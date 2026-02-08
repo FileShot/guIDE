@@ -1,15 +1,15 @@
 <p align="center">
-  <img src="https://graysoft.dev/icon.png" alt="guIDE Logo" width="120" />
+<img src="https://graysoft.dev/logo.png" alt="guIDE Logo" width="120" />
 </p>
 
 <h1 align="center">guIDE</h1>
 <p align="center"><strong>Your AI. Your Machine. No Limits.</strong></p>
 
 <p align="center">
-  <a href="https://graysoft.dev">Website</a> •
-  <a href="https://graysoft.dev/download">Download</a> •
-  <a href="https://graysoft.dev/about">About</a> •
-  <a href="https://graysoft.dev/faq">FAQ</a>
+<a href="https://graysoft.dev">Website</a> •
+<a href="https://graysoft.dev/download">Download</a> •
+<a href="https://graysoft.dev/about">About</a> •
+<a href="https://graysoft.dev/faq">FAQ</a>
 </p>
 
 ---
@@ -64,7 +64,6 @@ Frustrated by rate limits on Cursor? Tired of monthly subscriptions for Windsurf
 - **Responsive Layout** — Resizable panels and customizable workspace
 
 ## System Requirements
-
 - **OS:** Windows 10+ (64-bit)
 - **RAM:** 8GB minimum, 16GB+ recommended for local AI
 - **GPU:** Optional but recommended for faster local inference
@@ -95,7 +94,4 @@ guIDE is proprietary software. This repository is for public information and iss
 
 ---
 
-<p align="center">
-  <strong>Stop renting your IDE. Own it.</strong><br/>
-  <a href="https://graysoft.dev/download">Download guIDE →</a>
-</p>
+**Stop renting your IDE. Own it.** [Download guIDE →](https://graysoft.dev/download)

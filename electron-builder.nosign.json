@@ -17,7 +17,7 @@
   ],
   "mac": {
     "category": "public.app-category.developer-tools",
-    "icon": "icon.ico",
+    "icon": "build/icon.png",
     "target": [
       {
         "target": "dmg",
@@ -56,7 +56,7 @@
     "artifactName": "guIDE-Setup-${version}.${ext}"
   },
   "linux": {
-    "icon": "icon.ico",
+    "icon": "build/icon.png",
     "target": [
       {
         "target": "AppImage",

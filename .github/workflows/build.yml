@@ -87,7 +87,10 @@ jobs:
         run: npm run build:renderer
 
       - name: Convert icon for macOS
-        run: sips -s format png icon.ico --out build/icon.png || cp icon.ico build/icon.png
+        run: |
+          mkdir -p build
+          sips -s format png icon.ico --out build/icon_src.png 2>/dev/null || cp icon.ico build/icon_src.png
+          sips -z 512 512 build/icon_src.png --out build/icon.png
 
       - name: Build macOS DMG (x64 + arm64)
         run: npx electron-builder --mac --x64 --arm64 --config electron-builder.nosign.json

@@ -97,7 +97,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-          CSC_LINK: ''
 
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4

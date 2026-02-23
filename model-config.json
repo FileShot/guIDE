@@ -1,0 +1,15 @@
+{
+  "customModelPaths": [
+    "D:\\models\\qwen2.5-0.5b-instruct-q8_0.gguf",
+    "D:\\models\\qwen3-30b-a3b-thinking-2507-q4_k_m.gguf",
+    "D:\\models\\models\\qwen2.5-coder-1.5b-instruct-q4_k_m.gguf",
+    "D:\\models\\models\\Qwen3-1.7B-Q4_K_M.gguf",
+    "D:\\models\\models\\Qwen3-0.6B-Q8_0.gguf",
+    "D:\\models\\models\\Qwen3-8B-Q4_K_M.gguf",
+    "D:\\models\\models\\Qwen3-4B-Instruct-2507-Q4_K_M.gguf",
+    "D:\\models\\models\\qwen3-15b-a2b-base-q3_k_l.gguf",
+    "D:\\models\\models\\Llama3.3-8B-Instruct-Thinking-Heretic-Uncensored-Claude-4.5-Opus-High-Reasoning.i1-Q4_K_S.gguf",
+    "D:\\models\\models\\Llama-3-8B-Instruct-Coder-v2-Q4_K_S.gguf",
+    "D:\\models\\models\\Qwen3-4B-Thinking-2507-Q4_K_M.gguf"
+  ]
+}

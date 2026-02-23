@@ -1,0 +1,38 @@
+﻿2026-02-21T23:11:23.527Z LOG   [LLM] Backend gpu=auto: VRAM total=4.0GB free=3.2GB
+2026-02-21T23:11:26.950Z LOG   [LLM] Model loaded: 16 GPU layers (mode: auto)
+2026-02-21T23:11:26.950Z LOG   [LLM] Model train context size: 131072
+2026-02-21T23:11:26.951Z LOG   [LLM] Model profile: llama/3B (small) â†’ effectiveCtx=32768
+2026-02-21T23:11:26.951Z LOG   [LLM] Target context: 32768 (profile=32768, native=131072, user=auto)
+2026-02-21T23:11:27.016Z LOG   [LLM] Context: 4608 tokens (threads: 14, flash: true)
+2026-02-21T23:11:27.257Z LOG   [LLM] Chat wrapper auto-detected: Llama3_2LightweightChatWrapper
+2026-02-21T23:11:27.257Z LOG   [LLM] Ready: llama-3.2-3b-instruct-q8_0 â€” 4608 ctx, 16 GPU layers, flash: true, wrapper: Llama3_2LightweightChatWrapper
+2026-02-21T23:11:28.254Z LOG   [AI Chat] Profile: llama/small | ctx=4608 (hw=4608) | sysReserve=280 | compact=true
+2026-02-21T23:11:28.254Z LOG   [AI Chat] Detected task type: chat
+2026-02-21T23:11:28.255Z LOG   [AI Chat] Model: llama/small (3B llama) â€” tools=8, grammar=limited, retry=3, quirks={"loopsFrequently":false,"truncatesMidTool":false,"overlyVerbose":false,"refusesOften":false,"halluccinatesToolResults":false,"needsExplicitStop":false,"emitsSpecialTokens":false,"poorMultiTool":false}
+2026-02-21T23:11:28.255Z LOG   [AI Chat] Agentic iteration 1/50
+2026-02-21T23:11:28.255Z LOG   [AI Chat] Prompt: ~63 tokens
+2026-02-21T23:11:28.256Z LOG   [LLM] ThoughtTokenBudget: 256 (effort=medium, profileDefault=256)
+2026-02-21T23:12:47.890Z LOG   [LLM] Resetting session (standard prompt, ~230 tokens)
+2026-02-21T23:12:48.227Z LOG   [LLM] Session reset complete
+2026-02-21T23:12:48.229Z ERROR [AI Chat] Generation error on iteration 1: Object is disposed
+2026-02-21T23:12:48.229Z LOG   [AI Chat] âš ï¸ cleanLocalResponse is EMPTY â€” displayResponseText was 0 chars (raw preview: "") | allToolResults: 0
+2026-02-21T23:12:48.229Z LOG   [AI Chat] â•â• FINAL RETURN â•â• 22 chars â†’ UI | preview: "No response generated."
+2026-02-21T23:14:15.376Z LOG   [LLM] Resetting session (standard prompt, ~230 tokens)
+2026-02-21T23:14:15.594Z LOG   [LLM] Session reset complete
+2026-02-21T23:14:17.675Z LOG   [AI Chat] Profile: llama/small | ctx=4608 (hw=4608) | sysReserve=280 | compact=true
+2026-02-21T23:14:17.676Z LOG   [AI Chat] Detected task type: chat
+2026-02-21T23:14:17.676Z LOG   [AI Chat] Model: llama/small (3B llama) â€” tools=8, grammar=limited, retry=3, quirks={"loopsFrequently":false,"truncatesMidTool":false,"overlyVerbose":false,"refusesOften":false,"halluccinatesToolResults":false,"needsExplicitStop":false,"emitsSpecialTokens":false,"poorMultiTool":false}
+2026-02-21T23:14:17.676Z LOG   [AI Chat] Agentic iteration 1/50
+2026-02-21T23:14:17.676Z LOG   [AI Chat] Prompt: ~63 tokens
+2026-02-21T23:14:17.676Z LOG   [LLM] ThoughtTokenBudget: 256 (effort=medium, profileDefault=256)
+2026-02-21T23:15:17.832Z LOG   [LLM] Resetting session (standard prompt, ~230 tokens)
+2026-02-21T23:15:18.077Z LOG   [LLM] Session reset complete
+2026-02-21T23:15:18.078Z ERROR [AI Chat] Generation error on iteration 1: Object is disposed
+2026-02-21T23:15:18.079Z LOG   [AI Chat] âš ï¸ cleanLocalResponse is EMPTY â€” displayResponseText was 0 chars (raw preview: "") | allToolResults: 0
+2026-02-21T23:15:18.079Z LOG   [AI Chat] â•â• FINAL RETURN â•â• 22 chars â†’ UI | preview: "No response generated."
+2026-02-21T23:15:22.471Z LOG   [LLM] Resetting session (standard prompt, ~230 tokens)
+2026-02-21T23:15:22.697Z LOG   [LLM] Session reset complete
+2026-02-21T23:15:32.210Z LOG   [LLM] Resetting session (standard prompt, ~230 tokens)
+2026-02-21T23:15:32.395Z LOG   [LLM] Session reset complete
+2026-02-21T23:15:33.277Z LOG   [LLM] Reusing existing llama instance (gpu=auto)
+2026-02-21T23:15:33.278Z LOG   [LLM] Backend gpu=auto: VRAM total=4.0GB free=3.2GB

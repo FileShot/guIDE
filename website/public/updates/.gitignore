@@ -1,0 +1,13 @@
+# Ignore large installer binaries — copy to server manually after each build
+*.exe
+*.dmg
+*.AppImage
+*.deb
+*.rpm
+*.zip
+*.tar.gz
+*.blockmap
+
+# Keep the manifest and README in git
+!latest.yml
+!README.md

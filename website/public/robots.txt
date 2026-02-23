@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /account
+Disallow: /login
+Disallow: /register
+Disallow: /admin
+
+Sitemap: https://graysoft.dev/sitemap.xml

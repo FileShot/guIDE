@@ -1,0 +1,222 @@
+{
+  "model": "Qwen3-0.6B-Q8_0",
+  "timestamp": "2026-02-15T18:57:47.456Z",
+  "overallPct": 40.2,
+  "target": 90,
+  "tests": {
+    "A1": {
+      "score": 0,
+      "reason": "No tool calls",
+      "weight": 2,
+      "responseTokens": 85,
+      "thinkingTokens": 205,
+      "elapsed": 2798,
+      "toolCalls": []
+    },
+    "A2": {
+      "score": 0,
+      "reason": "No tool calls",
+      "weight": 2,
+      "responseTokens": 89,
+      "thinkingTokens": 144,
+      "elapsed": 1938,
+      "toolCalls": []
+    },
+    "A3": {
+      "score": 0,
+      "reason": "No tool calls",
+      "weight": 3,
+      "responseTokens": 19,
+      "thinkingTokens": 490,
+      "elapsed": 4169,
+      "toolCalls": []
+    },
+    "A4": {
+      "score": 0,
+      "reason": "No tool calls",
+      "weight": 2,
+      "responseTokens": 21,
+      "thinkingTokens": 251,
+      "elapsed": 2207,
+      "toolCalls": []
+    },
+    "B1": {
+      "score": 100,
+      "reason": "Correct navigation to GitHub",
+      "weight": 2,
+      "responseTokens": 23,
+      "thinkingTokens": 86,
+      "elapsed": 905,
+      "toolCalls": [
+        {
+          "tool": "browser_navigate",
+          "params": {
+            "url": "github.com"
+          }
+        }
+      ]
+    },
+    "B2": {
+      "score": 15,
+      "reason": "Wrong tool: write_todos",
+      "weight": 2,
+      "responseTokens": 26,
+      "thinkingTokens": 720,
+      "elapsed": 5930,
+      "toolCalls": [
+        {
+          "tool": "write_todos",
+          "params": {
+            "todo": "Look up latest TypeScript version"
+          }
+        }
+      ]
+    },
+    "B3": {
+      "score": 100,
+      "reason": "Perfect URL",
+      "weight": 3,
+      "responseTokens": 26,
+      "thinkingTokens": 972,
+      "elapsed": 8188,
+      "toolCalls": [
+        {
+          "tool": "browser_navigate",
+          "params": {
+            "url": "reddit.com/r/programming"
+          }
+        }
+      ]
+    },
+    "C1": {
+      "score": 5,
+      "reason": "browser_navigate for local files!",
+      "weight": 3,
+      "responseTokens": 63,
+      "thinkingTokens": 184,
+      "elapsed": 1975,
+      "toolCalls": [
+        {
+          "tool": "browser_navigate",
+          "params": {
+            "url": "https://app.example.com"
+          }
+        }
+      ]
+    },
+    "C2": {
+      "score": 100,
+      "reason": "File: src/components/userprofile.tsx, content: 346 chars",
+      "weight": 3,
+      "responseTokens": 131,
+      "thinkingTokens": 267,
+      "elapsed": 3132,
+      "toolCalls": [
+        {
+          "tool": "write_file",
+          "params": {
+            "content": "<div className=\"user-profile\">  <h2>Username</h2>\n  <input type=\"text\" placeholder=\"Your Name\" value={name} onChange={(e) => setName(e.target.value)} />\n  \n  <br />\n  <h3>Email</h3>\n  <input type=\"email\" placeholder=\"Your Email\" value={email} onChange={(e) => setEmail(e.target.value)} />\n\n  <button onClick={() => handleSubmit()}>Submit</button>",
+            "filePath": "src/components/UserProfile.tsx"
+          }
+        }
+      ]
+    },
+    "C3": {
+      "score": 100,
+      "reason": "Correct HN URL",
+      "weight": 2,
+      "responseTokens": 33,
+      "thinkingTokens": 362,
+      "elapsed": 3079,
+      "toolCalls": [
+        {
+          "tool": "browser_navigate",
+          "params": {
+            "url": "https://news.hacker-news.com/hackernews/trending"
+          }
+        }
+      ]
+    },
+    "C4": {
+      "score": 0,
+      "reason": "No tool calls",
+      "weight": 2,
+      "responseTokens": 45,
+      "thinkingTokens": 324,
+      "elapsed": 2846,
+      "toolCalls": []
+    }
+  },
+  "failures": [
+    {
+      "id": "A1",
+      "name": "Create a simple file",
+      "score": 0,
+      "reason": "No tool calls",
+      "rawPreview": "I cannot generate a complete landing page without specific details about its content or structure. Could you please provide the following information?  \n1) What are the main features or sections of your landing page?  \n2) Are there any form submissions expected (e.g., contact, sign-up)?  \n3) Do you ",
+      "tools": []
+    },
+    {
+      "id": "A2",
+      "name": "Read a project file",
+      "score": 0,
+      "reason": "No tool calls",
+      "rawPreview": "The file `package.json` contains details about your project, such as dependencies, versioning information, configuration files, and other metadata. You can view its contents by navigating to the directory where this file resides in your terminal using the command:  \n```bash\ncd /path/to/your/project ",
+      "tools": []
+    },
+    {
+      "id": "A3",
+      "name": "Edit existing code",
+      "score": 0,
+      "reason": "No tool calls",
+      "rawPreview": "```json\n{\"tool\": \"useState\", \"params\": {\"value\": false}}\n```",
+      "tools": []
+    },
+    {
+      "id": "A4",
+      "name": "Run a terminal command",
+      "score": 0,
+      "reason": "No tool calls",
+      "rawPreview": "```json\n{\"tool\": \"npm\", \"params\": {\"command\": \"install axios\"}}\n```",
+      "tools": []
+    },
+    {
+      "id": "B2",
+      "name": "Search the internet",
+      "score": 15,
+      "reason": "Wrong tool: write_todos",
+      "rawPreview": "```json\n{\"tool\": \"write_todos\", \"params\": {\"todo\": \"Look up latest TypeScript version\"}}\n```",
+      "tools": [
+        {
+          "tool": "write_todos",
+          "params": {
+            "todo": "Look up latest TypeScript version"
+          }
+        }
+      ]
+    },
+    {
+      "id": "C1",
+      "name": "Multi-file read",
+      "score": 5,
+      "reason": "browser_navigate for local files!",
+      "rawPreview": "```json\n{\"tool\": \"browser_navigate\", \"params\": {\"url\": \"https://app.example.com\"}}\n```  \n\nTo understand how the app works, I'll open the main entry point (the URL provided) and check configuration files. Please provide specific paths or details for configuration files if needed.",
+      "tools": [
+        {
+          "tool": "browser_navigate",
+          "params": {
+            "url": "https://app.example.com"
+          }
+        }
+      ]
+    },
+    {
+      "id": "C4",
+      "name": "List project structure",
+      "score": 0,
+      "reason": "No tool calls",
+      "rawPreview": "I don’t have access to your specific files unless you share or provide details about where your project resides (e.g., a file path or directory name). Let me know if you’d like help navigating the project folder!",
+      "tools": []
+    }
+  ]
+}

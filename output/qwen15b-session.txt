@@ -1,0 +1,42 @@
+﻿2026-02-21T23:16:55.916Z LOG   [LLM] Model profile: qwen/1.5B (small) â†’ effectiveCtx=32768
+2026-02-21T23:16:55.916Z LOG   [LLM] Target context: 32768 (profile=32768, native=32768, user=auto)
+2026-02-21T23:16:55.987Z LOG   [LLM] Context: 21760 tokens (threads: 14, flash: true)
+2026-02-21T23:16:56.295Z LOG   [LLM] Chat wrapper auto-detected: QwenChatWrapper
+2026-02-21T23:16:56.296Z LOG   [LLM] Ready: qwen2.5-1.5b-instruct-q8_0 â€” 21760 ctx, 29 GPU layers, flash: true, wrapper: QwenChatWrapper
+2026-02-21T23:16:56.869Z LOG   [LLM] Resetting session (standard prompt, ~230 tokens)
+2026-02-21T23:16:57.105Z LOG   [LLM] Session reset complete
+2026-02-21T23:16:58.870Z LOG   [AI Chat] Profile: qwen/small | ctx=21760 (hw=21760) | sysReserve=280 | compact=true
+2026-02-21T23:16:58.871Z LOG   [AI Chat] Detected task type: chat
+2026-02-21T23:16:58.872Z LOG   [AI Chat] Model: qwen/small (1.5B qwen) â€” tools=8, grammar=limited, retry=3, quirks={"loopsFrequently":false,"truncatesMidTool":false,"overlyVerbose":false,"refusesOften":false,"halluccinatesToolResults":false,"needsExplicitStop":false,"emitsSpecialTokens":true,"poorMultiTool":false}
+2026-02-21T23:16:58.872Z LOG   [AI Chat] Agentic iteration 1/50
+2026-02-21T23:16:58.872Z LOG   [AI Chat] Prompt: ~63 tokens
+2026-02-21T23:16:58.872Z LOG   [LLM] ThoughtTokenBudget: 256 (effort=medium, profileDefault=256)
+2026-02-21T23:17:07.040Z LOG   [LLM] Detected stuttering pattern (8 repeated words in last 33), aborting
+2026-02-21T23:17:07.042Z LOG   [AI Chat] Response committed to display: 1492 chars | display total: 1492 chars | preview: ",have a conversation with\n ]direct][ , and][tools available "
+2026-02-21T23:17:07.042Z LOG   [AI Chat] Chat-type hard gate | USER_MSG="hi" | MODEL_GENERATED=",have a conversation with\n ]direct][ , and][tools available " (1492 raw chars) â€” skipping tool parsing
+2026-02-21T23:17:07.043Z LOG   [AI Chat] No more tool calls, ending agentic loop
+2026-02-21T23:17:07.043Z LOG   [AI Chat] â•â• FINAL RETURN â•â• 1489 chars â†’ UI | preview: ",have a conversation with\n ]direct][ , and][tools available â€” answer directly fr"
+2026-02-21T23:17:49.005Z LOG   [LLM] Resetting session (standard prompt, ~230 tokens)
+2026-02-21T23:17:49.266Z LOG   [LLM] Session reset complete
+2026-02-21T23:17:49.493Z LOG   [LLM] Reusing existing llama instance (gpu=auto)
+2026-02-21T23:17:49.493Z LOG   [LLM] Backend gpu=auto: VRAM total=4.0GB free=3.2GB
+2026-02-21T23:17:51.920Z LOG   [LLM] Model loaded: 37 GPU layers (mode: auto)
+2026-02-21T23:17:51.920Z LOG   [LLM] Model train context size: 32768
+2026-02-21T23:17:51.921Z LOG   [LLM] Model profile: qwen/3B (small) â†’ effectiveCtx=32768
+2026-02-21T23:17:51.921Z LOG   [LLM] Target context: 32768 (profile=32768, native=32768, user=auto)
+2026-02-21T23:17:52.227Z LOG   [LLM] Context: 9216 tokens (threads: 14, flash: true)
+2026-02-21T23:17:52.538Z LOG   [LLM] Chat wrapper auto-detected: QwenChatWrapper
+2026-02-21T23:17:52.538Z LOG   [LLM] Ready: qwen2.5-3b-instruct-q4_k_m â€” 9216 ctx, 37 GPU layers, flash: true, wrapper: QwenChatWrapper
+2026-02-21T23:17:58.171Z LOG   [LLM] Resetting session (standard prompt, ~230 tokens)
+2026-02-21T23:17:58.421Z LOG   [LLM] Session reset complete
+2026-02-21T23:18:00.100Z LOG   [AI Chat] Profile: qwen/small | ctx=9216 (hw=9216) | sysReserve=280 | compact=true
+2026-02-21T23:18:00.100Z LOG   [AI Chat] Detected task type: chat
+2026-02-21T23:18:00.101Z LOG   [AI Chat] Model: qwen/small (3B qwen) â€” tools=8, grammar=limited, retry=3, quirks={"loopsFrequently":false,"truncatesMidTool":false,"overlyVerbose":false,"refusesOften":false,"halluccinatesToolResults":false,"needsExplicitStop":false,"emitsSpecialTokens":true,"poorMultiTool":false}
+2026-02-21T23:18:00.101Z LOG   [AI Chat] Agentic iteration 1/50
+2026-02-21T23:18:00.101Z LOG   [AI Chat] Prompt: ~63 tokens
+2026-02-21T23:18:00.101Z LOG   [LLM] ThoughtTokenBudget: 256 (effort=medium, profileDefault=256)
+2026-02-21T23:18:00.522Z LOG   [AI Chat] Response committed to display: 34 chars | display total: 34 chars | preview: "Hello! How can I assist you today?"
+2026-02-21T23:18:00.522Z LOG   [AI Chat] Chat-type hard gate | USER_MSG="hi" | MODEL_GENERATED="Hello! How can I assist you today?" (34 raw chars) â€” skipping tool parsing
+2026-02-21T23:18:00.522Z LOG   [AI Chat] No more tool calls, ending agentic loop
+2026-02-21T23:18:00.522Z LOG   [AI Chat] â•â• FINAL RETURN â•â• 34 chars â†’ UI | preview: "Hello! How can I assist you today?"
+2026-02-21T23:18:07.961Z LOG   [AI Chat] Profile: qwen/small | ctx=9216 (hw=9216) | sysReserve=280 | compact=true

@@ -1,0 +1,4 @@
+Price, Year, Mileage, Link
+$8000 - Honda 2016 (148,500 miles)
+$7950 - Toyota Camry (139,000 miles)
+$7800 - Civic (127,000 miles)

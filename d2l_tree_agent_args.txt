@@ -1,0 +1,116 @@
+- generic [active] [ref=e1]:
+  - banner [ref=e2]:
+    - navigation [ref=e3]:
+      - generic [ref=e4]:
+        - generic [ref=e5]:
+          - link "University of Maine at Augusta" [ref=e9] [cursor=pointer]:
+            - /url: /d2l/home/6662
+          - generic [ref=e15]:
+            - generic [ref=e17]: Brendan Gray
+            - list [ref=e19]:
+              - listitem [ref=e20]:
+                - link "Profile" [ref=e23] [cursor=pointer]:
+                  - /url: /d2l/lp/profile/profile_edit.d2l?ou=6662
+              - listitem [ref=e24]:
+                - link "My Portfolio" [ref=e26] [cursor=pointer]:
+                  - /url: /d2l/folio/main/Index
+              - listitem [ref=e27]:
+                - link "Notifications" [ref=e29] [cursor=pointer]:
+                  - /url: /d2l/Notifications/Settings?ou=6662
+              - listitem [ref=e30]:
+                - link "Account Settings" [ref=e32] [cursor=pointer]:
+                  - /url: /d2l/lp/preferences/preferences_main/preferences_main.d2l?ou=6662
+              - listitem [ref=e33]:
+                - link "English (United States)" [ref=e35] [cursor=pointer]:
+                  - /url: javascript:void(0);
+              - listitem [ref=e36]:
+                - link "Log Out" [ref=e38] [cursor=pointer]:
+                  - /url: javascript:void(0);
+        - list [ref=e42]:
+          - listitem [ref=e43]:
+            - link "Announcements" [ref=e44] [cursor=pointer]:
+              - /url: /d2l/lms/news/main.d2l?ou=6662
+          - listitem [ref=e45]:
+            - link "Discover" [ref=e46] [cursor=pointer]:
+              - /url: /d2l/le/discovery/view/
+          - listitem [ref=e47]:
+            - link "My Media" [ref=e48] [cursor=pointer]:
+              - /url: /d2l/common/dialogs/quickLink/quickLink.d2l?ou=6662&type=lti&rcode=F3C7BF8F-5062-472E-BD78-1E9087192E9D-277&srcou=6606
+          - listitem [ref=e49]:
+            - button "Help" [ref=e51]:
+              - generic [ref=e53]: Help
+          - listitem [ref=e55]:
+            - link "Course Evaluations" [ref=e56] [cursor=pointer]:
+              - /url: /d2l/common/dialogs/quickLink/quickLink.d2l?ou=6662&type=lti&rcode=F3C7BF8F-5062-472E-BD78-1E9087192E9D-2399069&srcou=6606
+          - listitem [ref=e57]:
+            - button "More" [ref=e59]:
+              - generic [ref=e61]: More
+  - main [ref=e63]:
+    - generic [ref=e70]:
+      - generic:
+        - generic [ref=e71]:
+          - region "My Courses" [ref=e72]:
+            - heading "My Courses" [level=2] [ref=e75]
+          - region "UMS Announcements" [ref=e78]:
+            - heading "UMS Announcements" [level=2] [ref=e81]
+        - generic [ref=e88]:
+          - region "Access Google Workspace" [ref=e89]:
+            - heading "Access Google Workspace" [level=2] [ref=e92]
+            - iframe [ref=e99]:
+              - generic [ref=f10e14]:
+                - text: Authorize your Google account.
+                - text: "Google Workspace Username: brendan.gray@maine.edu"
+                - text: If this is not your Google account, please contact your administrator
+                - button "Authorize" [ref=f10e15] [cursor=pointer]
+          - 'region "🟢 Students: Hello, Brendan!" [ref=e100]':
+            - 'heading "🟢 Students: Hello, Brendan!" [level=2] [ref=e103]'
+            - iframe [ref=e110]:
+              - generic [ref=f11e2]:
+                - paragraph [ref=f11e3]:
+                  - strong [ref=f11e5]:
+                    - strong [ref=f11e8]: "REMINDERS:"
+                - paragraph [ref=f11e9]:
+                  - strong [ref=f11e11]: Open Date vs. Date Classes Begin
+                - paragraph [ref=f11e12]:
+                  - text: The
+                  - strong [ref=f11e13]: Open Date
+                  - text: for your course might be sooner than the date
+                  - strong [ref=f11e14]: Classes begin.
+                - paragraph [ref=f11e15]:
+                  - strong
+                  - text: 🟢
+                  - strong [ref=f11e16]: Spring 2026 Courses Become "Open" on Tuesday, 1/13/2026
+                  - text: . The date
+                  - strong [ref=f11e17]: Classes begin is Tuesday, 1/20/2026.
+                - paragraph [ref=f11e18]: When classes open before the official start date, this gives you more time to review introductory material when it becomes available.
+                - paragraph [ref=f11e19]:
+                  - text: The
+                  - strong [ref=f11e20]: D
+                  - generic [ref=f11e21]:
+                    - strong [ref=f11e22]: ate
+                    - strong [ref=f11e23]: Classes Begin
+                    - text: for each semester can be found on the UMA Academic Calendar by
+                    - link "following this link" [ref=f11e25] [cursor=pointer]:
+                      - /url: https://www.uma.edu/academics/calendar/
+                    - text: . 🔗
+                - generic [ref=f11e27]:
+                  - paragraph [ref=f11e28]:
+                    - link "Visit the Tech Hub" [ref=f11e29] [cursor=pointer]:
+                      - /url: https://sites.google.com/maine.edu/thehub/
+                      - img "Visit the Tech Hub" [ref=f11e30]
+                  - paragraph [ref=f11e31]: The UMA Student Tech Hub
+                  - button "Visit The Hub!" [ref=f11e32] [cursor=pointer]
+                - generic [ref=f11e34]:
+                  - paragraph [ref=f11e35]:
+                    - text: Contact the UMS IT Helpdesk For Live Support!
+                    - text: 1-800-696-4357 (Phone or Chat preferred for CRITICAL issues)
+                    - text: "email: help@maine.edu"
+                  - button "Call/Chat/Email the IT Help Desk" [ref=f11e36] [cursor=pointer]
+                - generic [ref=f11e38]:
+                  - paragraph [ref=f11e39]:
+                    - text: Brightspace Student Orientation Course.
+                    - text: Learn about how Brightspace works.
+                  - button "Get Started" [ref=f11e40] [cursor=pointer]
+                - generic [ref=f11e42]:
+                  - paragraph [ref=f11e43]: "ACCESS: Accessible Content Creation that Ensures Support and Success"
+                  - button "Enroll" [ref=f11e44] [cursor=pointer]

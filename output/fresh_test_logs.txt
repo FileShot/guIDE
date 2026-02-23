@@ -1,0 +1,500 @@
+﻿2026-02-22T01:44:55.198Z LOG   [AI Chat] Detected task type: chat
+2026-02-22T01:44:55.198Z LOG   [AI Chat] Seeded local chatHistory from renderer (4 of 4 turns, max=11 for 4352-token context)
+2026-02-22T01:44:55.198Z LOG   [AI Chat] Model: qwen/small (4B qwen) â€” tools=12, grammar=limited, retry=3, quirks={"loopsFrequently":false,"truncatesMidTool":false,"overlyVerbose":false,"refusesOften":false,"halluccinatesToolResults":false,"needsExplicitStop":false,"emitsSpecialTokens":true,"poorMultiTool":false}
+2026-02-22T01:44:55.198Z LOG   [AI Chat] Agentic iteration 1/50
+2026-02-22T01:44:55.198Z LOG   [AI Chat] Prompt: ~63 tokens
+2026-02-22T01:44:55.199Z LOG   [LLM] ThoughtTokenBudget: 256 (effort=medium, profileDefault=256)
+2026-02-22T01:45:01.594Z LOG   [AI Chat] Response committed to display: 91 chars | display total: 91 chars | preview: "[{"name": "greet", "arguments": {"person": "Bob"}}, {"name":"
+2026-02-22T01:45:01.595Z LOG   [AI Chat] Chat-type hard gate | USER_MSG="hi" | MODEL_GENERATED="[{"name": "greet", "arguments": {"person": "Bob"}}, {"name":" (91 raw chars) â€” skipping tool parsing
+2026-02-22T01:45:01.595Z LOG   [AI Chat] No more tool calls, ending agentic loop
+2026-02-22T01:45:01.595Z LOG   [AI Chat] â•â• FINAL RETURN â•â• 91 chars â†’ UI | preview: "[{"name": "greet", "arguments": {"person": "Bob"}}, {"name": "say_hello", "argum"
+
+================================================================================
+2026-02-22T02:33:11.671Z SESSION START â€” guIDE v2.0.0
+================================================================================
+2026-02-22T02:33:14.682Z LOG   [CloudLLM] cerebras key pool: 1 key(s)
+2026-02-22T02:33:14.682Z LOG   [CloudLLM] cerebras key pool: 2 key(s)
+2026-02-22T02:33:14.682Z LOG   [CloudLLM] cerebras key pool: 3 key(s)
+2026-02-22T02:33:14.682Z LOG   [CloudLLM] cerebras key pool: 4 key(s)
+2026-02-22T02:33:14.682Z LOG   [CloudLLM] cerebras key pool: 5 key(s)
+2026-02-22T02:33:14.682Z LOG   [CloudLLM] cerebras key pool: 6 key(s)
+2026-02-22T02:33:14.682Z LOG   [CloudLLM] cerebras key pool: 7 key(s)
+2026-02-22T02:33:14.682Z LOG   [CloudLLM] cerebras key pool: 8 key(s)
+2026-02-22T02:33:14.682Z LOG   [CloudLLM] cerebras key pool: 9 key(s)
+2026-02-22T02:33:14.690Z LOG   [IDE] App starting, NODE_ENV: undefined
+2026-02-22T02:33:15.033Z LOG   [IDE] Deferred handlers registered in 233ms
+2026-02-22T02:33:15.050Z LOG   
+2026-02-22T02:33:15.050Z LOG     â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—
+2026-02-22T02:33:15.050Z LOG     â•‘  guIDE â€” AI-Powered Offline IDE                  â•‘
+2026-02-22T02:33:15.050Z LOG     â•‘  Copyright Â© 2025-2026 Brendan Gray               â•‘
+2026-02-22T02:33:15.050Z LOG     â•‘  GitHub: github.com/FileShot                      â•‘
+2026-02-22T02:33:15.050Z LOG     â•‘  Licensed under Source Available License           â•‘
+2026-02-22T02:33:15.050Z LOG     â•‘  Unauthorized redistribution/rebranding prohibited â•‘
+2026-02-22T02:33:15.050Z LOG     â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+2026-02-22T02:33:15.050Z LOG   
+2026-02-22T02:33:15.051Z LOG   [IDE] App ready, creating window...
+2026-02-22T02:33:15.184Z LOG   [IDE] Initializing services...
+2026-02-22T02:33:15.241Z LOG   [CloudLLM] cerebras key pool: 10 key(s)
+2026-02-22T02:33:15.241Z LOG   [CloudLLM] cerebras key pool: 11 key(s)
+2026-02-22T02:33:15.241Z LOG   [CloudLLM] cerebras key pool: 12 key(s)
+2026-02-22T02:33:15.241Z LOG   [CloudLLM] cerebras key pool: 13 key(s)
+2026-02-22T02:33:15.241Z LOG   [CloudLLM] cerebras key pool: 14 key(s)
+2026-02-22T02:33:15.241Z LOG   [CloudLLM] cerebras key pool: 15 key(s)
+2026-02-22T02:33:15.241Z LOG   [CloudLLM] cerebras key pool: 16 key(s)
+2026-02-22T02:33:15.241Z LOG   [CloudLLM] cerebras key pool: 17 key(s)
+2026-02-22T02:33:15.242Z LOG   [CloudLLM] cerebras key pool: 18 key(s)
+2026-02-22T02:33:15.242Z LOG   [CloudLLM] cerebras key pool: 19 key(s)
+2026-02-22T02:33:15.242Z LOG   [CloudLLM] cerebras key pool: 20 key(s)
+2026-02-22T02:33:15.242Z LOG   [CloudLLM] cerebras key pool: 21 key(s)
+2026-02-22T02:33:15.242Z LOG   [CloudLLM] groq key pool: 1 key(s)
+2026-02-22T02:33:15.242Z LOG   [CloudLLM] groq key pool: 2 key(s)
+2026-02-22T02:33:15.242Z LOG   [CloudLLM] groq key pool: 3 key(s)
+2026-02-22T02:33:15.242Z LOG   [CloudLLM] groq key pool: 4 key(s)
+2026-02-22T02:33:15.242Z LOG   [CloudLLM] groq key pool: 5 key(s)
+2026-02-22T02:33:15.242Z LOG   [CloudLLM] groq key pool: 6 key(s)
+2026-02-22T02:33:15.242Z LOG   [CloudLLM] groq key pool: 7 key(s)
+2026-02-22T02:33:15.242Z LOG   [ImageGen] Added Pollinations API key (pool: 1)
+2026-02-22T02:33:15.242Z LOG   [ImageGen] Added Pollinations API key (pool: 2)
+2026-02-22T02:33:15.242Z LOG   [ImageGen] Added Pollinations API key (pool: 3)
+2026-02-22T02:33:15.242Z LOG   [LLM] GPU preference set to: auto
+2026-02-22T02:33:15.314Z LOG   [IDE] Found 13 model(s)
+2026-02-22T02:33:15.538Z LOG   [IDE] Page loaded, sending initial state...
+2026-02-22T02:33:15.540Z LOG   [IDE] Default model available: Qwen3-4B-Function-Calling-Pro (not auto-loading)
+2026-02-22T02:33:21.905Z WARN  [LLM] Cannot reset session: model or context is null/disposed
+2026-02-22T02:33:27.383Z LOG   [LLM] Backend gpu=auto: VRAM total=4.0GB free=3.2GB
+2026-02-22T02:33:28.855Z LOG   [RAG] Indexed 4 files in 0.0s
+2026-02-22T02:33:29.594Z LOG   [LLM] Model loaded: 25 GPU layers (mode: auto)
+2026-02-22T02:33:29.594Z LOG   [LLM] Model train context size: 131072
+2026-02-22T02:33:29.595Z LOG   [LLM] Model profile: llama/3B (small) â†’ effectiveCtx=32768
+2026-02-22T02:33:29.595Z LOG   [LLM] Target context: 32768 (profile=32768, native=131072, user=auto)
+2026-02-22T02:33:29.645Z LOG   [LLM] Context: 6144 tokens (threads: 14, flash: true)
+2026-02-22T02:33:29.975Z LOG   [LLM] Chat wrapper auto-detected: Llama3_2LightweightChatWrapper
+2026-02-22T02:33:29.975Z LOG   [LLM] _applyChatWrapperOverride: arch="llama" wrapper="Llama3_2LightweightChatWrapper" hasJinja=true
+2026-02-22T02:33:29.976Z WARN  [LLM] Trusted family wrapper: "Llama3_2LightweightChatWrapper" â€” skipping Jinja override (hasJinja=true), reconstructing with date preamble disabled
+2026-02-22T02:33:29.976Z LOG   [LLM] Trusted wrapper applied: Llama3_2LightweightChatWrapper (date preamble disabled, Jinja skipped)
+2026-02-22T02:33:29.976Z LOG   [LLM] Ready: Llama-3.2-3B-Instruct-Q4_K_S â€” 6144 ctx, 25 GPU layers, flash: true, wrapper: Llama3_2LightweightChatWrapper
+2026-02-22T02:33:30.557Z ERROR Error: Error: Cannot find channel "latest.yml" update info: HttpError: 404 
+"method: GET url: https://graysoft.dev/updates/latest.yml?noCache=1ji1j3ofc\n\nPlease double check that your authentication token is correct. Due to security reasons, actual status maybe not reported, but 404.\n"
+Headers: {
+  "alt-svc": "h3=\":443\"; ma=86400",
+  "cache-control": "private, no-cache, no-store, max-age=0, must-revalidate",
+  "cf-cache-status": "DYNAMIC",
+  "cf-ray": "9d1b14405d59b1bc-EWR",
+  "content-encoding": "br",
+  "content-security-policy": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://www.googletagmanager.com https://www.google-analytics.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://api.stripe.com https://accounts.google.com https://github.com https://api.github.com https://www.google-analytics.com https://www.googletagmanager.com https://static.cloudflareinsights.com; frame-src 'self' https://js.stripe.com https://hooks.stripe.com; base-uri 'self'; form-action 'self'",
+  "content-type": "text/html; charset=utf-8",
+  "date": "Sun, 22 Feb 2026 02:33:30 GMT",
+  "nel": "{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}",
+  "permissions-policy": "camera=(), microphone=(), geolocation=()",
+  "priority": "u=4,i",
+  "referrer-policy": "strict-origin-when-cross-origin",
+  "report-to": "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=9GXXLqhVn90grywLh1Iv8rKNqVfhpqi5Xxzyw9ndRD%2FqH2DCBTU0p3GI7LvmOm2m%2Br0ddH58vTAMwv%2ByVFKUnQBHDudULCzZd8JCbhZneeHg1pFZVMwlBQ%3D%3D\"}]}",
+  "server": "cloudflare",
+  "server-timing": "cfCacheStatus;desc=\"DYNAMIC\", cfEdge;dur=10,cfOrigin;dur=36, cfExtPri",
+  "strict-transport-security": "max-age=63072000; includeSubDomains; preload",
+  "vary": "rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch, Accept-Encoding",
+  "x-content-type-options": "nosniff",
+  "x-dns-prefetch-control": "on",
+  "x-frame-options": "DENY",
+  "x-nextjs-cache": "HIT",
+  "x-nextjs-prerender": "1, 1",
+  "x-nextjs-stale-time": "300",
+  "x-powered-by": "Next.js",
+  "x-xss-protection": "1; mode=block"
+}
+    at createHttpError (C:\Users\brend\AppData\Local\Programs\guIDE\resources\app.asar\node_modules\electron-updater\node_modules\builder-util-runtime\out\httpExecutor.js:21:12)
+    at ElectronHttpExecutor.handleResponse (C:\Users\brend\AppData\Local\Programs\guIDE\resources\app.asar\node_modules\electron-updater\node_modules\builder-util-runtime\out\httpExecutor.js:121:20)
+    at ClientRequest.<anonymous> (C:\Users\brend\AppData\Local\Programs\guIDE\resources\app.asar\node_modules\electron-updater\node_modules\builder-util-runtime\out\httpExecutor.js:87:26)
+    at ClientRequest.emit (node:events:514:28)
+    at SimpleURLLoaderWrapper.<anonymous> (node:electron/js2c/browser_init:2:109961)
+    at SimpleURLLoaderWrapper.emit (node:events:514:28)
+    at newError (C:\Users\brend\AppData\Local\Programs\guIDE\resources\app.asar\node_modules\electron-updater\node_modules\builder-util-runtime\out\error.js:5:19)
+    at GenericProvider.getLatestVersion (C:\Users\brend\AppData\Local\Programs\guIDE\resources\app.asar\node_modules\electron-updater\out\providers\GenericProvider.js:27:63)
+    at async NsisUpdater.getUpdateInfoAndProvider (C:\Users\brend\AppData\Local\Programs\guIDE\resources\app.asar\node_modules\electron-updater\out\AppUpdater.js:389:19)
+    at async NsisUpdater.doCheckForUpdates (C:\Users\brend\AppData\Local\Programs\guIDE\resources\app.asar\node_modules\electron-updater\out\AppUpdater.js:402:24)
+2026-02-22T02:33:30.557Z ERROR [AutoUpdater] Error: Cannot find channel "latest.yml" update info: HttpError: 404 
+"method: GET url: https://graysoft.dev/updates/latest.yml?noCache=1ji1j3ofc\n\nPlease double check that your authentication token is correct. Due to security reasons, actual status maybe not reported, but 404.\n"
+Headers: {
+  "alt-svc": "h3=\":443\"; ma=86400",
+  "cache-control": "private, no-cache, no-store, max-age=0, must-revalidate",
+  "cf-cache-status": "DYNAMIC",
+  "cf-ray": "9d1b14405d59b1bc-EWR",
+  "content-encoding": "br",
+  "content-security-policy": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://www.googletagmanager.com https://www.google-analytics.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://api.stripe.com https://accounts.google.com https://github.com https://api.github.com https://www.google-analytics.com https://www.googletagmanager.com https://static.cloudflareinsights.com; frame-src 'self' https://js.stripe.com https://hooks.stripe.com; base-uri 'self'; form-action 'self'",
+  "content-type": "text/html; charset=utf-8",
+  "date": "Sun, 22 Feb 2026 02:33:30 GMT",
+  "nel": "{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}",
+  "permissions-policy": "camera=(), microphone=(), geolocation=()",
+  "priority": "u=4,i",
+  "referrer-policy": "strict-origin-when-cross-origin",
+  "report-to": "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=9GXXLqhVn90grywLh1Iv8rKNqVfhpqi5Xxzyw9ndRD%2FqH2DCBTU0p3GI7LvmOm2m%2Br0ddH58vTAMwv%2ByVFKUnQBHDudULCzZd8JCbhZneeHg1pFZVMwlBQ%3D%3D\"}]}",
+  "server": "cloudflare",
+  "server-timing": "cfCacheStatus;desc=\"DYNAMIC\", cfEdge;dur=10,cfOrigin;dur=36, cfExtPri",
+  "strict-transport-security": "max-age=63072000; includeSubDomains; preload",
+  "vary": "rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch, Accept-Encoding",
+  "x-content-type-options": "nosniff",
+  "x-dns-prefetch-control": "on",
+  "x-frame-options": "DENY",
+  "x-nextjs-cache": "HIT",
+  "x-nextjs-prerender": "1, 1",
+  "x-nextjs-stale-time": "300",
+  "x-powered-by": "Next.js",
+  "x-xss-protection": "1; mode=block"
+}
+    at createHttpError (C:\Users\brend\AppData\Local\Programs\guIDE\resources\app.asar\node_modules\electron-updater\node_modules\builder-util-runtime\out\httpExecutor.js:21:12)
+    at ElectronHttpExecutor.handleResponse (C:\Users\brend\AppData\Local\Programs\guIDE\resources\app.asar\node_modules\electron-updater\node_modules\builder-util-runtime\out\httpExecutor.js:121:20)
+    at ClientRequest.<anonymous> (C:\Users\brend\AppData\Local\Programs\guIDE\resources\app.asar\node_modules\electron-updater\node_modules\builder-util-runtime\out\httpExecutor.js:87:26)
+    at ClientRequest.emit (node:events:514:28)
+    at SimpleURLLoaderWrapper.<anonymous> (node:electron/js2c/browser_init:2:109961)
+    at SimpleURLLoaderWrapper.emit (node:events:514:28)
+2026-02-22T02:33:30.557Z ERROR [AutoUpdater] checkForUpdates failed: Cannot find channel "latest.yml" update info: HttpError: 404 
+"method: GET url: https://graysoft.dev/updates/latest.yml?noCache=1ji1j3ofc\n\nPlease double check that your authentication token is correct. Due to security reasons, actual status maybe not reported, but 404.\n"
+Headers: {
+  "alt-svc": "h3=\":443\"; ma=86400",
+  "cache-control": "private, no-cache, no-store, max-age=0, must-revalidate",
+  "cf-cache-status": "DYNAMIC",
+  "cf-ray": "9d1b14405d59b1bc-EWR",
+  "content-encoding": "br",
+  "content-security-policy": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://www.googletagmanager.com https://www.google-analytics.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://api.stripe.com https://accounts.google.com https://github.com https://api.github.com https://www.google-analytics.com https://www.googletagmanager.com https://static.cloudflareinsights.com; frame-src 'self' https://js.stripe.com https://hooks.stripe.com; base-uri 'self'; form-action 'self'",
+  "content-type": "text/html; charset=utf-8",
+  "date": "Sun, 22 Feb 2026 02:33:30 GMT",
+  "nel": "{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}",
+  "permissions-policy": "camera=(), microphone=(), geolocation=()",
+  "priority": "u=4,i",
+  "referrer-policy": "strict-origin-when-cross-origin",
+  "report-to": "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=9GXXLqhVn90grywLh1Iv8rKNqVfhpqi5Xxzyw9ndRD%2FqH2DCBTU0p3GI7LvmOm2m%2Br0ddH58vTAMwv%2ByVFKUnQBHDudULCzZd8JCbhZneeHg1pFZVMwlBQ%3D%3D\"}]}",
+  "server": "cloudflare",
+  "server-timing": "cfCacheStatus;desc=\"DYNAMIC\", cfEdge;dur=10,cfOrigin;dur=36, cfExtPri",
+  "strict-transport-security": "max-age=63072000; includeSubDomains; preload",
+  "vary": "rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch, Accept-Encoding",
+  "x-content-type-options": "nosniff",
+  "x-dns-prefetch-control": "on",
+  "x-frame-options": "DENY",
+  "x-nextjs-cache": "HIT",
+  "x-nextjs-prerender": "1, 1",
+  "x-nextjs-stale-time": "300",
+  "x-powered-by": "Next.js",
+  "x-xss-protection": "1; mode=block"
+}
+    at createHttpError (C:\Users\brend\AppData\Local\Programs\guIDE\resources\app.asar\node_modules\electron-updater\node_modules\builder-util-runtime\out\httpExecutor.js:21:12)
+    at ElectronHttpExecutor.handleResponse (C:\Users\brend\AppData\Local\Programs\guIDE\resources\app.asar\node_modules\electron-updater\node_modules\builder-util-runtime\out\httpExecutor.js:121:20)
+    at ClientRequest.<anonymous> (C:\Users\brend\AppData\Local\Programs\guIDE\resources\app.asar\node_modules\electron-updater\node_modules\builder-util-runtime\out\httpExecutor.js:87:26)
+    at ClientRequest.emit (node:events:514:28)
+    at SimpleURLLoaderWrapper.<anonymous> (node:electron/js2c/browser_init:2:109961)
+    at SimpleURLLoaderWrapper.emit (node:events:514:28)
+2026-02-22T02:33:32.172Z LOG   [AI Chat] Profile: llama/small | ctx=6144 (hw=6144) | sysReserve=280 | compact=true
+2026-02-22T02:33:32.172Z LOG   [AI Chat] Detected task type: chat
+2026-02-22T02:33:32.173Z LOG   [AI Chat] Model: llama/small (3B llama) â€” tools=12, grammar=limited, retry=3, quirks={"loopsFrequently":false,"truncatesMidTool":false,"overlyVerbose":false,"refusesOften":false,"halluccinatesToolResults":false,"needsExplicitStop":false,"emitsSpecialTokens":false,"poorMultiTool":false}
+2026-02-22T02:33:32.173Z LOG   [AI Chat] Agentic iteration 1/50
+2026-02-22T02:33:32.173Z LOG   [AI Chat] Prompt: ~63 tokens
+2026-02-22T02:33:32.174Z LOG   [LLM] ThoughtTokenBudget: 0 (effort=medium, profileDefault=0)
+2026-02-22T02:33:36.114Z LOG   [LLM] Detected stuttering pattern (8 repeated words in last 33), aborting
+2026-02-22T02:33:36.116Z LOG   [AI Chat] Response committed to display: 525 chars | display total: 525 chars | preview: "CD's over on cafetÃ­n for above in seemed\nMen's with s per:\nâ€“"
+2026-02-22T02:33:36.117Z LOG   [AI Chat] Chat-type hard gate | USER_MSG="hi" | MODEL_GENERATED="CD's over on cafetÃ­n for above in seemed\nMen's with s per:\nâ€“" (525 raw chars) â€” skipping tool parsing
+2026-02-22T02:33:36.117Z LOG   [AI Chat] No more tool calls, ending agentic loop
+2026-02-22T02:33:36.117Z LOG   [AI Chat] â•â• FINAL RETURN â•â• 525 chars â†’ UI | preview: "CD's over on cafetÃ­n for above in seemed\nMen's with s per:\nâ€“ â€“ if under.sh's â€“ a"
+2026-02-22T02:34:14.733Z LOG   [LLM] Resetting session (standard prompt, ~230 tokens)
+2026-02-22T02:34:15.048Z LOG   [LLM] Session reset complete
+2026-02-22T02:34:15.146Z LOG   [LLM] Reusing existing llama instance (gpu=auto)
+2026-02-22T02:34:15.146Z LOG   [LLM] Backend gpu=auto: VRAM total=4.0GB free=3.2GB
+2026-02-22T02:34:16.452Z WARN  [LLM] Cannot reset session: model or context is null/disposed
+2026-02-22T02:34:17.161Z LOG   [LLM] Model loaded: 29 GPU layers (mode: auto)
+2026-02-22T02:34:17.161Z LOG   [LLM] Model train context size: 32768
+2026-02-22T02:34:17.161Z LOG   [LLM] Model profile: qwen/1.5B (small) â†’ effectiveCtx=32768
+2026-02-22T02:34:17.161Z LOG   [LLM] Target context: 32768 (profile=32768, native=32768, user=auto)
+2026-02-22T02:34:17.211Z LOG   [LLM] Context: 22272 tokens (threads: 14, flash: true)
+2026-02-22T02:34:17.567Z LOG   [LLM] Chat wrapper auto-detected: QwenChatWrapper
+2026-02-22T02:34:17.567Z LOG   [LLM] Ready: qwen2.5-1.5b-instruct-q8_0 â€” 22272 ctx, 29 GPU layers, flash: true, wrapper: QwenChatWrapper
+2026-02-22T02:34:20.160Z LOG   [AI Chat] Profile: qwen/small | ctx=22272 (hw=22272) | sysReserve=280 | compact=true
+2026-02-22T02:34:20.161Z LOG   [AI Chat] Detected task type: chat
+2026-02-22T02:34:20.161Z LOG   [AI Chat] Model: qwen/small (1.5B qwen) â€” tools=12, grammar=limited, retry=3, quirks={"loopsFrequently":false,"truncatesMidTool":false,"overlyVerbose":false,"refusesOften":false,"halluccinatesToolResults":false,"needsExplicitStop":false,"emitsSpecialTokens":true,"poorMultiTool":false}
+2026-02-22T02:34:20.161Z LOG   [AI Chat] Agentic iteration 1/50
+2026-02-22T02:34:20.161Z LOG   [AI Chat] Prompt: ~64 tokens
+2026-02-22T02:34:20.161Z LOG   [LLM] ThoughtTokenBudget: 256 (effort=medium, profileDefault=256)
+2026-02-22T02:34:20.904Z LOG   [AI Chat] Response committed to display: 94 chars | display total: 94 chars | preview: "iry][, directly from the nupe,,\n,Ñ€Ð¾ ,][:çŸ›bel ,[/stretchrly t"
+2026-02-22T02:34:20.905Z LOG   [AI Chat] Chat-type hard gate | USER_MSG="hey bro" | MODEL_GENERATED="iry][, directly from the nupe,,\n,Ñ€Ð¾ ,][:çŸ›bel ,[/stretchrly t" (94 raw chars) â€” skipping tool parsing
+2026-02-22T02:34:20.905Z LOG   [AI Chat] No more tool calls, ending agentic loop
+2026-02-22T02:34:20.905Z LOG   [AI Chat] â•â• FINAL RETURN â•â• 94 chars â†’ UI | preview: "iry][, directly from the nupe,,\n,Ñ€Ð¾ ,][:çŸ›bel ,[/stretchrly to , ][: tilda ,], um"
+2026-02-22T02:34:47.695Z LOG   [LLM] Resetting session (standard prompt, ~230 tokens)
+2026-02-22T02:34:47.982Z LOG   [LLM] Session reset complete
+2026-02-22T02:34:47.982Z LOG   [LLM] Cancelling active generation before model switch
+2026-02-22T02:34:48.155Z LOG   [LLM] Reusing existing llama instance (gpu=auto)
+2026-02-22T02:34:48.155Z LOG   [LLM] Backend gpu=auto: VRAM total=4.0GB free=3.2GB
+2026-02-22T02:34:49.873Z LOG   [LLM] Model loaded: 17 GPU layers (mode: auto)
+2026-02-22T02:34:49.873Z LOG   [LLM] Model train context size: 131072
+2026-02-22T02:34:49.874Z LOG   [LLM] Model profile: llama/1B (tiny) â†’ effectiveCtx=32768
+2026-02-22T02:34:49.874Z LOG   [LLM] Target context: 32768 (profile=32768, native=131072, user=auto)
+2026-02-22T02:34:49.944Z LOG   [LLM] Context: 30976 tokens (threads: 14, flash: true)
+2026-02-22T02:34:50.147Z LOG   [LLM] Chat wrapper auto-detected: Llama3_2LightweightChatWrapper
+2026-02-22T02:34:50.147Z LOG   [LLM] _applyChatWrapperOverride: arch="llama" wrapper="Llama3_2LightweightChatWrapper" hasJinja=true
+2026-02-22T02:34:50.147Z WARN  [LLM] Trusted family wrapper: "Llama3_2LightweightChatWrapper" â€” skipping Jinja override (hasJinja=true), reconstructing with date preamble disabled
+2026-02-22T02:34:50.147Z LOG   [LLM] Trusted wrapper applied: Llama3_2LightweightChatWrapper (date preamble disabled, Jinja skipped)
+2026-02-22T02:34:50.147Z LOG   [LLM] Ready: llama-3.2-1b-instruct-q8_0 â€” 30976 ctx, 17 GPU layers, flash: true, wrapper: Llama3_2LightweightChatWrapper
+2026-02-22T02:34:51.941Z LOG   [AI Chat] Profile: llama/tiny | ctx=30976 (hw=30976) | sysReserve=280 | compact=true
+2026-02-22T02:34:51.941Z LOG   [AI Chat] Detected task type: chat
+2026-02-22T02:34:51.942Z LOG   [AI Chat] Model: llama/tiny (1B llama) â€” tools=8, grammar=never, retry=3, quirks={"loopsFrequently":true,"truncatesMidTool":true,"overlyVerbose":false,"refusesOften":false,"halluccinatesToolResults":false,"needsExplicitStop":false,"emitsSpecialTokens":false,"poorMultiTool":true}
+2026-02-22T02:34:51.942Z LOG   [AI Chat] Agentic iteration 1/50
+2026-02-22T02:34:51.942Z LOG   [AI Chat] Prompt: ~63 tokens
+2026-02-22T02:34:51.942Z LOG   [LLM] ThoughtTokenBudget: 0 (effort=medium, profileDefault=0)
+2026-02-22T02:34:52.259Z LOG   [AI Chat] Response committed to display: 29 chars | display total: 29 chars | preview: "Hi! How can I help you today?"
+2026-02-22T02:34:52.259Z LOG   [AI Chat] Chat-type hard gate | USER_MSG="hi" | MODEL_GENERATED="Hi! How can I help you today?" (29 raw chars) â€” skipping tool parsing
+2026-02-22T02:34:52.259Z LOG   [AI Chat] No more tool calls, ending agentic loop
+2026-02-22T02:34:52.259Z LOG   [AI Chat] â•â• FINAL RETURN â•â• 29 chars â†’ UI | preview: "Hi! How can I help you today?"
+2026-02-22T02:34:56.151Z LOG   [AI Chat] Profile: llama/tiny | ctx=30976 (hw=30976) | sysReserve=280 | compact=true
+2026-02-22T02:34:56.152Z LOG   [AI Chat] Detected task type: general
+2026-02-22T02:34:56.154Z LOG   [AI Chat] Model: llama/tiny (1B llama) â€” tools=8, grammar=never, retry=3, quirks={"loopsFrequently":true,"truncatesMidTool":true,"overlyVerbose":false,"refusesOften":false,"halluccinatesToolResults":false,"needsExplicitStop":false,"emitsSpecialTokens":false,"poorMultiTool":true}
+2026-02-22T02:34:56.154Z LOG   [AI Chat] Agentic iteration 1/50
+2026-02-22T02:34:56.154Z LOG   [AI Chat] Prompt: ~813 tokens
+2026-02-22T02:34:56.154Z LOG   [LLM] ThoughtTokenBudget: 0 (effort=medium, profileDefault=0)
+2026-02-22T02:34:57.204Z LOG   [AI Chat] Response committed to display: 322 chars | display total: 322 chars | preview: "It looks like you're trying to create a simple HTML game in "
+2026-02-22T02:34:57.205Z LOG   [MCP] processResponse called, text preview: It looks like you're trying to create a simple HTML game in the C:\Users\brend\my-static-appytr project. You want me to help with creating an HTML file, but there are no tools available.
+
+Let's try so
+2026-02-22T02:34:57.206Z LOG   [MCP] Parsing response for tool calls, length: 322
+2026-02-22T02:34:57.207Z LOG   [MCP] Total tool calls found (pre-repair): 0
+2026-02-22T02:34:57.207Z LOG   [MCP] No formal tool calls found, trying fallback detection...
+2026-02-22T02:34:57.207Z LOG   [MCP] No fallback tool calls either
+2026-02-22T02:34:57.209Z LOG   [AI Chat] No more tool calls, ending agentic loop
+2026-02-22T02:34:57.209Z LOG   [AI Chat] â•â• FINAL RETURN â•â• 322 chars â†’ UI | preview: "It looks like you're trying to create a simple HTML game in the C:\Users\brend\m"
+2026-02-22T02:35:08.540Z LOG   [AI Chat] Profile: llama/tiny | ctx=30976 (hw=30976) | sysReserve=280 | compact=true
+2026-02-22T02:35:08.541Z LOG   [AI Chat] Detected task type: general
+2026-02-22T02:35:08.542Z LOG   [AI Chat] Model: llama/tiny (1B llama) â€” tools=8, grammar=never, retry=3, quirks={"loopsFrequently":true,"truncatesMidTool":true,"overlyVerbose":false,"refusesOften":false,"halluccinatesToolResults":false,"needsExplicitStop":false,"emitsSpecialTokens":false,"poorMultiTool":true}
+2026-02-22T02:35:08.542Z LOG   [AI Chat] Agentic iteration 1/50
+2026-02-22T02:35:08.542Z LOG   [AI Chat] Prompt: ~871 tokens
+2026-02-22T02:35:08.542Z LOG   [LLM] ThoughtTokenBudget: 0 (effort=medium, profileDefault=0)
+2026-02-22T02:35:08.599Z LOG   [LLM] Empty response with KV reuse enabled; retrying once with lastEvaluation cleared (rawLen=0 fullLen=0 thinkTokens=0)
+2026-02-22T02:35:09.348Z LOG   [AI Chat] Response committed to display: 277 chars | display total: 277 chars | preview: "You want to create a simple HTML game. Let's use the `write_"
+2026-02-22T02:35:09.348Z LOG   [MCP] processResponse called, text preview: You want to create a simple HTML game. Let's use the `write_file` tool to write an empty index.html file in your project directory.
+
+```bash
+write_file (index.html, <html>...</html>)
+```
+
+This will cr
+2026-02-22T02:35:09.348Z LOG   [MCP] Parsing response for tool calls, length: 277
+2026-02-22T02:35:09.349Z LOG   [MCP] Total tool calls found (pre-repair): 0
+2026-02-22T02:35:09.349Z LOG   [MCP] No formal tool calls found, trying fallback detection...
+2026-02-22T02:35:09.349Z LOG   [MCP] Fallback: bash/shell block â†’ run_command: write_file (index.html, <html>...</html>)
+2026-02-22T02:35:09.349Z LOG   [MCP] Found fallback tool calls: 1
+2026-02-22T02:35:09.504Z LOG   [AI Chat] BUG-005: All tools failed (1 consecutive all-fail iterations)
+2026-02-22T02:35:09.505Z LOG   [AI Chat] Agentic iteration 2/50
+2026-02-22T02:35:09.505Z LOG   [AI Chat] Prompt: ~926 tokens
+2026-02-22T02:35:09.505Z LOG   [LLM] ThoughtTokenBudget: 0 (effort=medium, profileDefault=0)
+2026-02-22T02:35:09.505Z LOG   [LLM] KV reuse cooldown active (2 remaining) â€” skipping cache reuse this turn
+2026-02-22T02:35:10.073Z LOG   [AI Chat] Response committed to display: 206 chars | display total: 560 chars | preview: "```bash\nedit_file (index.html, "const game = new Phaser.Game"
+2026-02-22T02:35:10.073Z LOG   [MCP] processResponse called, text preview: ```bash
+edit_file (index.html, "const game = new Phaser.Game(800, 600);")
+```
+
+This will open the `index.html` file in your text editor and replace it with a simple HTML page that initializes a Phaser
+2026-02-22T02:35:10.073Z LOG   [MCP] Parsing response for tool calls, length: 206
+2026-02-22T02:35:10.073Z LOG   [MCP] Total tool calls found (pre-repair): 0
+2026-02-22T02:35:10.073Z LOG   [MCP] No formal tool calls found, trying fallback detection...
+2026-02-22T02:35:10.073Z LOG   [MCP] Fallback: bash/shell block â†’ run_command: edit_file (index.html, "const game = new Phaser.Game(800, 600);")
+2026-02-22T02:35:10.073Z LOG   [MCP] Found fallback tool calls: 1
+2026-02-22T02:35:10.123Z LOG   [AI Chat] BUG-005: All tools failed (2 consecutive all-fail iterations)
+2026-02-22T02:35:10.123Z LOG   [AI Chat] Agentic iteration 3/50
+2026-02-22T02:35:10.123Z LOG   [AI Chat] Prompt: ~945 tokens
+2026-02-22T02:35:10.123Z LOG   [LLM] ThoughtTokenBudget: 0 (effort=medium, profileDefault=0)
+2026-02-22T02:35:10.123Z LOG   [LLM] KV reuse cooldown active (1 remaining) â€” skipping cache reuse this turn
+2026-02-22T02:35:10.483Z LOG   [AI Chat] Response committed to display: 142 chars | display total: 855 chars | preview: "```bash\nweb_search "phaser game template"\n```\n\nThis will sea"
+2026-02-22T02:35:10.483Z LOG   [MCP] processResponse called, text preview: ```bash
+web_search "phaser game template"
+```
+
+This will search for a Phaser game template online and display the results in your web browser.
+2026-02-22T02:35:10.483Z LOG   [MCP] Parsing response for tool calls, length: 142
+2026-02-22T02:35:10.483Z LOG   [MCP] Total tool calls found (pre-repair): 0
+2026-02-22T02:35:10.483Z LOG   [MCP] No formal tool calls found, trying fallback detection...
+2026-02-22T02:35:10.483Z LOG   [MCP] Fallback: bash/shell block â†’ run_command: web_search "phaser game template"
+2026-02-22T02:35:10.483Z LOG   [MCP] Found fallback tool calls: 1
+2026-02-22T02:35:10.510Z LOG   [AI Chat] BUG-005: All tools failed (3 consecutive all-fail iterations)
+2026-02-22T02:35:10.511Z LOG   [AI Chat] Generating final summary...
+2026-02-22T02:35:10.511Z LOG   [LLM] ThoughtTokenBudget: 0 (effort=medium, profileDefault=0)
+2026-02-22T02:35:10.798Z LOG   [AI Chat] Condensed chatHistory: 12 turns â†’ 3 entries (prevents template loop)
+2026-02-22T02:35:10.799Z LOG   [AI Chat] â•â• FINAL RETURN â•â• 946 chars â†’ UI | preview: "You want to create a simple HTML game. Let's use the `write_file` tool to write "
+2026-02-22T02:35:27.742Z LOG   [LLM] Resetting session (standard prompt, ~230 tokens)
+2026-02-22T02:35:27.973Z LOG   [LLM] Session reset complete
+2026-02-22T02:35:27.974Z LOG   [LLM] Cancelling active generation before model switch
+2026-02-22T02:35:28.172Z LOG   [LLM] Reusing existing llama instance (gpu=auto)
+2026-02-22T02:35:28.173Z LOG   [LLM] Backend gpu=auto: VRAM total=4.0GB free=3.2GB
+2026-02-22T02:35:29.466Z WARN  [LLM] Cannot reset session: model or context is null/disposed
+2026-02-22T02:35:30.953Z LOG   [LLM] Model loaded: 23 GPU layers (mode: auto)
+2026-02-22T02:35:30.953Z LOG   [LLM] Model train context size: 262144
+2026-02-22T02:35:30.954Z LOG   [LLM] Model profile: qwen/4B (small) â†’ effectiveCtx=32768
+2026-02-22T02:35:30.954Z LOG   [LLM] Target context: 32768 (profile=32768, native=262144, user=auto)
+2026-02-22T02:35:31.069Z LOG   [LLM] Context: 6400 tokens (threads: 14, flash: true)
+2026-02-22T02:35:31.372Z LOG   [LLM] Chat wrapper auto-detected: QwenChatWrapper
+2026-02-22T02:35:31.372Z LOG   [LLM] Ready: Qwen3-4B-Thinking-2507-Q4_K_M â€” 6400 ctx, 23 GPU layers, flash: true, wrapper: QwenChatWrapper
+2026-02-22T02:35:31.373Z WARN  [LLM] BUG-042: Thinking model with only 6400 ctx tokens â€” expect 60-150s per iteration on limited VRAM.
+2026-02-22T02:35:34.133Z LOG   [AI Chat] Profile: qwen/small | ctx=6400 (hw=6400) | sysReserve=280 | compact=true
+2026-02-22T02:35:34.134Z LOG   [AI Chat] Detected task type: general
+2026-02-22T02:35:34.136Z LOG   [AI Chat] Model: qwen/small (4B qwen) â€” tools=12, grammar=limited, retry=3, quirks={"loopsFrequently":false,"truncatesMidTool":false,"overlyVerbose":false,"refusesOften":false,"halluccinatesToolResults":false,"needsExplicitStop":false,"emitsSpecialTokens":true,"poorMultiTool":false}
+2026-02-22T02:35:34.136Z LOG   [AI Chat] Agentic iteration 1/50
+2026-02-22T02:35:34.136Z LOG   [AI Chat] Prompt: ~735 tokens
+2026-02-22T02:35:34.136Z LOG   [LLM] ThoughtTokenBudget: 256 (effort=medium, profileDefault=256)
+2026-02-22T02:37:21.974Z LOG   [AI Chat] Response committed to display: 535 chars | display total: 535 chars | preview: "```json\n{\n  "tool": "write_file",\n  "params": {\n    "filePat"
+2026-02-22T02:37:21.975Z LOG   [MCP] processResponse called, text preview: ```json
+{
+  "tool": "write_file",
+  "params": {
+    "filePath": "game.html",
+    "content": "<!DOCTYPE html>\n<html>\n<head>\n    <title>Simple Click Game</title>\n</head>\n<body>\n    <h1>Click to Sc
+2026-02-22T02:37:21.976Z LOG   [MCP] Parsing response for tool calls, length: 535
+2026-02-22T02:37:21.976Z LOG   [MCP] Found tool call in code block: write_file
+2026-02-22T02:37:21.977Z LOG   [MCP] Total tool calls found (pre-repair): 1
+2026-02-22T02:37:21.977Z LOG   [MCP] Executing 1 tool calls... (50ms pace)
+2026-02-22T02:37:21.979Z LOG   [MCP] Executed tool: write_file result: success
+2026-02-22T02:37:21.980Z LOG   [AI Chat] Stripped hallucinated content: 535 â†’ 0 chars
+2026-02-22T02:37:21.981Z LOG   [AI Chat] FABRICATION WARNING: wrote 410 char file with data-like content but NO web data in history
+2026-02-22T02:37:21.982Z LOG   [AI Chat] Agentic iteration 2/50
+2026-02-22T02:37:21.982Z LOG   [AI Chat] Prompt: ~872 tokens
+2026-02-22T02:37:21.982Z LOG   [LLM] ThoughtTokenBudget: 256 (effort=medium, profileDefault=256)
+2026-02-22T02:37:22.190Z LOG   [LLM] Empty response with KV reuse enabled; retrying once with lastEvaluation cleared (rawLen=0 fullLen=0 thinkTokens=0)
+2026-02-22T02:38:19.537Z LOG   [AI Chat] Response committed to display: 84 chars | display total: 685 chars | preview: "```json\n{\n  "tool": "read_file",\n  "params": {\n    "filePath"
+2026-02-22T02:38:19.538Z LOG   [MCP] processResponse called, text preview: ```json
+{
+  "tool": "read_file",
+  "params": {
+    "filePath": "game.html"
+  }
+}
+```
+2026-02-22T02:38:19.538Z LOG   [MCP] Parsing response for tool calls, length: 84
+2026-02-22T02:38:19.538Z LOG   [MCP] Found tool call in code block: read_file
+2026-02-22T02:38:19.538Z LOG   [MCP] Total tool calls found (pre-repair): 1
+2026-02-22T02:38:19.538Z LOG   [MCP] Executing 1 tool calls... (50ms pace)
+2026-02-22T02:38:19.541Z LOG   [MCP] Executed tool: read_file result: success
+2026-02-22T02:38:19.542Z LOG   [AI Chat] Stripped hallucinated content: 84 â†’ 0 chars
+2026-02-22T02:38:19.543Z LOG   [AI Chat] Agentic iteration 3/50
+2026-02-22T02:38:19.543Z LOG   [AI Chat] Prompt: ~917 tokens
+2026-02-22T02:38:19.543Z LOG   [LLM] ThoughtTokenBudget: 256 (effort=medium, profileDefault=256)
+2026-02-22T02:38:19.543Z LOG   [LLM] KV reuse cooldown active (2 remaining) â€” skipping cache reuse this turn
+2026-02-22T02:39:55.750Z LOG   [AI Chat] Response committed to display: 532 chars | display total: 1721 chars | preview: "```json\n{\n  "tool": "write_file",\n  "params": {\n    "filePat"
+2026-02-22T02:39:55.750Z LOG   [MCP] processResponse called, text preview: ```json
+{
+  "tool": "write_file",
+  "params": {
+    "filePath": "index.html",
+    "content": "<!DOCTYPE html>\n<html>\n<head>\n    <title>Simple Click Game</title>\n</head>\n<body>\n    <h1>Click to S
+2026-02-22T02:39:55.750Z LOG   [MCP] Parsing response for tool calls, length: 532
+2026-02-22T02:39:55.750Z LOG   [MCP] Found tool call in code block: write_file
+2026-02-22T02:39:55.750Z LOG   [MCP] Total tool calls found (pre-repair): 1
+2026-02-22T02:39:55.750Z LOG   [MCP] Executing 1 tool calls... (50ms pace)
+2026-02-22T02:39:55.752Z LOG   [MCP] Executed tool: write_file result: success
+2026-02-22T02:39:55.752Z LOG   [AI Chat] Stripped hallucinated content: 532 â†’ 0 chars
+2026-02-22T02:39:55.752Z LOG   [AI Chat] FABRICATION WARNING: wrote 406 char file with data-like content but NO web data in history
+2026-02-22T02:39:55.753Z LOG   [AI Chat] Agentic iteration 4/50
+2026-02-22T02:39:55.753Z LOG   [AI Chat] Prompt: ~875 tokens
+2026-02-22T02:39:55.753Z LOG   [LLM] ThoughtTokenBudget: 256 (effort=medium, profileDefault=256)
+2026-02-22T02:39:55.753Z LOG   [LLM] KV reuse cooldown active (1 remaining) â€” skipping cache reuse this turn
+2026-02-22T02:41:30.376Z LOG   [AI Chat] Response committed to display: 119 chars | display total: 1906 chars | preview: "```json\n{\n  "tool": "web_search",\n  "params": {\n    "query":"
+2026-02-22T02:41:30.376Z LOG   [MCP] processResponse called, text preview: ```json
+{
+  "tool": "web_search",
+  "params": {
+    "query": "simple html click game implementation examples"
+  }
+}
+```
+2026-02-22T02:41:30.376Z LOG   [MCP] Parsing response for tool calls, length: 119
+2026-02-22T02:41:30.377Z LOG   [MCP] Found tool call in code block: web_search
+2026-02-22T02:41:30.377Z LOG   [MCP] Total tool calls found (pre-repair): 1
+2026-02-22T02:41:30.377Z LOG   [MCP] Executing 1 tool calls... (50ms pace)
+2026-02-22T02:41:31.508Z LOG   [MCP] Executed tool: web_search result: success
+2026-02-22T02:41:31.508Z LOG   [AI Chat] Stripped hallucinated content: 119 â†’ 0 chars
+2026-02-22T02:41:31.508Z LOG   [AI Chat] Agentic iteration 5/50
+2026-02-22T02:41:31.508Z LOG   [AI Chat] Prompt: ~1100 tokens
+2026-02-22T02:41:31.508Z LOG   [LLM] ThoughtTokenBudget: 256 (effort=medium, profileDefault=256)
+2026-02-22T02:41:31.625Z LOG   [LLM] Empty response with KV reuse enabled; retrying once with lastEvaluation cleared (rawLen=0 fullLen=0 thinkTokens=0)
+2026-02-22T02:42:38.211Z LOG   [AI Chat] Response committed to display: 126 chars | display total: 3257 chars | preview: "```json\n{\n  "tool": "browser_navigate",\n  "params": {\n    "u"
+2026-02-22T02:42:38.211Z LOG   [MCP] processResponse called, text preview: ```json
+{
+  "tool": "browser_navigate",
+  "params": {
+    "url": "https://www.w3schools.com/graphics/game_intro.asp"
+  }
+}
+```
+2026-02-22T02:42:38.211Z LOG   [MCP] Parsing response for tool calls, length: 126
+2026-02-22T02:42:38.211Z LOG   [MCP] Found tool call in code block: browser_navigate
+2026-02-22T02:42:38.211Z LOG   [MCP] Total tool calls found (pre-repair): 1
+2026-02-22T02:42:38.211Z LOG   [MCP] Executing 1 tool calls... (50ms pace)
+2026-02-22T02:42:38.212Z LOG   [MCPToolServer] Auto-launching Playwright browser for navigation...
+2026-02-22T02:42:38.212Z LOG   [PlaywrightBrowser] Found browser: C:\Program Files\Google\Chrome\Application\chrome.exe
+2026-02-22T02:42:42.656Z LOG   [PlaywrightBrowser] Launched successfully using chrome.exe
+2026-02-22T02:42:51.112Z LOG   [MCP] Executed tool: browser_navigate result: failed
+2026-02-22T02:42:51.112Z LOG   [AI Chat] Stripped hallucinated content: 126 â†’ 0 chars
+2026-02-22T02:42:51.113Z LOG   [AI Chat] BUG-005: All tools failed (1 consecutive all-fail iterations)
+2026-02-22T02:42:51.511Z LOG   [PlaywrightBrowser] DOM walk insufficient, trying accessibility tree
+2026-02-22T02:42:51.511Z LOG   [PlaywrightBrowser] Accessibility tree error: Cannot read properties of undefined (reading 'snapshot')
+2026-02-22T02:42:51.511Z LOG   [PlaywrightBrowser] Falling back to ariaSnapshot with ref injection
+2026-02-22T02:42:51.644Z LOG   [AI Chat] Agentic iteration 6/50
+2026-02-22T02:42:51.644Z LOG   [AI Chat] Prompt: ~919 tokens
+2026-02-22T02:42:51.644Z LOG   [LLM] ThoughtTokenBudget: 256 (effort=medium, profileDefault=256)
+2026-02-22T02:42:51.644Z LOG   [LLM] KV reuse cooldown active (2 remaining) â€” skipping cache reuse this turn
+2026-02-22T02:44:20.114Z LOG   [AI Chat] Response committed to display: 532 chars | display total: 3936 chars | preview: "```json\n{\n  "tool": "write_file",\n  "params": {\n    "filePat"
+2026-02-22T02:44:20.114Z LOG   [MCP] processResponse called, text preview: ```json
+{
+  "tool": "write_file",
+  "params": {
+    "filePath": "index.html",
+    "content": "<!DOCTYPE html>\n<html>\n<head>\n    <title>Simple Click Game</title>\n</head>\n<body>\n    <h1>Click to S
+2026-02-22T02:44:20.114Z LOG   [MCP] Parsing response for tool calls, length: 532
+2026-02-22T02:44:20.114Z LOG   [MCP] Found tool call in code block: write_file
+2026-02-22T02:44:20.114Z LOG   [MCP] Total tool calls found (pre-repair): 1
+2026-02-22T02:44:20.115Z LOG   [MCP] Executing 1 tool calls... (50ms pace)
+2026-02-22T02:44:20.117Z LOG   [MCP] Executed tool: write_file result: success
+2026-02-22T02:44:20.117Z LOG   [AI Chat] Stripped hallucinated content: 532 â†’ 0 chars
+2026-02-22T02:44:20.118Z LOG   [AI Chat] FABRICATION AUTO-CORRECTED: replaced 406 chars fabricated â†’ 1550 chars real data in index.html
+2026-02-22T02:44:20.119Z LOG   [AI Chat] Agentic iteration 7/50
+2026-02-22T02:44:20.119Z LOG   [AI Chat] Prompt: ~830 tokens
+2026-02-22T02:44:20.119Z LOG   [LLM] ThoughtTokenBudget: 256 (effort=medium, profileDefault=256)
+2026-02-22T02:44:20.119Z LOG   [LLM] KV reuse cooldown active (1 remaining) â€” skipping cache reuse this turn
+2026-02-22T02:44:45.755Z LOG   [LLM] Resetting session (standard prompt, ~230 tokens)
+2026-02-22T02:44:46.056Z LOG   [LLM] Session reset complete
+2026-02-22T02:44:46.058Z LOG   [LLM] Context overflow in generateStream() (error: Object is disposed), auto-summarizing and resetting
+2026-02-22T02:44:46.058Z WARN  [LLM] Context is disposed, recreating from model...
+2026-02-22T02:44:46.059Z ERROR [LLM] Could not recreate context from model: A context size of 6400 is too large for the available VRAM
+2026-02-22T02:44:46.059Z ERROR [AI Chat] Generation error on iteration 7: CONTEXT_OVERFLOW:
+2026-02-22T02:44:46.060Z LOG   [AI Chat] Context rotation 1/10 â€” summarizing and continuing
+2026-02-22T02:44:46.060Z WARN  [AI Chat] Context is null after reset, attempting full context recreation...
+2026-02-22T02:44:46.060Z ERROR [AI Chat] Context recreation from model failed: A context size of 24 is too large for the available VRAM
+2026-02-22T02:44:46.061Z LOG   [AI Chat] â•â• FINAL RETURN â•â• 4001 chars â†’ UI | preview: "```json\n{\n  "tool": "write_file",\n  "params": {\n    "filePath": "game.html",\n   "
+2026-02-22T02:44:46.219Z LOG   [LLM] Reusing existing llama instance (gpu=auto)
+2026-02-22T02:44:46.219Z LOG   [LLM] Backend gpu=auto: VRAM total=4.0GB free=3.2GB
+2026-02-22T02:44:48.783Z LOG   [LLM] Model loaded: 23 GPU layers (mode: auto)
+2026-02-22T02:44:48.783Z LOG   [LLM] Model train context size: 262144
+2026-02-22T02:44:48.783Z LOG   [LLM] Model profile: qwen/4B (small) â†’ effectiveCtx=32768
+2026-02-22T02:44:48.784Z LOG   [LLM] Target context: 32768 (profile=32768, native=262144, user=auto)
+2026-02-22T02:44:48.932Z LOG   [LLM] Context: 6144 tokens (threads: 14, flash: true)
+2026-02-22T02:44:49.221Z LOG   [LLM] Chat wrapper auto-detected: QwenChatWrapper
+2026-02-22T02:44:49.221Z LOG   [LLM] Ready: Qwen3-4B-Instruct-2507-Q4_K_M â€” 6144 ctx, 23 GPU layers, flash: true, wrapper: QwenChatWrapper
+2026-02-22T02:44:55.010Z LOG   [LLM] Resetting session (standard prompt, ~230 tokens)
+2026-02-22T02:44:55.258Z LOG   [LLM] Session reset complete
+2026-02-22T02:44:55.417Z LOG   [Reset] Closed Playwright browser for fresh session
+2026-02-22T02:44:57.673Z LOG   [AI Chat] Profile: qwen/small | ctx=6144 (hw=6144) | sysReserve=280 | compact=true
+2026-02-22T02:44:57.674Z LOG   [AI Chat] Detected task type: chat
+2026-02-22T02:44:57.674Z LOG   [AI Chat] Model: qwen/small (4B qwen) â€” tools=12, grammar=limited, retry=3, quirks={"loopsFrequently":false,"truncatesMidTool":false,"overlyVerbose":false,"refusesOften":false,"halluccinatesToolResults":false,"needsExplicitStop":false,"emitsSpecialTokens":true,"poorMultiTool":false}
+2026-02-22T02:44:57.674Z LOG   [AI Chat] Agentic iteration 1/50
+2026-02-22T02:44:57.674Z LOG   [AI Chat] Prompt: ~63 tokens
+2026-02-22T02:44:57.674Z LOG   [LLM] ThoughtTokenBudget: 256 (effort=medium, profileDefault=256)
+2026-02-22T02:44:59.020Z LOG   [AI Chat] Response committed to display: 29 chars | display total: 29 chars | preview: "Hi! How can I help you today?"
+2026-02-22T02:44:59.020Z LOG   [AI Chat] Chat-type hard gate | USER_MSG="hi" | MODEL_GENERATED="Hi! How can I help you today?" (29 raw chars) â€” skipping tool parsing
+2026-02-22T02:44:59.021Z LOG   [AI Chat] No more tool calls, ending agentic loop
+2026-02-22T02:44:59.021Z LOG   [AI Chat] â•â• FINAL RETURN â•â• 29 chars â†’ UI | preview: "Hi! How can I help you today?"
+2026-02-22T02:45:04.813Z LOG   [AI Chat] Profile: qwen/small | ctx=6144 (hw=6144) | sysReserve=280 | compact=true
+2026-02-22T02:45:04.814Z LOG   [AI Chat] Detected task type: general
+2026-02-22T02:45:04.815Z LOG   [AI Chat] Model: qwen/small (4B qwen) â€” tools=12, grammar=limited, retry=3, quirks={"loopsFrequently":false,"truncatesMidTool":false,"overlyVerbose":false,"refusesOften":false,"halluccinatesToolResults":false,"needsExplicitStop":false,"emitsSpecialTokens":true,"poorMultiTool":false}
+2026-02-22T02:45:04.815Z LOG   [AI Chat] Agentic iteration 1/50
+2026-02-22T02:45:04.815Z LOG   [AI Chat] Prompt: ~1164 tokens
+2026-02-22T02:45:04.815Z LOG   [LLM] ThoughtTokenBudget: 256 (effort=medium, profileDefault=256)
+2026-02-22T02:47:37.689Z LOG   [AI Chat] âš ï¸ ROLLBACK (described_not_executed) â€” retry 1/3, restoring checkpoint
+2026-02-22T02:47:37.689Z LOG   [AI Chat] Agentic iteration 1/50
+2026-02-22T02:47:37.689Z LOG   [AI Chat] Prompt: ~774 tokens
+2026-02-22T02:47:37.689Z LOG   [LLM] ThoughtTokenBudget: 256 (effort=medium, profileDefault=256)
+2026-02-22T02:48:40.795Z LOG   [LLM] Context overflow in generateStream() (error: Object is disposed), auto-summarizing and resetting
+2026-02-22T02:48:40.796Z WARN  [LLM] Context is disposed, recreating from model...
+2026-02-22T02:48:40.797Z ERROR [LLM] Could not recreate context from model: A context size of 6144 is too large for the available VRAM
+2026-02-22T02:48:40.797Z ERROR [AI Chat] Generation error on iteration 1: CONTEXT_OVERFLOW:
+2026-02-22T02:48:40.797Z LOG   [AI Chat] Context rotation 1/10 â€” summarizing and continuing

@@ -1,0 +1,222 @@
+{
+  "overall": 75.2,
+  "results": [
+    {
+      "id": "B1",
+      "name": "Open a website",
+      "score": 100,
+      "weight": 2,
+      "detail": "Correct",
+      "tools": [
+        "browser_navigate"
+      ],
+      "rawOutput": "```json\n{\"tool\": \"browser_navigate\", \"params\": {\"url\": \"https://www.google.com\"}}\n```",
+      "toolCallsRaw": [
+        {
+          "tool": "browser_navigate",
+          "params": {
+            "url": "https://www.google.com"
+          }
+        }
+      ],
+      "thinkTokens": 144,
+      "respTokens": 26,
+      "elapsed": 2450
+    },
+    {
+      "id": "B2",
+      "name": "Check a specific page",
+      "score": 100,
+      "weight": 2,
+      "detail": "Correct",
+      "tools": [
+        "browser_navigate"
+      ],
+      "rawOutput": "```json\n{\"tool\": \"browser_navigate\", \"params\": {\"url\": \"https://www.reddit.com/\"}}\n```",
+      "toolCallsRaw": [
+        {
+          "tool": "browser_navigate",
+          "params": {
+            "url": "https://www.reddit.com/"
+          }
+        }
+      ],
+      "thinkTokens": 232,
+      "respTokens": 27,
+      "elapsed": 2449
+    },
+    {
+      "id": "B3",
+      "name": "Search the internet",
+      "score": 0,
+      "weight": 2,
+      "detail": "No tool calls — model tried to answer from knowledge",
+      "tools": [],
+      "rawOutput": "The James Webb Space Telescope (JWST) has made significant discoveries in space exploration and astrophysics. Here are some key findings:  \n\n1. **Exoplanet Trans-Neptunian Objects**: The JWST has observed \"Oort clouds\" around Pluto, which is a critical discovery for understanding the structure of our solar system's outer planets.  \n2. **Dark Matter Research**: It has contributed to studies on dark matter by detecting gravitational waves and analyzing distant galaxy formations.  \n3. **Galaxy Studies**: The telescope has revealed new types of galaxies and studied cosmic dust in interstellar space, providing insights into early universe conditions.  \n\nFor the latest updates or specific discoveries, I recommend checking NASA’s official website or recent scientific papers related to JWST projects. Let me know if you'd like more details!",
+      "toolCallsRaw": [],
+      "thinkTokens": 268,
+      "respTokens": 168,
+      "elapsed": 4026
+    },
+    {
+      "id": "F1",
+      "name": "Create a file",
+      "score": 85,
+      "weight": 3,
+      "detail": "File: ., len: 75",
+      "tools": [
+        "write_file"
+      ],
+      "rawOutput": "```json\n{\"tool\": \"write_file\", \"params\": {\"filePath\": \".\", \"content\": \"<html><head><title>Welcome</title></head>\\n<body>\\n  <h1>Welcome</h1>\\n</body>\"}}\n```",
+      "toolCallsRaw": [
+        {
+          "tool": "write_file",
+          "params": {
+            "filePath": ".",
+            "content": "<html><head><title>Welcome</title></head>\n<body>\n  <h1>Welcome</h1>\n</body>"
+          }
+        }
+      ],
+      "thinkTokens": 205,
+      "respTokens": 48,
+      "elapsed": 2326
+    },
+    {
+      "id": "F2",
+      "name": "Read a project file",
+      "score": 100,
+      "weight": 2,
+      "detail": "Correct",
+      "tools": [
+        "read_file"
+      ],
+      "rawOutput": "```json\n{\"tool\": \"read_file\", \"params\": {\"filePath\": \"./package.json\"}}\n```",
+      "toolCallsRaw": [
+        {
+          "tool": "read_file",
+          "params": {
+            "filePath": "./package.json"
+          }
+        }
+      ],
+      "thinkTokens": 213,
+      "respTokens": 22,
+      "elapsed": 2173
+    },
+    {
+      "id": "C1",
+      "name": "Write a utility function",
+      "score": 85,
+      "weight": 3,
+      "detail": "utils.js, 131 chars",
+      "tools": [
+        "write_file"
+      ],
+      "rawOutput": "```json\n{\"tool\": \"write_file\", \"params\": {\"filePath\": \"utils.js\", \"content\": \"// This is a JavaScript function to reverse strings\\nfunction reverseString(input) {\\n  return input.split('').reverse().join('');\\n}\\n\"}}\n```",
+      "toolCallsRaw": [
+        {
+          "tool": "write_file",
+          "params": {
+            "filePath": "utils.js",
+            "content": "// This is a JavaScript function to reverse strings\nfunction reverseString(input) {\n  return input.split('').reverse().join('');\n}\n"
+          }
+        }
+      ],
+      "thinkTokens": 300,
+      "respTokens": 57,
+      "elapsed": 3227
+    },
+    {
+      "id": "C2",
+      "name": "Multi-file code task",
+      "score": 40,
+      "weight": 3,
+      "detail": "1 files: /project/config/config.json",
+      "tools": [
+        "write_file"
+      ],
+      "rawOutput": "```json\n{\"tool\":\"write_file\",\"params\":{\"filePath\":\"/project/config/config.json\",\"content\":\"{'port': 3000, 'host': 'localhost'}\"}}\n```\n\n```json\n{\"tool\":\"run_command\",\"params\":{\"command\":\"node /project/server.js\", \"cwd\":\"/project\"})\n```",
+      "toolCallsRaw": [
+        {
+          "tool": "write_file",
+          "params": {
+            "filePath": "/project/config/config.json",
+            "content": "{'port': 3000, 'host': 'localhost'}"
+          }
+        }
+      ],
+      "thinkTokens": 399,
+      "respTokens": 64,
+      "elapsed": 4175
+    },
+    {
+      "id": "M1",
+      "name": "Run a terminal command",
+      "score": 100,
+      "weight": 2,
+      "detail": "Perfect",
+      "tools": [
+        "run_command"
+      ],
+      "rawOutput": "```json\n{\"tool\": \"run_command\", \"params\": {\"command\": \"node -v\"}}\n```",
+      "toolCallsRaw": [
+        {
+          "tool": "run_command",
+          "params": {
+            "command": "node -v"
+          }
+        }
+      ],
+      "thinkTokens": 89,
+      "respTokens": 23,
+      "elapsed": 1054
+    },
+    {
+      "id": "M2",
+      "name": "Conversational — no tools needed",
+      "score": 100,
+      "weight": 2,
+      "detail": "Natural conversation",
+      "tools": [],
+      "rawOutput": "Hey there! How are you doing? I'm super happy to be here! If anything's on your mind, just let me know — I'll be around! 😊",
+      "toolCallsRaw": [],
+      "thinkTokens": 64,
+      "respTokens": 35,
+      "elapsed": 958
+    },
+    {
+      "id": "M3",
+      "name": "Explore project structure",
+      "score": 50,
+      "weight": 2,
+      "detail": "Listed wrong dir: ",
+      "tools": [
+        "list_directory"
+      ],
+      "rawOutput": "```json\n{\"tool\": \"list_directory\", \"params\": {\"dirPath\": \"src\"}}\n```",
+      "toolCallsRaw": [
+        {
+          "tool": "list_directory",
+          "params": {
+            "dirPath": "src"
+          }
+        }
+      ],
+      "thinkTokens": 213,
+      "respTokens": 22,
+      "elapsed": 2161
+    }
+  ],
+  "config": {
+    "maxTokens": 4096,
+    "temperature": 0.5,
+    "topP": 0.9,
+    "topK": 20,
+    "repeatPenalty": 1.15,
+    "frequencyPenalty": 0.1,
+    "presencePenalty": 0.1,
+    "lastTokensPenaltyCount": 128,
+    "thoughtTokenBudget": 2048
+  },
+  "timestamp": "2026-02-15T19:45:39.000Z"
+}

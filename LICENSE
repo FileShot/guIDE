@@ -1,0 +1,75 @@
+guIDE - Source Available License
+Copyright (c) 2025-2026 Brendan Gray (GitHub: FileShot)
+All Rights Reserved.
+
+TERMS AND CONDITIONS
+
+1. DEFINITIONS
+   "Software" means the guIDE application, including all source code, 
+   documentation, assets, and associated files in this repository.
+   "Author" means Brendan Gray (GitHub: FileShot).
+   "You" means the individual or entity exercising permissions under this License.
+
+2. GRANT OF RIGHTS
+   Subject to the terms of this License, the Author grants You a limited,
+   non-exclusive, non-transferable, revocable license to:
+   
+   a) View, download, and study the source code for personal, educational,
+      or evaluation purposes.
+   b) Use the Software in its unmodified form for personal, non-commercial use.
+   c) Create modifications for personal, non-commercial use only, provided
+      such modifications are not distributed publicly.
+   d) Submit contributions (pull requests) to the official repository, which
+      upon acceptance become part of the Software under this License.
+
+3. RESTRICTIONS
+   You may NOT, without prior written permission from the Author:
+   
+   a) Redistribute, sublicense, sell, lease, or commercially exploit the
+      Software or any modified version of it.
+   b) Remove, alter, or obscure any copyright notices, attribution, branding,
+      or authorship information in the Software.
+   c) Rebrand, rename, or present the Software or any derivative work as
+      your own creation or product.
+   d) Use the Software or any substantial portion of it as the basis for a
+      competing product or service, whether commercial or free.
+   e) Distribute modified versions of the Software publicly (forks for the
+      purpose of contributing back via pull requests are permitted).
+   f) Use the Author's name, likeness, or trademarks to endorse or promote
+      products derived from this Software without prior written consent.
+
+4. ATTRIBUTION
+   Any permitted use of the Software must prominently display the following
+   attribution in a reasonably visible location:
+   
+   "Built by Brendan Gray (github.com/FileShot)"
+   
+   This attribution must not be removed, modified, or obscured under any
+   circumstances.
+
+5. CONTRIBUTIONS
+   By submitting code, documentation, or other materials to the official
+   repository, You agree to assign copyright of those contributions to the
+   Author and agree that they will be licensed under this same License.
+
+6. NO WARRANTY
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+   OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+   AUTHOR BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+   ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+   WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+7. TERMINATION
+   This License automatically terminates if You violate any of its terms.
+   Upon termination, You must cease all use and destroy all copies of the
+   Software in your possession.
+
+8. FUTURE LICENSING
+   The Author reserves the right to offer the Software under additional or
+   alternative license terms at any time. Any such change applies only to
+   future versions and does not retroactively affect copies obtained under
+   this License.
+
+For licensing inquiries, commercial use, or permission requests:
+GitHub: https://github.com/FileShot

@@ -1,0 +1,16 @@
+Complete the student enrollment process at Prometheus Academy challenge site (https://pocket.graysoft.dev/challenge/login.html).
+
+Student details:
+- Name: Alexander James Prometheus  
+- DOB: March 15, 2008
+- Email: alex.prometheus2026@email.com
+- Phone: (555) 123-4567
+
+Start at the login page and work through ALL steps to complete enrollment:
+1. Login and navigate to registration
+2. Fill out ALL registration form sections (personal, contact, academic, program, accommodations, statement)  
+3. Select 5 appropriate courses (15+ credits, no conflicts)
+4. Complete the assessment test (answer questions to best of your ability)
+5. Review and confirm enrollment
+
+Be thorough, read all instructions, handle any validation errors, and complete the ENTIRE enrollment process through to the final confirmation.

@@ -1,0 +1,17 @@
+Car 1: 2015 Nissan Altima
+Price: $5,800
+Year: 2015
+Mileage: 115,000
+Link: https://dallas.craigslist.org/dal/cto/d/arlington-2015-nissan-altima/7915430562.html
+
+Car 2: 2010 Nissan Pathfinder
+Price: $6,500
+Year: 2010
+Mileage: 202,000
+Link: https://dallas.craigslist.org/dal/cto/d/irving-nissan-pathfinder-2010-se-for/7915431829.html
+
+Car 3: 2006 KIA SPECTRA 4D SEDAN EX
+Price: $5,000
+Year: 2006
+Mileage: 145,000
+Link: https://dallas.craigslist.org/ftw/ctd/d/fort-worth-2006-kia-spectra-4d-sedan-ex/7915434756.html

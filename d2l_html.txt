@@ -1,0 +1,1241 @@
+<!DOCTYPE html><html data-userprofile-context="{&quot;hasProfileCardAccess&quot;:true}" data-mathjax-context="{&quot;renderLatex&quot;:false,&quot;outputScale&quot;:1.5}" data-logging-endpoint="/d2l/lp/logger/provision?sessionToken=NjYwNiw3OTkyMQ" lang="en-us" data-lang-default="en-us" data-intl-overrides="{&quot;number&quot;:{&quot;patterns&quot;:{&quot;decimal&quot;:{&quot;negativePattern&quot;:&quot;-{number}&quot;},&quot;percent&quot;:{&quot;positivePattern&quot;:&quot;{number} %&quot;,&quot;negativePattern&quot;:&quot;-{number} %&quot;}},&quot;symbols&quot;:{&quot;decimal&quot;:&quot;.&quot;,&quot;group&quot;:&quot;,&quot;,&quot;negative&quot;:&quot;-&quot;,&quot;percent&quot;:&quot;%&quot;},&quot;groupSize&quot;:[3]},&quot;date&quot;:{&quot;hour24&quot;:false,&quot;calendar&quot;:{&quot;firstDayOfWeek&quot;:0,&quot;dayPeriods&quot;:{&quot;am&quot;:&quot;AM&quot;,&quot;pm&quot;:&quot;PM&quot;},&quot;months&quot;:{&quot;short&quot;:[&quot;Jan&quot;,&quot;Feb&quot;,&quot;Mar&quot;,&quot;Apr&quot;,&quot;May&quot;,&quot;Jun&quot;,&quot;Jul&quot;,&quot;Aug&quot;,&quot;Sep&quot;,&quot;Oct&quot;,&quot;Nov&quot;,&quot;Dec&quot;,&quot;&quot;],&quot;long&quot;:[&quot;January&quot;,&quot;February&quot;,&quot;March&quot;,&quot;April&quot;,&quot;May&quot;,&quot;June&quot;,&quot;July&quot;,&quot;August&quot;,&quot;September&quot;,&quot;October&quot;,&quot;November&quot;,&quot;December&quot;,&quot;&quot;]},&quot;days&quot;:{&quot;short&quot;:[&quot;Sun&quot;,&quot;Mon&quot;,&quot;Tue&quot;,&quot;Wed&quot;,&quot;Thu&quot;,&quot;Fri&quot;,&quot;Sat&quot;]}},&quot;formats&quot;:{&quot;dateFormats&quot;:{&quot;short&quot;:&quot;M/d/yyyy&quot;},&quot;timeFormats&quot;:{&quot;short&quot;:&quot;h:mm tt&quot;,&quot;medium&quot;:&quot;h:mm tt&quot;,&quot;full&quot;:&quot;h:mm tt ZZZ&quot;}}}}" data-oslo="{&quot;batch&quot;:&quot;/d2l/api/oslo/1/batch&quot;,&quot;collection&quot;:&quot;/d2l/api/oslo/1/collection&quot;,&quot;version&quot;:&quot;W/\&quot;20.26.2.21397.638396676610101010\&quot;&quot;}" data-timezone="{&quot;name&quot;:&quot;United States - New York&quot;,&quot;identifier&quot;:&quot;America/New_York&quot;}" data-terminology="{&quot;outcomes&quot;:&quot;outcomes&quot;,&quot;educator&quot;:&quot;teacher&quot;,&quot;moduleHierarchy&quot;:&quot;unit&quot;}" data-app-version="20.26.2" dir="ltr" data-telemetry-endpoint="https://prd.us-east-1.telemetryservice.brightspace.com/api/events/" data-cdn="https://s.brightspace.com/apps/brightspace/20.26.2.21397/" data-global-context="{&quot;orgUnitId&quot;:&quot;6662&quot;,&quot;orgId&quot;:&quot;6606&quot;,&quot;userId&quot;:&quot;79921&quot;}" data-he-context="{&quot;activeOrgEnrollment&quot;:true,&quot;applySandboxing&quot;:false,&quot;bcsansFontAllowed&quot;:false,&quot;contentStyler&quot;:false,&quot;contentStylerCssOverride&quot;:&quot;&quot;,&quot;enableLmsPathChecking&quot;:true,&quot;generativeAIEndpoint&quot;:&quot;&quot;,&quot;h5pContext&quot;:null,&quot;h5pLtiDeploymentLinkId&quot;:null,&quot;insertElement&quot;:false,&quot;insertPractice&quot;:false,&quot;layouts&quot;:false,&quot;mathRenderScale&quot;:1.5,&quot;maxFileSize&quot;:3221225472,&quot;mentions&quot;:false,&quot;orgUnitId&quot;:&quot;6662&quot;,&quot;orgUnitPath&quot;:&quot;/content/&quot;,&quot;pasteFormatting&quot;:&quot;merge&quot;,&quot;sourceEditable&quot;:true,&quot;uploadFiles&quot;:false,&quot;useNewTinyMCEVersion&quot;:false,&quot;viewFiles&quot;:false,&quot;wmodeOpaque&quot;:true}" data-css-vars="{&quot;--d2l-branding-primary-color&quot;:&quot;#a4d65e&quot;}" style="--d2l-vh: 7.2px; --d2l-vw: 12.8px;"><head>
+		<meta http-equiv="Content-Type" content="text/html;charset=utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+		<title>Homepage - University of Maine at Augusta</title>
+		<link rel="preconnect" href="https://s.brightspace.com/lib/bsi/2026.2.264/" crossorigin="">
+		<link rel="dns-prefetch" href="https://s.brightspace.com/lib/bsi/2026.2.264/">
+		<link rel="modulepreload" href="https://s.brightspace.com/lib/bsi/2026.2.264/unbundled/bsi-unbundled.js" as="script" crossorigin="anonymous">
+		<link rel="modulepreload" href="https://s.brightspace.com/lib/bsi/2026.2.264/unbundled/navigation.js" as="script" crossorigin="anonymous">
+		<link rel="modulepreload" href="https://s.brightspace.com/lib/bsi/2026.2.264/unbundled/navigation-main-header.js" as="script" crossorigin="anonymous">
+		<link rel="modulepreload" href="https://s.brightspace.com/lib/bsi/2026.2.264/unbundled/navigation-button-icon.js" as="script" crossorigin="anonymous">
+		<link rel="modulepreload" href="https://s.brightspace.com/lib/bsi/2026.2.264/unbundled/navigation-link-icon.js" as="script" crossorigin="anonymous">
+		<link rel="modulepreload" href="https://s.brightspace.com/lib/bsi/2026.2.264/unbundled/navigation-separator.js" as="script" crossorigin="anonymous">
+		<link rel="modulepreload" href="https://s.brightspace.com/lib/bsi/2026.2.264/unbundled/navigation-link-image.js" as="script" crossorigin="anonymous">
+		<link rel="modulepreload" href="https://s.brightspace.com/lib/bsi/2026.2.264/unbundled/navigation-dropdown-button-icon.js" as="script" crossorigin="anonymous">
+		<link rel="modulepreload" href="https://s.brightspace.com/lib/bsi/2026.2.264/unbundled/dropdown-content.js" as="script" crossorigin="anonymous">
+		<link rel="modulepreload" href="https://s.brightspace.com/lib/bsi/2026.2.264/unbundled/navigation-dropdown-button-custom.js" as="script" crossorigin="anonymous">
+		<link rel="modulepreload" href="https://s.brightspace.com/lib/bsi/2026.2.264/unbundled/d2l-profile-image-base.js" as="script" crossorigin="anonymous">
+		<link rel="modulepreload" href="https://s.brightspace.com/lib/bsi/2026.2.264/unbundled/navigation-main-footer.js" as="script" crossorigin="anonymous">
+		<link rel="modulepreload" href="https://s.brightspace.com/lib/bsi/2026.2.264/unbundled/dropdown.js" as="script" crossorigin="anonymous">
+		<link rel="modulepreload" href="https://s.brightspace.com/lib/bsi/2026.2.264/unbundled/dropdown-menu.js" as="script" crossorigin="anonymous">
+		<link rel="modulepreload" href="https://s.brightspace.com/lib/bsi/2026.2.264/unbundled/icon.js" as="script" crossorigin="anonymous">
+		<link rel="modulepreload" href="https://s.brightspace.com/lib/bsi/2026.2.264/unbundled/menu.js" as="script" crossorigin="anonymous">
+		<link rel="modulepreload" href="https://s.brightspace.com/lib/bsi/2026.2.264/unbundled/menu-item.js" as="script" crossorigin="anonymous">
+		<link rel="modulepreload" href="https://s.brightspace.com/lib/bsi/2026.2.264/unbundled/menu-item-link.js" as="script" crossorigin="anonymous">
+		<link rel="modulepreload" href="https://s.brightspace.com/lib/bsi/2026.2.264/unbundled/navigation-band.js" as="script" crossorigin="anonymous">
+		<link rel="modulepreload" href="https://s.brightspace.com/lib/bsi/2026.2.264/unbundled/button-icon.js" as="script" crossorigin="anonymous">
+		<link rel="modulepreload" href="https://s.brightspace.com/lib/bsi/2026.2.264/unbundled/menu-item-separator.js" as="script" crossorigin="anonymous">
+		<link rel="modulepreload" href="https://s.brightspace.com/lib/bsi/2026.2.264/unbundled/d2l-image-banner-overlay.js" as="script" crossorigin="anonymous">
+		<link rel="modulepreload" href="https://s.brightspace.com/lib/bsi/2026.2.264/unbundled/expand-collapse-content.js" as="script" crossorigin="anonymous">
+		<link rel="modulepreload" href="https://s.brightspace.com/lib/bsi/2026.2.264/unbundled/d2l-my-courses.js" as="script" crossorigin="anonymous">
+		<link rel="modulepreload" href="https://s.brightspace.com/lib/bsi/2026.2.264/unbundled/dropdown-context-menu.js" as="script" crossorigin="anonymous">
+		<link rel="modulepreload" href="https://s.brightspace.com/lib/bsi/2026.2.264/unbundled/html-block.js" as="script" crossorigin="anonymous">
+		<script async="" src="https://www.googletagmanager.com/gtm.js?id=G-PDG4BGM9SH"></script><script>
+		(function(){if('PerformanceLongTaskTiming' in window) {var g = window.__tti = {e:[]};g.o = new PerformanceObserver( function( l ){ g.e = g.e.concat( l.getEntries() ) });g.o.observe({ entryTypes:['longtask']})}})();
+		(function(){var client;var errors = [];window.addEventListener('d2l-logging-loaded', function(e) {client = e.detail.createClient('uncaught-errors', { shouldThrottle: true });if (errors.length > 0) {client.legacyErrorBatch(errors);}});var handleError = function(data) {if (!data.message) return;if (data.error && data.error.stack && (data.error.stack.includes('/content/') || data.error.stack.includes('/shared/'))) return;if (client) {client.legacyError(data.message, data.source, data.lineno, data.colno, data.error);} else {errors.push(data);}};window.addEventListener('error', function(e) {handleError({ message: e.message, source: e.source, lineno: e.lineno, colno: e.colno, error: e.error });});window.addEventListener('unhandledrejection', function(e) {handleError({message: e.reason ? (e.reason.message ? e.reason.message : e.reason) : '',error: e.reason});});})();
+		(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+})(window,document,'script','dataLayer','G-PDG4BGM9SH');
+		(function(){try { localStorage.setItem('XSRF.Token','m4wZNf29DIriFOcs4hEJjoGq93v2XvD7');localStorage.setItem('Session.UserId','79921');} catch(e) {}})();
+		(function(){if(window['FontFace'] === undefined) { window.d2lFontsLoaded = true; return; }window.d2lFontsLoaded = false;Promise.all(['400','700'].map(function(w) {return new FontFace('Lato','url(https://s.brightspace.com/lib/fonts/0.6.1/assets/Lato-' + w + '.woff2) format("woff2")', {style:'normal',weight: w}).load();})).then(function() {window.d2lFontsLoaded = true;if(window['D2L'] && window.D2L['FontsLoaded']) { window.D2L.FontsLoaded(); }});})();
+		(function(){
+				D2L = window.D2L || {}; D2L.LP = D2L.LP || {}; D2L.LP.Web = D2L.LP.Web || {}; D2L.LP.Web.UI = D2L.LP.Web.UI || {};
+				D2L.LP.Web.UI.Flags = {
+					ListedFlags: {"ACC-5-dashboard":false,"kaiju-349-source-course-deploy":true,"award-enable-copy-workflow":false,"awards-increase-string-fields-length":true,"LURV-6105-update-public-awards-fields":true,"awards-summary-date-localization-fix":true,"create-space-experimental-brightspace-object-types":false,"MAV-5508-welcome-widget-create-new":true,"ipsis-sourcesystem-migration":true,"ipsis-provider-oldstandardcsv":false,"ipsis-oneroster-csv-powerschool":false,"ipsis-oneroster-full-sync-implicit-unenrollments":false,"ipsis-esb-lis":false,"hyrl-4-ipsis-queued-batches":true,"f17778-oneroster-psur":false,"f19471-gg4l-oneroster-grades-passback":true,"hyrl-1999-oneroster-rest-1p2":false,"hyrl-2561-ipsis-lms-invoke-aws-lambdas":true,"hyrl-2962-cancel-batch":false,"hyrl-3638-user-default-inactive-option":true,"hyrl-3587-hylia-data-pond":false,"F16988-add-to-calendar":true,"advanced-assessments-groups":true,"PHNX-2361-lti-activity-usage":false,"BORG-5035-Use-Full-Html-Editor":true,"nim-3228-ce-multi-eval-tab-skeleton-fix":true,"nim-5386-modify-activity-display-return-to":true,"nim-5487-fix-assigned-actor-counts":true,"course-completion-manual-override":true,"PHNX-3264-unavailable-content-visibility-setting":true,"F18735-lti-special-access-ui-feature-flag":false,"F19162-enable-content-face-releaseconditions":true,"F21912-enable-content-face-competencies":true,"F19163-enable-content-face-standards":true,"IDCS-15-edit-content-file-descriptions":true,"IDCS-17-edit-weblink-descriptions":true,"PHNX-1554-enable-refactored-completion-summary":true,"PHNX-2629-access-unlimited-depth":true,"IDCS-283-edit-lti-descriptions":true,"EP-1169-use-content-search":true,"EP-1097-edit-scorm-descriptions":true,"EP-1432-enable-description-scrolling-hovering":true,"EP-1339-show-next-and-previous-buttons":true,"EP-1580-enable-url-updating-in-lessons-next-prev":true,"PHNX-2357-user-guided-grade-associations":true,"PHNX-2649-lessons-course-overview":true,"PHNX-3198-respect-availability-window":true,"PHNX-3065-lessons-quicklink-current-window-navigation":true,"PHNX-2766-lazy-load-content":true,"PHNX-2988-lessons-full-date-tooltip-and-aria":true,"PHNX-3063-support-availability-types":true,"EP-1454-enable-module-level-outcome-alignment":false,"usa-1243-discussions-due-date":true,"FED-3067-Annual-Consumption":true,"cpd-add-record-from-award":true,"cpd-utc-dates":true,"cpd-default-attachments":true,"cpd-save-targets-dialog":true,"LURV-6016-CPD-Submission-Alert":true,"nim-3661-new-alerts-on-incorrect-file-extenstion-assignment-submission":true,"fed-54-in-progress":false,"FED-4668-lift-outcomes":true,"FED-4649-content-gen-import-expand":true,"FED-4285-content-templates":true,"HAI-1593-content-picker-quiz":true,"HAI-1591-content-picker-ideas":true,"HAI-1592-content-picker-summary":true,"HAI-1821-content-picker-lss":true,"HAI-596-Interventions":true,"HAI-2303-lcg-bulk-template":false,"FED-6732-quiz-custom-instructions":false,"FED-6876-idea-custom-instructions":false,"rpc-recalculate-all-users-fix":true,"oad-include-asn":true,"EP-1443-enable-lightcast-skills":false,"rename-programs-to-outcome-sets":true,"outcome-sets-organization":true,"outcomes-set-course-dataset":true,"outcomes-set-org-dataset":true,"EP-1420-enable-createspace-picker":false,"outcome-sets-scales":false,"de44716-lti-iframe-resize-limit":false,"lti-apps":false,"uce-eula-dialog":true,"BORG-4318-hide-quiz-question-points":true,"BORG-5230-zero-point-questions":true,"BORG-6211-jobify-survey-export":true,"BORG-5429-Hotspot-Question-Type":false,"BORG-3975-quizzing-h5p-improvements":false,"f21399-reopen-quiz-attempt":true,"BORG-3800-attempt-log-tab-id-additional-work":true,"BORG-5624-question-pools-validate-numquestions":true,"EP-1126-edit-lor-descriptions":true,"FED-2493-Docs-PDF":true,"HAI-2170-study-notebook":false,"MAV-5203-createspace-h5p-library":false,"GAUD-7472-dropdown-popover":true,"GAUD-7355-tooltip-popover":true,"GAUD-7146-tabs-new-structure":true,"GAUD-8605-tab-no-initial-selected-event":true,"GAUD-8351-dialog-resize-telemetry":true,"GAUD-8658-mvc-dialog-focus-custom-elems":true,"PHNX-3234-dialog-alignment-fix":true,"GAUD-8228-8186-improved-table-col-sync":true,"GAUD-8465-immersive-nav-text-spacing":true,"lurv-6209-user-merge":false,"rubrics-clear-selections-option-and-menu-improvements":true,"KAIJU-189-source-course-deploy":true,"MAV-5177-source-courses-in-createspace":false,"MAV-3788-slim-announcements-no-context-override":true,"MAV-4341-single-profile-social-media-update":true,"MAV-4588-learner-awards-no-context-override":true,"MAV-4591-welcome-window-no-context-override":false,"MAV-5067-hwep-empty-widget":true,"MAV-5258-mpw-profile-dropdown":true,"shield-4811-enter-grades-scrolling-fix":false,"GAUD-7660-legacy-tabs-backport":true,"workforce-learning-groups":false,"scheduled-learning":false},
+					Flag: function(feature, defaultValue) {
+						const featureValue = D2L.LP.Web.UI.Flags.ListedFlags[feature];
+						return featureValue !== undefined ? featureValue : defaultValue;
+					}
+				};
+			})();
+		</script>
+		<meta name="robots" content="noindex">
+		<link rel="icon" href="/d2l/lp/web/faviconView?variant=0&amp;version=1">
+		<link rel="stylesheet" type="text/css" href="https://s.brightspace.com/lib/bsi/2026.2.264/bsi.css">
+		<link rel="stylesheet" type="text/css" href="https://s.brightspace.com/lib/reset-css/1.1.0/reset.css">
+		<link rel="stylesheet" type="text/css" href="https://s.brightspace.com/apps/brightspace/20.26.2.21397/web-packages/D2L.LP.Web.Desktop.css">
+		<link rel="stylesheet" type="text/css" href="https://s.brightspace.com/apps/brightspace/20.26.2.21397/web-packages/D2L.PlatformTools.Homepage.css">
+		<link rel="stylesheet" type="text/css" href="https://s.brightspace.com/lib/bsi/2026.2.264/homepages.css">
+		<style>
+			html { font-size:20px; }
+			html { --d2l-branding-primary-color: #a4d65e; }
+			.d2l-branding-navigation-background-color {background-color: #003057;}
+			.d2l_1_21_903 {margin:10px;}
+			.d2l_1_33_244 {width:500px;}
+			.d2l_1_34_887 {background-position:left top;}
+			.d2l_1_35_808 {padding:1em;}
+			.d2l_1_36_4 {background-image:url('https://s.brightspace.com/lib/bsi/2026.2.264/images/tier1/alert.svg');}
+			.d2l_1_37_779 {background-position:right top;}
+			.d2l_1_38_167 {padding-right:31px;}
+			.d2l_1_39_787 {min-height:18px;}
+			.d2l_1_40_880 {background-image:url('https://s.brightspace.com/lib/bsi/2026.2.264/images/tier1/check.svg');}
+			.d2l_1_41_859 {padding:3.4em;}
+			.d2l_1_46_463 {float:left;}
+			.d2l_1_54_112 {width:100%;}
+			.d2l_1_55_785 {height:50px;}
+		</style>
+		<script>(function() {})();</script><style id="d2l-colors">
+		html {
+			/* basic grays (lightest to darkest) */
+			--d2l-color-regolith: #f9fbff;
+			--d2l-color-sylvite: #f1f5fb;
+			--d2l-color-gypsum: #e3e9f1;
+			--d2l-color-mica: #cdd5dc;
+			--d2l-color-corundum: #b1b9be;
+			--d2l-color-chromite: #90989d;
+			--d2l-color-galena: #6e7477;
+			--d2l-color-tungsten: #494c4e;
+			--d2l-color-ferrite: #202122;
+
+			/* zircon */
+			--d2l-color-zircon-plus-2: #e0feff;
+			--d2l-color-zircon-plus-1: #00d2ed;
+			--d2l-color-zircon: #008eab;
+			--d2l-color-zircon-minus-1: #035670;
+
+			/* celestine */
+			--d2l-color-celestine-plus-2: #e8f8ff;
+			--d2l-color-celestine-plus-1: #29a6ff;
+			--d2l-color-celestine: #006fbf;
+			--d2l-color-celestine-minus-1: #004489;
+
+			/* amethyst */
+			--d2l-color-amethyst-plus-2: #f2f0ff;
+			--d2l-color-amethyst-plus-1: #8982ff;
+			--d2l-color-amethyst: #6038ff;
+			--d2l-color-amethyst-minus-1: #4500db;
+
+			/* fluorite */
+			--d2l-color-fluorite-plus-2: #f9ebff;
+			--d2l-color-fluorite-plus-1: #ce68fa;
+			--d2l-color-fluorite: #9d1fd4;
+			--d2l-color-fluorite-minus-1: #6900a0;
+
+			/* tourmaline */
+			--d2l-color-tourmaline-plus-2: #ffebf6;
+			--d2l-color-tourmaline-plus-1: #fd4e9d;
+			--d2l-color-tourmaline: #d40067;
+			--d2l-color-tourmaline-minus-1: #990056;
+
+			/* cinnabar */
+			--d2l-color-cinnabar-plus-2: #ffede8;
+			--d2l-color-cinnabar-plus-1: #ff575a;
+			--d2l-color-cinnabar: #cd2026;
+			--d2l-color-cinnabar-minus-1: #990006;
+
+			/* carnelian */
+			--d2l-color-carnelian-plus-1: #fff3e0;
+			--d2l-color-carnelian: #e87511;
+			--d2l-color-carnelian-minus-1: #ba4700;
+			--d2l-color-carnelian-minus-2: #7d2600;
+
+			/* citrine */
+			--d2l-color-citrine-plus-1: #fff9d6;
+			--d2l-color-citrine: #ffba59;
+			--d2l-color-citrine-minus-1: #c47400;
+			--d2l-color-citrine-minus-2: #7a4300;
+
+			/* peridot */
+			--d2l-color-peridot-plus-1: #efffd9;
+			--d2l-color-peridot: #8ad934;
+			--d2l-color-peridot-minus-1: #4a8f00;
+			--d2l-color-peridot-minus-2: #2f5e00;
+
+			/* olivine */
+			--d2l-color-olivine-plus-1: #e7ffe3;
+			--d2l-color-olivine: #46a661;
+			--d2l-color-olivine-minus-1: #027a21;
+			--d2l-color-olivine-minus-2: #005614;
+
+			/* malachite */
+			--d2l-color-malachite-plus-1: #e3fff5;
+			--d2l-color-malachite: #2de2c0;
+			--d2l-color-malachite-minus-1: #00a490;
+			--d2l-color-malachite-minus-2: #00635e;
+
+			/* primary accent */
+			--d2l-color-primary-accent-action: var(--d2l-color-celestine);
+			--d2l-color-primary-accent-indicator: var(--d2l-color-carnelian);
+
+			/* feedback */
+			--d2l-color-feedback-error: var(--d2l-color-cinnabar);
+			--d2l-color-feedback-warning: var(--d2l-color-carnelian);
+			--d2l-color-feedback-success: var(--d2l-color-olivine);
+			--d2l-color-feedback-action: var(--d2l-color-celestine);
+		}
+	</style><dom-module id="d2l-course-image">
+	<template strip-whitespace="">
+		<style>
+			.shown {
+				opacity: 1;
+			}
+
+			img {
+				object-fit: cover;
+				object-position: center;
+				height: 100%;
+				width: 100%;
+				opacity: 0;
+				transition: opacity 0.5s;
+			}
+
+			:host([load-error]) img {
+				display: none;
+			}
+
+			.d2l-course-image-error-container {
+				display: none;
+				height: 100%;
+				width: 100%;
+			}
+
+			:host([load-error]) .d2l-course-image-error-container {
+				display: block;
+			}
+		</style>
+
+		<img src="[[_src]]" srcset$="[[_srcset]]" loading="lazy" sizes$="[[_tileSizes]]" on-load="_showImage" on-error="_handleError" class$="[[_imageClass]]" alt="" aria-hidden="true">
+		<div class="d2l-course-image-error-container">
+			<svg viewBox="0 0 231 103" xmlns="http://www.w3.org/2000/svg">
+				<g fill="none" fill-rule="evenodd"><path fill="#E3E9F1" d="M0 0h231v103H0z"></path>
+					<path d="M231 89l-41.216-37.138c-2.4-2.874-6.624-5-11.712-5.92-1.824-.287-3.648-.46-5.472-.46-3.36 0-6.72.518-9.696 1.552L101.368 68.53 77.752 58.93c-3.264-1.322-7.008-1.954-10.752-1.954-4.992 0-9.888 1.15-13.536 3.39L0 87v16h231V89z" fill="#CDD5DC"></path>
+					<path d="M116 41c0 8.636-5 15-15 15s-15-6.364-15-15 5-15 15-15 15 6.364 15 15z" fill="#CDD5DC"></path>
+				</g>
+			</svg>
+		</div>
+	</template>
+
+</dom-module><dom-module id="d2l-search-widget">
+	<template strip-whitespace="">
+		<d2l-input-search label="[[searchLabel]]" placeholder="[[placeholderText]]"></d2l-input-search>
+	</template>
+
+</dom-module><dom-module id="d2l-image-selector-tile-styles">
+	<template strip-whitespace="">
+		<style>
+			:host {
+				background-color: lightgrey;
+				overflow: hidden;
+			}
+
+			.d2l-image-tile {
+				position: absolute;
+				width: 100%;
+				height: 100%;
+				top: 0;
+				left: 0;
+				overflow: hidden;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+			}
+
+			.d2l-image-tile-overlay	{
+				z-index: 2;
+				position: absolute;
+				width: 100%;
+				height: 100%;
+				top: 0;
+				left: 0;
+
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				background: none;
+
+				pointer-events: none;
+				transition: opacity 0.35s;
+				opacity: 0;
+			}
+
+			.d2l-image-tile-content {
+				position: relative;
+				height: 100%;
+				min-height: 100%;
+				min-width: 100%;
+				top: 0;
+				left: 0;
+				transition: transform 0.35s, filter 0.35s, -webkit-filter 0.35s;
+				transform: scale(1.0) translateZ(0);
+				overflow: hidden;
+			}
+
+			.no-image .d2l-image-tile-content,
+			.no-image .click-overlay,
+			.no-image .d2l-image-tile-overlay {
+				display: none;
+			}
+
+			.d2l-image-tile-content d2l-course-image {
+				height: 100%;
+				min-width: 100%;
+				background-color: lightgray;
+			}
+
+			.d2l-image-tile:hover .d2l-image-tile-content,
+			.mobile-selected .d2l-image-tile-content {
+				transform: scale(1.2) translateZ(0);
+				-webkit-filter: saturate(1.15);
+				filter: saturate(1.15);
+			}
+
+			.d2l-image-tile:hover .d2l-image-tile-overlay,
+			.mobile-selected .d2l-image-tile-overlay {
+				box-shadow: 3px 2px 10px rgba(0, 0, 0, 0);
+				opacity: 1;
+			}
+
+			.click-overlay {
+				position: absolute;
+				width: 100%;
+				height: 100%;
+				top: 0;
+				left: 0;
+				z-index: 3;
+			}
+
+			.d2l-image-tile:hover .click-overlay {
+				pointer-events: none;
+			}
+
+			.overlay-button {
+				z-index: 4;
+				background: rgba(0,0,0,0.5);
+				border: 0;
+				border-radius: 3px;
+				padding: 15px;
+				color: white;
+
+				margin-top: -30px;
+				transition: margin-top 0.35s, color 0.5s, background 0.5s;
+				font-family: inherit;
+				font-size: inherit;
+				pointer-events:all;
+			}
+
+			.overlay-button-inner {
+				height: 100%;
+				width: 100%;
+				display: flex;
+				align-items: center;
+			}
+
+			.overlay-button-text {
+				padding-top: 2px;
+				font-size: 0.8em;
+			}
+
+			.overlay-button:hover, .overlay-button:focus {
+				opacity: 1;
+				background: var(--d2l-color-celestine);
+			}
+
+			.camera-icon {
+				margin-right: 10px;
+				color: white;
+			}
+
+			.d2l-image-tile:hover .d2l-image-tile-overlay .overlay-button,
+			.mobile-selected .d2l-image-tile-overlay .overlay-button {
+				margin-top: 0;
+				cursor: pointer;
+			}
+		</style>
+	</template>
+</dom-module><dom-module id="d2l-image-selector-tile">
+	<template strip-whitespace="">
+		<style include="d2l-image-selector-tile-styles">
+			.d2l-image-selector-tile-hidden {
+				opacity: 0;
+			}
+
+			.shown {
+				animation-name: shown;
+				animation-duration: 0.5s;
+				animation-fill-mode: forwards;
+			}
+
+			@keyframes shown {
+				0% { opacity: 0 }
+				100% { opacity: 1; }
+			}
+		</style>
+
+		<div class$="[[_getTileClass(image)]]">
+			<div class="click-overlay" on-click="_toggleOverlayOn" on-blur="_toggleOverlayOff" tabindex="-1">
+			</div>
+			<div class="d2l-image-tile-overlay">
+				<button class="overlay-button" on-tap="_selectImage" on-focus="_toggleOverlayOn" on-blur="_toggleOverlayOff">
+					<div class="overlay-button-inner">
+						<d2l-icon class="camera-icon" icon="tier1:pic" aria-hidden="true"></d2l-icon>
+						<span class="overlay-button-text">[[localize('useThisImage')]]</span>
+					</div>
+				</button>
+			</div>
+			<div class="d2l-image-tile-content">
+				<d2l-course-image image="[[image]]" sizes="[[_imageSizes]]" type="narrow"></d2l-course-image>
+			</div>
+		</div>
+	</template>
+
+
+</dom-module><dom-module id="d2l-image-tile-grid">
+	<template strip-whitespace="">
+		<style>
+		:host {
+			--breakpoint-gutter-width: 0.8%;
+
+			/*
+			*	100% = n(tile width) + 2n(margin) - 2(margin),
+			*	see d2l-course-tile-grid-styles.html for a more in-depth description
+			*/
+			--breakpoint-two-column-width: 48.7%;
+			--breakpoint-three-column-width: 31.6%;
+
+			/*
+				Height has to be 73% of the width to maintain the image aspect ratio,
+				use padding, as it sizes in relation to the width of the screen as opposed to the height (yay css!)
+			*/
+			--breakpoint-one-column-height: 73%;
+			--breakpoint-two-column-height: 35.551%;
+			--breakpoint-three-column-height: 23.068%;
+		}
+
+		.grid-child {
+			width: 100%;
+		}
+
+		.grid-container {
+			position: relative;
+			width: 100%;
+			display: flex;
+			flex-wrap: wrap;
+			flex-direction: row;
+			align-items: flex-start;
+		}
+
+		.responsive-columns-3-2-1 {
+			/* This needs to be a block so that we get the width-based padding-top for it's children on firefox */
+			display: block;
+		}
+
+		.responsive-columns-3-2-1 > .grid-child {
+			height: auto;
+			position: relative;
+			display: inline-block;
+		}
+
+		@media screen and (min-width: 992px) {
+			.responsive-columns-3-2-1 {
+				padding: 0;
+			}
+
+			.responsive-columns-3-2-1 > .grid-child {
+				width: var(--breakpoint-three-column-width);
+				padding-top: var(--breakpoint-three-column-height);
+				margin: var(--breakpoint-gutter-width);
+			}
+
+			.responsive-columns-3-2-1 > .grid-child:nth-child(3n) {
+				margin-right: 0;
+			}
+
+			.responsive-columns-3-2-1 > .grid-child:nth-child(3n+1) {
+				margin-left: 0;
+			}
+		}
+
+		@media screen and (max-width: 991px) and (min-width: 768px) {
+			.responsive-columns-3-2-1 {
+				padding: 0;
+			}
+
+			.responsive-columns-3-2-1 > .grid-child {
+				width: var(--breakpoint-two-column-width);
+				padding-top: var(--breakpoint-two-column-height);
+				margin: var(--breakpoint-gutter-width);
+			}
+
+			.responsive-columns-3-2-1 > .grid-child:nth-child(2n) {
+				margin-right: 0;
+			}
+
+			.responsive-columns-3-2-1 > .grid-child:nth-child(2n+1) {
+				margin-left: 0;
+			}
+		}
+
+		@media screen and (max-width: 767px) {
+			.responsive-columns-3-2-1 {
+				margin: 0 -28px;
+				width: 100vw;
+			}
+
+			.responsive-columns-3-2-1 > .grid-child {
+				width: 100%;
+				padding-top: var(--breakpoint-one-column-height);
+				margin: var(--breakpoint-gutter-width) 0;
+			}
+		}
+		</style>
+
+
+		<div class="image-selector-tile-container responsive-columns-3-2-1 grid-container">
+			<template id="enrollmentsTemplate" is="dom-repeat" items="[[images]]">
+				<d2l-image-selector-tile image="[[item]]" organization="[[organization]]" class="grid-child"></d2l-image-selector-tile>
+			</template>
+		</div>
+
+	</template>
+	
+</dom-module><dom-module id="d2l-basic-image-selector">
+	<template strip-whitespace="">
+		<style>
+			#image-search{
+				width: 50%;
+			}
+
+			.no-results-search-text {
+				font-weight: bolder;
+				word-wrap: break-word;
+			}
+
+			.no-results-text {
+				font-size: 1.5rem;
+				margin-bottom: 12px;
+			}
+
+			.top-section {
+				display: flex;
+				justify-content: space-between;
+				align-items: center;
+				margin-bottom: 45px;
+			}
+
+			div.upload {
+				cursor: pointer;
+			}
+
+			.upload-text {
+				margin-left: 5px;
+			}
+
+			.upload:focus .upload-text,
+			.upload:hover .upload-text,
+			.upload:focus .upload-icon,
+			.upload:hover .upload-icon {
+				text-decoration: underline;
+				color: var(--d2l-color-celestine);
+			}
+
+			#lazyLoadSpinner {
+				display: block;
+				margin: auto;
+				margin-bottom: 30px;
+			}
+
+			#lazyLoadSpinner.d2l-basic-image-selector-hidden {
+				display: none;
+			}
+		</style>
+
+		<div class="top-section">
+			<d2l-search-widget id="image-search" search-action="[[_searchAction]]" search-label="[[localize('search')]]" placeholder-text="[[localize('search')]]" search-field-name="search">
+			</d2l-search-widget>
+
+			<template is="dom-if" if="[[_organizationChangeImageHref]]" restamp="true">
+				<div role="button" tabindex="0" class="upload" on-tap="_handleUpload" on-keydown="_handleUpload">
+					<d2l-icon class="upload-icon" icon="tier2:upload" aria-hidden="true"></d2l-icon>
+					<span class="upload-text">[[localize('upload')]]</span>
+				</div>
+			</template>
+
+		</div>
+
+		<template is="dom-if" if="[[_showGrid]]">
+			<d2l-image-tile-grid id="image-grid" organization="[[organization]]" images="[[_images]]"></d2l-image-tile-grid>
+		</template>
+
+		<template is="dom-if" if="[[!_showGrid]]">
+			<div class="no-results-area">
+				<div class="no-results-text">
+					<span>[[_noResultsTextStart]]</span><span class="no-results-search-text">[[_noResultsTextMid]]</span><span>[[_noResultsTextEnd]]</span>
+				</div>
+				[[localize('images_pleaseModify')]]
+			</div>
+		</template>
+		<d2l-loading-spinner id="lazyLoadSpinner" class$="[[_loadingSpinnerClass]]" size="100">
+		</d2l-loading-spinner>
+	</template>
+
+</dom-module><custom-style>
+	<style is="custom-style">html {
+  --d2l-body-standard-text_-_font-size:  0.95rem; --d2l-body-standard-text_-_font-weight:  400; --d2l-body-standard-text_-_line-height:  1.4rem;;
+
+			--d2l-body-compact-text_-_font-size:  0.8rem; --d2l-body-compact-text_-_font-weight:  400; --d2l-body-compact-text_-_line-height:  1.2rem;;
+
+			--d2l-body-small-text_-_color:  var(--d2l-color-tungsten); --d2l-body-small-text_-_font-size:  0.7rem; --d2l-body-small-text_-_font-weight:  400; --d2l-body-small-text_-_line-height:  1rem; --d2l-body-small-text_-_margin:  auto;;
+
+			--d2l-heading-1_-_font-size:  2rem; --d2l-heading-1_-_font-weight:  400; --d2l-heading-1_-_line-height:  2.4rem; --d2l-heading-1_-_margin:  1.5rem 0 1.5rem 0;;
+
+			--d2l-heading-2_-_font-size:  1.5rem; --d2l-heading-2_-_font-weight:  400; --d2l-heading-2_-_line-height:  1.8rem; --d2l-heading-2_-_margin:  1.5rem 0 1.5rem 0;;
+
+			--d2l-heading-3_-_font-size:  1rem; --d2l-heading-3_-_font-weight:  700; --d2l-heading-3_-_line-height:  1.5rem; --d2l-heading-3_-_margin:  1.5rem 0 1.5rem 0;;
+
+			--d2l-heading-4_-_font-size:  0.8rem; --d2l-heading-4_-_font-weight:  700; --d2l-heading-4_-_line-height:  1.2rem; --d2l-heading-4_-_margin:  1.5rem 0 1.5rem 0;;
+
+			--d2l-label-text_-_font-size:  0.7rem; --d2l-label-text_-_line-height:  1rem; --d2l-label-text_-_font-weight:  700; --d2l-label-text_-_letter-spacing:  0.2px;;
+}
+
+</style>
+</custom-style><dom-module id="d2l-image-banner-overlay-styles">
+	<template strip-whitespace="">
+		<style>
+			:host {
+				height: 100%;
+				left: 0;
+				word-wrap: break-word; /* IE/Edge */
+				overflow-wrap: break-word; /* replaces 'word-wrap' in Firefox, Chrome, Safari */
+				position: absolute;
+				top: 0;
+				width: 100%;
+				z-index: 1;
+				@apply --d2l-body-standard-text;
+			}
+
+			.d2l-image-banner-overlay-content {
+				display: none;
+				height: 100%;
+				opacity: 0;
+				overflow: hidden;
+				width: 100%;
+			}
+
+			.d2l-image-banner-overlay-content-shown {
+				animation-duration: 1.2s;
+				animation-fill-mode: forwards;
+				animation-name: shown;
+				display: block;
+			}
+
+			@keyframes shown {
+				0% { opacity: 0 }
+				100% { opacity: 1; }
+			}
+
+			.d2l-image-banner-course-name {
+				background: linear-gradient(rgba(0,0,0,0), #000 120%);
+				bottom: 0;
+				max-height: 100%;
+				padding-top: 3.5rem;
+				position: absolute;
+				transform: scale3d(1,1,1);
+				width: 100%;
+			}
+
+			@supports (-webkit-line-clamp: 2) {
+				.d2l-image-banner-course-name {
+					background: linear-gradient(rgba(0, 0, 0, 0), #000 267px);
+					padding-top: 3.35rem;
+				}
+			}
+
+			#bannerTitle {
+				box-sizing: border-box;
+				color: white;
+				-webkit-line-clamp: 2;
+				-webkit-box-orient: vertical;
+				display: -webkit-box;
+				margin-top: 0;
+				overflow: hidden;
+				padding-top: 0;
+				padding-bottom: 0;
+				pointer-events: none;
+				text-shadow: 0 0 3px rgba(0,0,0,.2);
+				@apply --d2l-heading-1;
+			}
+
+			d2l-dropdown-more,
+			#bannerTitle {
+				margin-left: 2.439%;
+				margin-right: 2.439%;
+			}
+
+			:host([department-banner-flag]) d2l-dropdown-more {
+				margin-left: 10px;
+				margin-right: 10px;
+				margin-top: 10px;
+			}
+
+			.loading-overlay-shown d2l-dropdown-more {
+				display: none;
+			}
+
+			@media (min-width: 1230px) {
+				:host(:not([department-banner-flag])) d2l-dropdown-more {
+					margin-left: 30px;
+					margin-right: 30px;
+					margin-top: 30px;
+				}
+
+				:host(:dir(rtl)) #bannerTitle.menu-exists {
+					padding-left: 50px;
+					padding-right: 0;
+				}
+
+				#bannerTitle.menu-exists {
+					padding-right: 50px;
+				}
+			}
+
+			@media (max-width: 615px) {
+				:host(:not([department-banner-flag])) d2l-dropdown-more {
+					margin-left: 15px;
+					margin-right: 15px;
+					margin-top: 15px;
+				}
+				#bannerTitle {
+					margin-left: 15px;
+					margin-right: 15px;
+				}
+			}
+
+			d2l-dropdown-more {
+				position: absolute;
+				right: 0;
+			}
+			d2l-dropdown-more[hidden] {
+				display: none;
+			}
+			:host(:dir(rtl)) d2l-dropdown-more {
+				left: 0;
+				right: auto;
+			}
+
+			:host(:dir(rtl)) #bannerTitle.menu-exists {
+				padding-left: 40px;
+				padding-right: 0;
+			}
+
+			#bannerTitle.menu-exists {
+				padding-right: 40px;
+			}
+
+			.d2l-image-banner-course-name-container {
+				height: 100%;
+				overflow: hidden;
+				pointer-events: none;
+				position: absolute;
+				width: 100%;
+			}
+
+			d2l-alert {
+				font-size: 1rem;
+			}
+
+			.d2l-image-banner-error-alert {
+				margin-left: 2%;
+				margin-right: 2%;
+				position: absolute;
+				top: 20px;
+				width: 95%;
+			}
+
+			.loading-overlay {
+				align-items: center;
+				display: flex;
+				height: 100%;
+				justify-content: center;
+				left: 0;
+				opacity: 0;
+				pointer-events: none;
+				position: absolute;
+				top: 0;
+				width: 100%;
+			}
+
+			.loading-overlay-shown .loading-overlay {
+				background-color: rgba(0, 0, 0, 0.4);
+				opacity: 1;
+				transition: opacity 0.5s 0.5s;
+			}
+
+			d2l-loading-spinner {
+				bottom: 0;
+				display: none;
+				left: 0;
+				margin: auto;
+				position: absolute;
+				right: 0;
+				top: 0;
+				z-index: 4;
+			}
+
+			.change-image-loading d2l-loading-spinner,
+			.loading-overlay-shown .loading-overlay d2l-loading-spinner {
+				display: flex;
+			}
+
+			.change-image-success d2l-loading-spinner,
+			.change-image-failure d2l-loading-spinner {
+				display: flex;
+				opacity: 0;
+			}
+
+			.icon-container {
+				display: none;
+			}
+
+			.change-image-loading .icon-container,
+			.change-image-success .icon-container,
+			.change-image-failure .icon-container {
+				align-items: center;
+				background-color: white;
+				border-radius: 100px;
+				border-style: none;
+				bottom: 0;
+				display: flex;
+				height: 80px;
+				justify-content: center;
+				left: 0;
+				margin: auto;
+				overflow: hidden;
+				position: absolute;
+				right: 0;
+				top: 0;
+				width: 80px;
+			}
+
+			@keyframes inner {
+				0% { transform: scale(1); }
+				15% { transform: scale(1.8); }
+				20% { transform: scale(1.5); }
+				100% { transform: scale(1.5); }
+			}
+
+			@keyframes container {
+				0% { height: 80px; width: 80px; }
+				70% { height: 80px; width: 80px; opacity: 1; }
+				90% { height: 100px; width: 100px; opacity: 0.4 }
+				100% { height: 20px; width: 20px; opacity: 0; }
+			}
+
+			.checkmark {
+				color: var(--d2l-color-olivine);
+				display: none;
+			}
+
+			.fail-icon {
+				color: #ffce51;
+				display: none;
+			}
+
+			.change-image-success,
+			.change-image-failure,
+			.change-image-loading {
+				pointer-events: none;
+			}
+
+			.change-image-success .checkmark,
+			.change-image-failure .fail-icon {
+				animation-duration: 1s;
+				animation-fill-mode: forwards;
+				animation-name: inner;
+				display: flex;
+			}
+
+			.change-image-success .icon-container,
+			.change-image-failure .icon-container {
+				animation-duration: 1s;
+				animation-fill-mode: forwards;
+				animation-name: container;
+			}
+
+			.change-image-loading .loading-overlay,
+			.change-image-success .loading-overlay,
+			.change-image-failure .loading-overlay {
+				background-color: rgba(0, 0, 0, 0.4);
+				display: block;
+				height: 100%;
+				opacity: 1;
+				position: relative;
+				width: 100%;
+				z-index: 2;
+			}
+		</style>
+	</template>
+</dom-module><dom-module id="d2l-image-banner-overlay">
+	<template strip-whitespace="">
+		<style include="d2l-image-banner-overlay-styles"></style>
+
+		<div id="overlayContent" class="d2l-image-banner-overlay-content d2l-visible-on-ancestor-target">
+			<div class="d2l-image-banner-course-name-container">
+				<div class="d2l-image-banner-course-name">
+					<h1 id="bannerTitle">
+						<span hidden$="[[hideBannerTitle]]">[[bannerTitle]]</span>
+						<d2l-offscreen hidden$="[[!hideBannerTitle]]">[[bannerTitle]]</d2l-offscreen>
+					</h1>
+				</div>
+			</div>
+			<d2l-dropdown-more class="d2l-focusable" hidden$="[[!_showDropdown]]" text="[[localize('bannerSettings')]]" translucent="" visible-on-ancestor="">
+				<d2l-dropdown-menu>
+					<d2l-menu label$="[[localize('bannerSettings')]]">
+						<d2l-menu-item id="change-image-button" hidden$="[[!_showChangeImageMenuItem]]" text="[[localize('changeImage')]]" on-d2l-menu-item-select="_launchCourseTileImageSelector">
+						</d2l-menu-item>
+						<d2l-menu-item hidden$="[[!canChangeBannerTitle]]" text="[[localize('customizeBannerText')]]" on-d2l-menu-item-select="_changeBannerTitle">
+						</d2l-menu-item>
+						<d2l-menu-item id="opt-out-button" hidden$="[[!_showRemoveBannerMenuItem]]" text="[[localize('removeBanner')]]" on-d2l-menu-item-select="_toggleCourseBanner">
+						</d2l-menu-item>
+					</d2l-menu>
+				</d2l-dropdown-menu>
+			</d2l-dropdown-more>
+			<div class="loading-overlay">
+				<d2l-loading-spinner size="100"></d2l-loading-spinner>
+				<div class="icon-container">
+					<d2l-icon class$="[[_iconDetails.className]]" icon="[[_iconDetails.iconName]]"></d2l-icon>
+				</div>
+			</div>
+		</div>
+		<d2l-dialog-fullscreen id="basic-image-selector-overlay" title-text="[[localize('changeImage')]]">
+			<d2l-basic-image-selector image-catalog-location="[[imageCatalogLocation]]" organization="[[_organization]]" course-image-upload-cb="[[courseImageUploadCb]]">
+			</d2l-basic-image-selector>
+			<div id="scrollThreshold" style="height: 1px"></div>
+		</d2l-dialog-fullscreen>
+		<d2l-alert id="optBackInAlert" hidden$="[[!_showBannerRemovedAlert]]" button-text="[[localize('undo')]]" has-close-button="true" role="alert">
+			<span id="bannerRemovedMenuAlertText">[[localize('bannerRemovedMenu')]]</span>
+		</d2l-alert>
+		<d2l-alert id="errorAlert" hidden$="[[!_showBannerErrorAlert]]" has-close-button="true" role="alert" type="error">
+			<span>[[_errorAlertStart]]</span><d2l-link href="javascript:window.location.reload(true)">[[localize('refreshAndTryAgain')]]</d2l-link><span>[[_errorAlertEnd]]</span>
+		</d2l-alert>
+		<d2l-alert hidden$="[[!_showErrorLoadingBannerImage]]" class="d2l-image-banner-error-alert" type="error">
+			<span>[[localize('imageLoadingError')]]</span>
+		</d2l-alert>
+	</template>
+
+</dom-module><dom-module id="d2l-search-listbox">
+	<template strip-whitespace="">
+		<style>
+			:host {
+				box-sizing: border-box;
+				display: block;
+				width: 100%;
+			}
+
+			::slotted(div) {
+				box-sizing: border-box;
+				border-top: 1px solid transparent;
+				border-bottom: 1px solid var(--d2l-color-gypsum);
+				list-style-type: none;
+				width: calc(100% - 2px);
+				padding: 0.75rem 1.5rem;
+				cursor: pointer;
+				outline: none;
+			}
+
+			::slotted(div:last-of-type) {
+				border-bottom-color: transparent;
+			}
+
+			::slotted(*:not([disabled]):focus),
+			::slotted(*:not([disabled]):hover) {
+				background-color: var(--d2l-color-celestine-plus-2);
+				border-top-color: var(--d2l-color-celestine);
+				border-bottom-color: var(--d2l-color-celestine);
+				color: var(--d2l-color-celestine-minus-1);
+			}
+
+			::slotted([data-list-title]) {
+				padding-top: 1rem;
+				padding-bottom: 1rem;
+				margin: 0 !important;
+				cursor: default;
+				border-bottom-color: var(--d2l-color-mica);
+			}
+
+			::slotted([data-list-title]+div) {
+				background: -moz-linear-gradient(to top, white, var(--d2l-color-regolith));
+				background: -webkit-linear-gradient(to top, white, var(--d2l-color-regolith));
+				background: linear-gradient(to top, white, var(--d2l-color-regolith));
+			}
+		</style>
+		<slot></slot>
+	</template>
+	
+</dom-module></head>
+	<body class="d2l-body d2l-typography vui-typography d2l-tiles-container daylight">
+		<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=G-PDG4BGM9SH" height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript><header><nav class="d2l-navigation-s d2l-branding-navigation-light-foreground-color d2l-navigation-s-linkarea-has-color"><d2l-labs-navigation has-skip-nav=""><d2l-labs-navigation-main-header><div class="d2l-labs-navigation-header-left" slot="left"><div class="d2l-navigation-s-header-open-button-wrapper"><d2l-labs-navigation-button-icon icon="tier3:menu-hamburger" text="Menu" text-hidden="" tooltip-offset="0"></d2l-labs-navigation-button-icon></div><div class="d2l-navigation-s-header-logo-area"><d2l-labs-navigation-link-icon class="d2l-navigation-s-home-icon" text="My Home" href="/d2l/lp/ouHome/defaultHome.d2l" text-hidden="" icon="tier1:home" tooltip-offset="0"></d2l-labs-navigation-link-icon><d2l-labs-navigation-separator class="d2l-navigation-s-logo-divider"></d2l-labs-navigation-separator><d2l-labs-navigation-link-image class="d2l-navigation-s-logo" src="/d2l/lp/navbars/6606/theme/viewimage/14083/view?v=20.26.2.21397" text="University of Maine at Augusta" href="/d2l/lp/ouHome/home.d2l?ou=6662" slim="" tooltip-offset="0"></d2l-labs-navigation-link-image><d2l-labs-navigation-separator class="d2l-navigation-s-title-divider"></d2l-labs-navigation-separator><div class="d2l-navigation-s-title-container"><a class="d2l-navigation-s-link" href="/d2l/home/6662" title="University of Maine at Augusta">University of Maine at Augusta</a></div></div></div><div class="d2l-labs-navigation-header-right" slot="right"><div class="d2l-navigation-s-course-menu"><d2l-labs-navigation-dropdown-button-icon icon="tier3:classes" text="Select a course..." no-auto-open="" tooltip-offset="0" data-prl="/d2l/lp/courseSelector/6662/InitPartial" data-prid="d2l_1_18_653"><d2l-dropdown-content max-width="800" min-width="450" no-padding="" vertical-offset="0" popover="manual" dropdown-content=""><div id="d2l_1_18_653" class="d2l-placeholder d2l-placeholder-live" aria-live="assertive">
+		</div>
+		</d2l-dropdown-content></d2l-labs-navigation-dropdown-button-icon></div><d2l-labs-navigation-separator class="d2l-navigation-s-course-menu-divider"></d2l-labs-navigation-separator><div class="d2l-navigation-s-notifications"><div class="d2l-navigation-s-notifications-wrapper"><div class="d2l-navigation-s-notification" data-category="alerts" data-aria-message="You have new Subscriptions"><d2l-labs-navigation-dropdown-button-icon icon="tier3:discussions" text="Subscription alerts" no-auto-open="" tooltip-offset="0" data-prl="/d2l/NavigationArea/6662/ActivityFeed/GetAlertsDaylight?Category=0" data-prid="d2l_1_19_81"><d2l-dropdown-content no-padding="" vertical-offset="0" popover="manual" dropdown-content=""><div id="d2l_1_19_81" class="d2l-placeholder d2l-placeholder-live" aria-live="assertive">
+		</div>
+		</d2l-dropdown-content></d2l-labs-navigation-dropdown-button-icon></div><div class="d2l-navigation-s-notification" data-category="grades" data-aria-message="You have new Updates"><d2l-labs-navigation-dropdown-button-icon icon="tier3:notification-bell" text="Update alerts" no-auto-open="" tooltip-offset="0" has-notification="" notification-text="Update alerts - You have new alerts" data-prl="/d2l/NavigationArea/6662/ActivityFeed/GetAlertsDaylight?Category=1" data-prid="d2l_1_20_328"><d2l-dropdown-content no-padding="" vertical-offset="0" popover="manual" dropdown-content=""><div id="d2l_1_20_328" class="d2l-placeholder d2l-placeholder-live" aria-live="assertive">
+		</div>
+		</d2l-dropdown-content></d2l-labs-navigation-dropdown-button-icon></div></div><div class="d2l-navigation-s-notifications-div"></div></div><d2l-labs-navigation-separator class="d2l-navigation-s-notifications-divider"></d2l-labs-navigation-separator><div class="d2l-navigation-s-personal-menu"><d2l-labs-navigation-dropdown-button-custom opener-label="Brendan Gray, avatar"><span class="d2l-navigation-s-personal-menu-wrapper" slot="opener"><d2l-profile-image-base class="d2l-token-receiver" data-token-receiver-scope="core:*:*" href="/d2l/api/lp/1.7/profile/mncUBQPQbG/image?v=20.26.2.21397" first-name="Brendan" last-name="Gray" color-id="79921" size="medium" aria-hidden="true" style="--d2l-initials-background-color: #D13B7F;"></d2l-profile-image-base><span class="d2l-navigation-s-personal-menu-text">Brendan Gray</span></span><d2l-dropdown-content min-width="300" no-padding="" vertical-offset="0" popover="manual" dropdown-content=""><ul class="d2l-personal-tools-list"><li><div class="d2l-personal-tools-category-item d2l-personal-tools-category-item-first"><span style="white-space:nowrap;"><a class="d2l-link" aria-label="" href="/d2l/lp/profile/profile_edit.d2l?ou=6662" onclick="D2L.O(&quot;__g1&quot;,0)();">Profile</a>
+		</span></div></li><li class="d2l-personal-tools-category-item"><span style="white-space:nowrap;"><a class="d2l-link" aria-label="" href="/d2l/folio/main/Index" onclick="D2L.O(&quot;__g1&quot;,1)();">My Portfolio</a>
+		</span></li><li class="d2l-personal-tools-category-item"><span style="white-space:nowrap;"><a class="d2l-link" aria-label="" href="/d2l/Notifications/Settings?ou=6662" onclick="D2L.O(&quot;__g1&quot;,2)();">Notifications</a>
+		</span></li><li class="d2l-personal-tools-category-item d2l-personal-tools-category-item-last"><span style="white-space:nowrap;"><a class="d2l-link" aria-label="" href="/d2l/lp/preferences/preferences_main/preferences_main.d2l?ou=6662" onclick="D2L.O(&quot;__g1&quot;,1)();">Account Settings</a>
+		</span></li><li class="d2l-personal-tools-separated-item"><span style="white-space:nowrap;"><a class="d2l-link d2l_1_21_903" aria-label="" id="LocaleLinkId" href="javascript:void(0);" onclick="D2L.O(&quot;__g1&quot;,3)();return false;">English (United States)</a>
+		</span></li><li class="d2l-personal-tools-separated-item"><span style="white-space:nowrap;"><a class="d2l-link d2l_1_21_903" aria-label="" href="javascript:void(0);" onclick="D2L.O(&quot;__g1&quot;,4)();return false;">Log Out</a>
+		</span></li></ul></d2l-dropdown-content></d2l-labs-navigation-dropdown-button-custom></div><div class="d2l-navigation-s-admin-menu"><div class="d2l-navigation-s-admin-menu-spacer"></div><d2l-labs-navigation-dropdown-button-icon icon="tier3:gear" text="Admin Tools" no-auto-open="" tooltip-offset="0" data-prl="/d2l/lp/admintools/6662/dropdownpartial" data-prid="d2l_1_22_735"><d2l-dropdown-content max-width="960" min-width="200" no-padding="" vertical-offset="0" popover="manual" dropdown-content=""><div id="d2l_1_22_735" class="d2l-placeholder d2l-placeholder-live" aria-live="assertive">
+		</div>
+		</d2l-dropdown-content></d2l-labs-navigation-dropdown-button-icon></div></div></d2l-labs-navigation-main-header><d2l-labs-navigation-main-footer class="d2l-branding-navigation-background-color d2l-visible-on-ancestor-target"><div slot="main"><div class="d2l-navigation-s-main-wrapper" role="list"><div class="d2l-navigation-s-item" role="listitem"><a href="/d2l/lms/news/main.d2l?ou=6662" class="d2l-navigation-s-link">Announcements</a></div>
+		<div class="d2l-navigation-s-item" role="listitem"><a href="/d2l/le/discovery/view/" class="d2l-navigation-s-link">Discover</a></div>
+		<div class="d2l-navigation-s-item" role="listitem"><a href="/d2l/common/dialogs/quickLink/quickLink.d2l?ou=6662&amp;type=lti&amp;rcode=F3C7BF8F-5062-472E-BD78-1E9087192E9D-277&amp;srcou=6606" data-popup-menubar="1" data-popup-toolbar="1" rel="noopener" class="d2l-navigation-s-link d2l-navigation-s-link-popup">My Media</a></div>
+		<div class="d2l-navigation-s-item" role="listitem"><d2l-dropdown><button class="d2l-navigation-s-group d2l-dropdown-opener" aria-expanded="false" aria-haspopup="true"><span class="d2l-navigation-s-group-wrapper"><span class="d2l-navigation-s-group-text">Help</span><d2l-icon icon="tier1:chevron-down"></d2l-icon></span></button><d2l-dropdown-menu popover="manual" dropdown-content=""><d2l-menu label="Help" class="d2l-menu-mvc" active="" aria-label="Help" role="menu">
+			<d2l-menu-item text="Student Brightspace Video Tutorials" class="d2l-navigation-s-menu-item-root" id="d2l_1_23_666" role="menuitem" tabindex="0" aria-disabled="false" aria-label="Student Brightspace Video Tutorials" first="true"></d2l-menu-item>
+			<d2l-menu-item text="IT Helpdesk" class="d2l-navigation-s-menu-item-root" id="d2l_1_24_427" role="menuitem" tabindex="-1" aria-disabled="false" aria-label="IT Helpdesk"></d2l-menu-item>
+			<d2l-menu-item-link text="System Check" href="/d2l/systemCheck" class="d2l-navigation-s-menu-item-root" role="menuitem" tabindex="-1" aria-disabled="false" aria-label="System Check" last="true"></d2l-menu-item-link>
+		</d2l-menu>
+		</d2l-dropdown-menu></d2l-dropdown>
+		</div>
+		<div class="d2l-navigation-s-item" role="listitem"><a href="/d2l/common/dialogs/quickLink/quickLink.d2l?ou=6662&amp;type=lti&amp;rcode=F3C7BF8F-5062-472E-BD78-1E9087192E9D-2399069&amp;srcou=6606" data-popup-menubar="1" data-popup-toolbar="1" rel="noopener" class="d2l-navigation-s-link d2l-navigation-s-link-popup">Course Evaluations</a></div>
+		<div class="d2l-navigation-s-item d2l-navigation-s-more" role="listitem" data-hidden="1"><d2l-dropdown><button class="d2l-navigation-s-group d2l-dropdown-opener" aria-expanded="false" aria-haspopup="true"><span class="d2l-navigation-s-group-wrapper"><span class="d2l-navigation-s-group-text">More</span><d2l-icon icon="tier1:chevron-down"></d2l-icon></span></button><d2l-dropdown-menu popover="manual" dropdown-content=""><d2l-menu label="More" class="d2l-menu-mvc" active="" aria-label="More" role="menu">
+			<d2l-menu-item-link text="Announcements" href="/d2l/lms/news/main.d2l?ou=6662" class="d2l-navigation-s-menu-item-root d2l-hidden" role="menuitem" tabindex="0" aria-disabled="false" aria-label="Announcements" first="true"></d2l-menu-item-link>
+			<d2l-menu-item-link text="Discover" href="/d2l/le/discovery/view/" class="d2l-navigation-s-menu-item-root d2l-hidden" role="menuitem" tabindex="-1" aria-disabled="false" aria-label="Discover"></d2l-menu-item-link>
+			<d2l-menu-item text="My Media" class="d2l-navigation-s-menu-item-root d2l-hidden" id="d2l_1_25_533" role="menuitem" tabindex="-1" aria-disabled="false" aria-label="My Media"></d2l-menu-item>
+			<d2l-menu-item text="Help" class="d2l-navigation-s-menu-item-root d2l-hidden" role="menuitem" tabindex="-1" aria-disabled="false" aria-label="Help" aria-haspopup="true">
+				<d2l-menu class="d2l-menu-mvc d2l-navigation-s-menu-item-root" child-view="" role="menu" aria-label="Help">
+					<d2l-menu-item text="Student Brightspace Video Tutorials" id="d2l_1_26_434" role="menuitem" tabindex="-1" aria-disabled="false" aria-label="Student Brightspace Video Tutorials"></d2l-menu-item>
+					<d2l-menu-item text="IT Helpdesk" id="d2l_1_27_325" role="menuitem" tabindex="-1" aria-disabled="false" aria-label="IT Helpdesk"></d2l-menu-item>
+					<d2l-menu-item-link text="System Check" href="/d2l/systemCheck" role="menuitem" tabindex="-1" aria-disabled="false" aria-label="System Check" last="true"></d2l-menu-item-link>
+				</d2l-menu>
+			</d2l-menu-item>
+			<d2l-menu-item text="Course Evaluations" class="d2l-navigation-s-menu-item-root d2l-hidden" id="d2l_1_28_937" role="menuitem" tabindex="-1" aria-disabled="false" aria-label="Course Evaluations" last="true"></d2l-menu-item>
+		</d2l-menu>
+		</d2l-dropdown-menu></d2l-dropdown>
+		</div>
+		</div></div></d2l-labs-navigation-main-footer><div class="d2l-navigation-s-mobile-menu" data-state="closed" data-cprl="/d2l/lp/courseSelector/6662/InitPartial"><div class="d2l-navigation-s-mobile-menu-mask"><div class="d2l-navigation-s-mobile-menu-focus-trap-start d2l-offscreen" tabindex="0">Menu Start</div><p class="d2l-navigation-s-mobile-menu-first d2l-offscreen" tabindex="-1">Menu Start</p><div class="d2l-navigation-s-mobile-menu-mask-close"><d2l-button-icon icon="tier1:close-large-thick" text="close" animation-type="opacity-transform" type="button"></d2l-button-icon>
+		</div></div><div class="d2l-navigation-s-mobile-menu-content"><d2l-labs-navigation-band></d2l-labs-navigation-band><div class="d2l-navigation-s-mobile-menu-header"><div class="d2l-navigation-s-mobile-menu-branded-header"><div class="d2l-navigation-s-header-logo-area"><d2l-labs-navigation-link-icon class="d2l-navigation-s-home-icon" text="My Home" href="/d2l/lp/ouHome/defaultHome.d2l" text-hidden="" icon="tier1:home" tooltip-offset="0"></d2l-labs-navigation-link-icon><d2l-labs-navigation-separator class="d2l-navigation-s-logo-divider"></d2l-labs-navigation-separator><d2l-labs-navigation-link-image class="d2l-navigation-s-logo" src="/d2l/lp/navbars/6606/theme/viewimage/14083/view?v=20.26.2.21397" text="University of Maine at Augusta" href="/d2l/lp/ouHome/home.d2l?ou=6662" slim="" tooltip-offset="0"></d2l-labs-navigation-link-image><d2l-labs-navigation-separator class="d2l-navigation-s-title-divider"></d2l-labs-navigation-separator><div class="d2l-navigation-s-title-container"><a class="d2l-navigation-s-link" href="/d2l/home/6662" title="University of Maine at Augusta">University of Maine at Augusta</a></div></div><div class="d2l-navigation-s-gutter"></div><div class="d2l-navigation-s-mobile-menu-course-selector"><d2l-labs-navigation-button-icon icon="tier3:classes" text="Select a course..." text-hidden="" tooltip-offset="0"></d2l-labs-navigation-button-icon></div></div><div class="d2l-navigation-s-mobile-menu-header-course-menu"><d2l-labs-navigation-button-icon icon="tier1:chevron-left" text="University of Maine at Augusta" text-hidden="" tooltip-offset="0"></d2l-labs-navigation-button-icon><div class="d2l-navigation-s-title-container"><span class="d2l-navigation-s-title">University of Maine at Augusta</span></div></div></div><div class="d2l-navigation-s-title-container d2l-navigation-s-mobile-menu-title-bp d2l-branding-navigation-background-color"><a class="d2l-navigation-s-link" href="/d2l/home/6662" title="University of Maine at Augusta">University of Maine at Augusta</a></div><div class="d2l-navigation-s-mobile-menu-course-menu"></div><div class="d2l-navigation-s-mobile-menu-nav"><d2l-menu label="Menu" class="d2l-menu-mvc" active="" aria-label="Menu" role="menu">
+			<d2l-menu-item-link text="Announcements" href="/d2l/lms/news/main.d2l?ou=6662" role="menuitem" tabindex="0" aria-disabled="false" aria-label="Announcements" first="true"></d2l-menu-item-link>
+			<d2l-menu-item-link text="Discover" href="/d2l/le/discovery/view/" role="menuitem" tabindex="-1" aria-disabled="false" aria-label="Discover"></d2l-menu-item-link>
+			<d2l-menu-item text="My Media" id="d2l_1_29_132" role="menuitem" tabindex="-1" aria-disabled="false" aria-label="My Media"></d2l-menu-item>
+			<d2l-menu-item text="Help" role="menuitem" tabindex="-1" aria-disabled="false" aria-label="Help" aria-haspopup="true">
+				<d2l-menu class="d2l-menu-mvc" child-view="" role="menu" aria-label="Help">
+					<d2l-menu-item text="Student Brightspace Video Tutorials" id="d2l_1_30_136" role="menuitem" tabindex="-1" aria-disabled="false" aria-label="Student Brightspace Video Tutorials"></d2l-menu-item>
+					<d2l-menu-item text="IT Helpdesk" id="d2l_1_31_521" role="menuitem" tabindex="-1" aria-disabled="false" aria-label="IT Helpdesk"></d2l-menu-item>
+					<d2l-menu-item-link text="System Check" href="/d2l/systemCheck" role="menuitem" tabindex="-1" aria-disabled="false" aria-label="System Check" last="true"></d2l-menu-item-link>
+				</d2l-menu>
+			</d2l-menu-item>
+			<d2l-menu-item text="Course Evaluations" id="d2l_1_32_307" role="menuitem" tabindex="-1" aria-disabled="false" aria-label="Course Evaluations"></d2l-menu-item>
+			<d2l-menu-item-separator role="separator"></d2l-menu-item-separator>
+			<d2l-menu-item text="Admin Tools" role="menuitem" tabindex="-1" aria-disabled="false" aria-label="Admin Tools" aria-haspopup="true" last="true">
+				<d2l-menu class="d2l-menu-mvc" child-view="" role="menu" aria-label="Admin Tools">
+					<d2l-menu-item text="Organization Related" role="menuitem" tabindex="-1" aria-disabled="false" aria-label="Organization Related" aria-haspopup="true">
+						<d2l-menu class="d2l-menu-mvc" child-view="" role="menu" aria-label="Organization Related">
+							<d2l-menu-item-link text="Media Library" href="/d2l/wcs/media-library/?ou=6662" role="menuitem" tabindex="-1" aria-disabled="false" aria-label="Media Library" last="true"></d2l-menu-item-link>
+						</d2l-menu>
+					</d2l-menu-item>
+					<d2l-menu-item text="Course Related" role="menuitem" tabindex="-1" aria-disabled="false" aria-label="Course Related" aria-haspopup="true" last="true">
+						<d2l-menu class="d2l-menu-mvc" child-view="" role="menu" aria-label="Course Related">
+							<d2l-menu-item-link text="Course Content Feedback" href="/d2l/lms/content/reports/course_content_feedback/courses_list.d2l?ou=6606" role="menuitem" tabindex="-1" aria-disabled="false" aria-label="Course Content Feedback" last="true"></d2l-menu-item-link>
+						</d2l-menu>
+					</d2l-menu-item>
+				</d2l-menu>
+			</d2l-menu-item>
+		</d2l-menu>
+		</div></div><div class="d2l-navigation-s-mobile-menu-focus-trap-end d2l-offscreen" tabindex="0">Menu End</div></div></d2l-labs-navigation></nav></header><div class="d2l-page-message-container"><div class="d2l-page-message d2l-hidden d2l_1_33_244" id="d2l_sessionExpiryWarning"><div style="display:none;" id="d2l_sessionExpiryAlert" role="alert"><div class="d2l-container-icon d2l_1_34_887 d2l_1_35_808">
+			<div class="d2l-container-icon-inner d2l_1_36_4 d2l_1_37_779 d2l_1_38_167 d2l_1_39_787">
+				<h2 class="d2l-heading vui-heading-2">Are You Still There?</h2>
+				<div class="d2l-textblock">Your session expires after 180 minutes of inactivity, which protects your information in case you've left your device without logging out.<br>
+<br>
+<strong>Hit a key or click anywhere to stay logged in.</strong></div>
+			</div>
+		</div>
+		</div><div style="display:none;" id="d2l_sessionExpiryCheck" role="alert"><div class="d2l-container-icon d2l_1_34_887 d2l_1_35_808">
+			<div class="d2l-container-icon-inner d2l_1_40_880 d2l_1_37_779 d2l_1_38_167 d2l_1_39_787">
+				<div class="d2l_1_41_859">
+					<h2 class="d2l-heading vui-heading-2 d2l-heading-none">Oh, There You Are!</h2>
+				</div>
+			</div>
+		</div>
+		</div></div>
+		</div>
+		<div class="d2l-page-main d2l-max-width d2l-min-width" role="main">
+			<div id="CourseImageBannerPlaceholderId" class="d2l-placeholder d2l-placeholder-live" aria-live="assertive">
+				<div class="d2l-course-banner-container">
+					<d2l-image-banner-overlay class="d2l-image-banner-overlay" organization-url="https://0e762a26-9e86-4b6d-b6cb-3eeb3383a351.organizations.api.brightspace.com/6662" id="d2l_1_42_371" image-catalog-location="https://course-image-catalog.api.brightspace.com/" banner-title="University of Maine at Augusta" hide-banner-title="" dir="ltr"></d2l-image-banner-overlay>
+					<div class="d2l-course-banner">
+						<img alt="" class="d2l-course-banner-image d2l-shown" onload="this.classList.add('d2l-shown'); this.parentNode.classList.remove('d2l-load-error');" onerror="this.parentNode.classList.add('d2l-load-error');" srcset="https://courses.maine.edu/d2l/api/lp/1.9/courses/6662/image?height=192&amp;width=768&amp;versionNumber=c0ffeec0-ffee-c0ff-eec0-ffeec0ffeec0 768w, https://courses.maine.edu/d2l/api/lp/1.9/courses/6662/image?height=240&amp;width=960&amp;versionNumber=c0ffeec0-ffee-c0ff-eec0-ffeec0ffeec0 960w, https://courses.maine.edu/d2l/api/lp/1.9/courses/6662/image?height=300&amp;width=1200&amp;versionNumber=c0ffeec0-ffee-c0ff-eec0-ffeec0ffeec0 1200w" sizes="(max-width: 1200px) 100vw, 1200px" src="https://courses.maine.edu/d2l/api/lp/1.9/courses/6662/image?height=300&amp;width=1200&amp;versionNumber=c0ffeec0-ffee-c0ff-eec0-ffeec0ffeec0">
+					<div class="d2l-course-banner-error-image-container"><svg viewBox="0 0 231 103" xmlns="http://www.w3.org/2000/svg"><g fill="none" fill-rule="evenodd"><path fill="#E3E9F1" d="M0 0h231v103H0z"></path><path d="M231 89l-41.216-37.138c-2.4-2.874-6.624-5-11.712-5.92-1.824-.287-3.648-.46-5.472-.46-3.36 0-6.72.518-9.696 1.552L101.368 68.53 77.752 58.93c-3.264-1.322-7.008-1.954-10.752-1.954-4.992 0-9.888 1.15-13.536 3.39L0 87v16h231V89z" fill="#CDD5DC"></path><path d="M116 41c0 8.636-5 15-15 15s-15-6.364-15-15 5-15 15-15 15 6.364 15 15z" fill="#CDD5DC"></path></g></svg></div></div>
+				</div>
+			</div>
+			<div class="d2l-page-main-padding">
+				<div class="d2l-homepage">
+					<div class="homepage-container">
+						<div class="homepage-col-12">
+						</div>
+						<div class="homepage-row">
+							<div>
+								<div class="homepage-col-6">
+									<div role="region" aria-labelledby="d2l_1_8_267" class="d2l-widget d2l-tile"><div class="d2l-widget-header"><div class="d2l-homepage-header-wrapper"><h2 class="d2l-heading vui-heading-4" id="d2l_1_8_267">My Courses</h2>
+									</div><div class="d2l-clear"></div>
+									</div><d2l-expand-collapse-content expanded="" class="d2l-widget-content" id="d2l_1_14_900"><div class="d2l-widget-content-padding"><d2l-my-courses class="d2l-my-courses-widget d2l-token-receiver" enrollments-url="https://0e762a26-9e86-4b6d-b6cb-3eeb3383a351.enrollments.api.brightspace.com" id="d2l_1_12_688" data-token-receiver-scope="*:*:*" standard-semester-name="Semester" standard-department-name="Academic Unit" show-course-code="true" course-updates-config="{ &quot;showUnattemptedQuizzes&quot;:false,  &quot;showDropboxUnreadFeedback&quot;:false,  &quot;showPendingEnrollmentRequests&quot;:true,  &quot;showUngradedQuizAttempts&quot;:true,   &quot;showUnreadDiscussionMessages&quot;:true,  &quot;showUnreadDropboxSubmissions&quot;:true }" image-catalog-location="https://course-image-catalog.api.brightspace.com/" promoted-searches="https://courses.maine.edu/d2l/api/le/manageCourses/courses-searches/79921/BySemester?desc=0" user-settings-url="https://courses.maine.edu/d2l/api/le/manageCourses/homepage-component/545/user-settings/79921" show-semester="true" org-unit-type-ids="{&quot;type&quot;:&quot;Array&quot;,&quot;value&quot;:[3]}" updated-sort-logic="true"></d2l-my-courses><div class="d2l-clear"></div>
+									</div></d2l-expand-collapse-content></div><div role="region" aria-labelledby="d2l_1_0_690" class="d2l-widget d2l-custom-widget"><div class="d2l-widget-header"><div class="d2l-homepage-header-wrapper"><h2 class="d2l-heading vui-heading-4" id="d2l_1_0_690">UMS Announcements</h2>
+									</div><div class="d2l-homepage-header-menu-wrapper"><d2l-dropdown-context-menu no-auto-open="" text="Actions for UMS Announcements" id="d2l_1_44_353" class="d2l-contextmenu-ph d2l-contextmenu-ph-dropdown d2l_1_46_463" data-contextmenuid="d2l_1_1_229" data-placeholderkey="d2l_1_45_990" animation-type="opacity-transform"></d2l-dropdown-context-menu>
+									<div id="d2l_1_47_724" class="d2l-floating-container d2l-hidden ">
+										<template id="d2l_1_1_229" class="d2l-contextmenu-template" data-floating-container-id="d2l_1_47_724" data-dropdown-content-id="d2l_1_48_983">
+										<d2l-menu class="d2l-menu-mvc d2l-contextmenu">
+											<d2l-menu-item text="Collapse this widget" id="d2l_1_1_229_CollapseWidgetAction"></d2l-menu-item>
+											<d2l-menu-item text="Expand this widget" hidden="" id="d2l_1_1_229_ExpandWidgetAction"></d2l-menu-item>
+										</d2l-menu>
+										</template>
+									</div><div class="d2l-clear"></div>
+									</div><div class="d2l-clear"></div>
+									</div><d2l-expand-collapse-content expanded="" class="d2l-widget-content" id="d2l_1_15_356"><div class="d2l-widget-content-padding"><div class=""><d2l-html-block html="&lt;p&gt;&lt;a href=&quot;https://courses.maine.edu/d2l/le/content/6606/viewContent/2232410/View&quot; target=&quot;_self&quot;&gt;Click to View the latest changes to Brightspace&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;&lt;a href=&quot;https://courses.maine.edu/d2l/le/content/6606/viewContent/2572842/View&quot; target=&quot;_blank&quot; rel=&quot;noopener&quot;&gt;Attention New Employees - You must complete FERPA training before working in Brightspace&lt;/a&gt;&lt;/p&gt;"></d2l-html-block></div><div class="d2l-clear"></div>
+									</div></d2l-expand-collapse-content></div></div>
+								<div class="homepage-col-6">
+									<div role="region" aria-labelledby="d2l_1_11_641" class="d2l-widget d2l-tile"><div class="d2l-widget-header"><div class="d2l-homepage-header-wrapper"><h2 class="d2l-heading vui-heading-4" id="d2l_1_11_641">Access Google Workspace</h2>
+									</div><div class="d2l-homepage-header-menu-wrapper"><d2l-dropdown-context-menu no-auto-open="" text="Actions for Access Google Workspace" id="d2l_1_49_67" class="d2l-contextmenu-ph d2l-contextmenu-ph-dropdown d2l_1_46_463" data-contextmenuid="d2l_1_9_52" data-placeholderkey="d2l_1_50_941" animation-type="opacity-transform"></d2l-dropdown-context-menu>
+									<div id="d2l_1_51_62" class="d2l-floating-container d2l-hidden ">
+										<template id="d2l_1_9_52" class="d2l-contextmenu-template" data-floating-container-id="d2l_1_51_62" data-dropdown-content-id="d2l_1_52_11">
+										<d2l-menu class="d2l-menu-mvc d2l-contextmenu">
+											<d2l-menu-item text="Collapse this widget" id="d2l_1_9_52_CollapseWidgetAction"></d2l-menu-item>
+											<d2l-menu-item text="Expand this widget" hidden="" id="d2l_1_9_52_ExpandWidgetAction"></d2l-menu-item>
+										</d2l-menu>
+										</template>
+									</div><div class="d2l-clear"></div>
+									</div><div class="d2l-clear"></div>
+									</div><d2l-expand-collapse-content expanded="" class="d2l-widget-content" id="d2l_1_16_8"><div class="d2l-widget-content-padding"><div class="d2l-widget-iframe-wrapper">
+										<div class="d2l-iframe-loading-container d2l_1_54_112 d2l_1_55_785" style="display: none;">
+										</div>
+										<iframe class="d2l-iframe d2l-iframe-fit d2l_1_54_112 d2l_1_55_785" id="d2l_1_53_920" name="d2l_1_53_920" src="/d2l/lp/homepage/LegacyWidgetViewer.d2l?ou=6662&amp;WidgetPath=%2fd2l%2fim%2fgapps%2fwidget%2fGappsWidget.d2l&amp;WidgetId=700&amp;d2l_headingLevel=3&amp;d2l_body_type=3" title="Access Google Workspace" frameborder="0" scrolling="auto" allowfullscreen="" allow="microphone *; camera *" onload="this.m_loaded=true;" data-default-height="50" content-resize-iframe-height="true" style="height: 224px;"></iframe>
+
+									</div><div class="d2l-clear"></div>
+									</div></d2l-expand-collapse-content></div><div role="region" aria-labelledby="d2l_1_3_368" class="d2l-widget d2l-tile d2l-custom-widget"><div class="d2l-widget-header"><div class="d2l-homepage-header-wrapper"><h2 class="d2l-heading vui-heading-4" id="d2l_1_3_368">🟢 Students: Hello, Brendan! </h2>
+									</div><div class="d2l-homepage-header-menu-wrapper"><d2l-dropdown-context-menu no-auto-open="" text="Actions for 🟢 Students: Hello, Brendan! " id="d2l_1_56_492" class="d2l-contextmenu-ph d2l-contextmenu-ph-dropdown d2l_1_46_463" data-contextmenuid="d2l_1_4_205" data-placeholderkey="d2l_1_57_197" animation-type="opacity-transform"></d2l-dropdown-context-menu>
+									<div id="d2l_1_58_939" class="d2l-floating-container d2l-hidden ">
+										<template id="d2l_1_4_205" class="d2l-contextmenu-template" data-floating-container-id="d2l_1_58_939" data-dropdown-content-id="d2l_1_59_671">
+										<d2l-menu class="d2l-menu-mvc d2l-contextmenu">
+											<d2l-menu-item text="Collapse this widget" id="d2l_1_4_205_CollapseWidgetAction"></d2l-menu-item>
+											<d2l-menu-item text="Expand this widget" hidden="" id="d2l_1_4_205_ExpandWidgetAction"></d2l-menu-item>
+										</d2l-menu>
+										</template>
+									</div><div class="d2l-clear"></div>
+									</div><div class="d2l-clear"></div>
+									</div><d2l-expand-collapse-content expanded="" class="d2l-widget-content" id="d2l_1_17_832"><div class="d2l-widget-content-padding"><div class="d2l-widget-iframe-wrapper">
+										<div class="d2l-iframe-loading-container d2l_1_54_112" style="display: none;">
+										</div>
+										<iframe class="d2l-iframe d2l-iframe-fit d2l_1_54_112" id="d2l_1_60_335" name="d2l_1_60_335" src="/d2l/lp/customwidgets/6662/frame/2685?d2l_body_type=3" title="🟢 Students: Hello, Brendan! " frameborder="0" scrolling="auto" allowfullscreen="" allow="microphone *; camera *" onload="this.m_loaded=true;" content-resize-iframe-height="true" style="height: 1216px;"></iframe>
+
+									</div><div class="d2l-clear"></div>
+									</div></d2l-expand-collapse-content></div></div>
+							</div>
+						</div>
+						<div class="homepage-col-12">
+						</div>
+					</div>
+
+				</div></div>
+		</div>
+<script src="https://www.googletagmanager.com/gtag/js?id=250834361"></script>
+		<script>
+		
+window.dataLayer = window.dataLayer || [];
+function gtag() { dataLayer.push( arguments ); }
+gtag('js', new Date());
+gtag('config', '250834361');
+		</script>
+		<script src="https://s.brightspace.com/lib/jquery/3.7.1/jquery.min.js"></script>
+		<script src="https://s.brightspace.com/lib/jqueryui/1.13.2/jquery-ui.min.js"></script>
+		<script src="https://s.brightspace.com/lib/bsi/2026.2.264/bsi.js"></script>
+		<script>
+		window.__elasticRumOnload = function() {if (!window['elasticApm']) return;var apm = elasticApm.init({serviceName: 'LMS',serverUrl: 'https://d2l-elasticrum.apm.us-east-1.aws.cloud.es.io/',transactionSampleRate: 0.1,disableInstrumentations: ['xmlhttprequest','fetch','eventtarget','history']});apm.addLabels({ "orgName": "umaine"});apm.addLabels({ "instanceName": "umaine"});};
+		</script>
+		<script async="async" onload="window.__elasticRumOnload()" src="https://s.brightspace.com/lib/elastic-apm-rum/5.14.0/elastic-apm-rum.umd.min.js"></script>
+		<script>
+		window.__ttiOnload = function() {ttiPolyfill.getFirstConsistentlyInteractive().then(function(tti) {if (tti) {document.dispatchEvent(new CustomEvent('d2l-performance-measure', {bubbles: true,detail: { name: 'd2l.page.tti', value: {name: 'd2l.page.tti', entryType: 'tti-polyfill', duration: tti, startTime: 0} }}));}});};
+		</script>
+		<script async="async" onload="window.__ttiOnload()" src="https://s.brightspace.com/lib/tti-polyfill/0.2.2/tti-polyfill-global.js"></script>
+		<script src="https://s.brightspace.com/apps/brightspace/20.26.2.21397/web-packages/D2L.LP.Web.Desktop.js"></script>
+		<script src="https://s.brightspace.com/apps/brightspace/20.26.2.21397/web-packages/D2L.PlatformTools.Homepage.js"></script>
+		<script>
+		D2L.LP.Web.UI.Events.OnInit.AddListener( function() {
+D2L.O("__g1",5)();
+D2L.O("__g1",5)();
+D2L.O("__g1",5)();
+D2L.O("__g1",6)();
+D2L.O("__g1",7)();
+D2L.O("__g1",8)();
+D2L.O("__g1",9)();
+D2L.O("__g1",10)();
+D2L.O("__g1",11)();
+D2L.O("__g1",12)();
+} );
+
+		D2L.OR={
+"d2l_1_18_653":{"0":"{\"_type\":\"D2L.LP.Web.UI.Html.PartialRendering.PartialHtmlRenderContext\",\"HeadingLevel\":2,\"ValidClassNames\":[],\"Scope\":\"\"}"}
+,
+"d2l_1_19_81":{"0":"{\"_type\":\"D2L.LP.Web.UI.Html.PartialRendering.PartialHtmlRenderContext\",\"HeadingLevel\":2,\"ValidClassNames\":[],\"Scope\":\"\"}"}
+,
+"d2l_1_20_328":{"0":"{\"_type\":\"D2L.LP.Web.UI.Html.PartialRendering.PartialHtmlRenderContext\",\"HeadingLevel\":2,\"ValidClassNames\":[],\"Scope\":\"\"}"}
+,
+"__g1":{"0":"{\"_type\":\"func\",\"N\":\"D2L.LP.Web.UI.Html.ReturnPoints.Set\",\"P\":[\"D2L.UXP.Profile.79921\"]}",
+"1":"{\"_type\":\"func\",\"N\":\"D2L.LP.Web.UI.Html.ReturnPoints.Set\",\"P\":[\"D2L.UXP.Preferences.6662\"]}",
+"2":"{\"_type\":\"func\",\"N\":\"D2L.LP.Web.UI.Html.ReturnPoints.Set\",\"P\":[\"D2L.LP.Notification.Settings.6662\"]}",
+"3":"{\"_type\":\"pipe\",\"P\":[{\"_type\":\"func\",\"N\":\"D2L.LP.Web.UI.Rpc.Connect\",\"P\":[\"POST\",{\"_type\":\"call\",\"N\":\"D2L.LP.Web.Mvc.RouteLocation.Create\",\"P\":[\"\/d2l\/lp\/personalTools\/{orgUnitId}\/dropdownpartial\/updateLanguage\",{\"_type\":\"D2L.LP.Util.Dictionary\",\"newLocaleId\":{\"_type\":\"call\",\"N\":\"D2L.LP.Web.UI.Desktop.MasterPages.Dialog.Open\",\"P\":[{\"_type\":\"id\",\"Value\":\"LocaleLinkId\"},{\"_type\":\"url\",\"Url\":\"\/d2l\/lp\/personalTools\/6662\/dropdownpartial\/language?currentLocaleId=0\"}],\"D\":true}},{\"_type\":\"D2L.LP.Util.Dictionary\",\"action\":\"LanguageDialog\"}]}],\"D\":true},{\"_type\":\"func\",\"N\":\"D2L.LP.Web.UI.Html.Dom.ReloadPage\"}]}",
+"4":"{\"_type\":\"func\",\"N\":\"D2L.PT.Auth.Logout\",\"P\":[\"\/d2l\/logout\"]}",
+"5":"{\"_type\":\"func\",\"N\":\"D2L.LP.Web.UI.Desktop.Controls.FloatingContainer.Init\"}",
+"6":"{\"_type\":\"func\",\"N\":\"D2L.PT.Auth.SessionTimeout.Init\",\"P\":[\"79921\",180,5,{\"_type\":\"id\",\"Value\":\"d2l_sessionExpiryWarning\"},\"d2l_sessionExpiryAlert\",\"d2l_sessionExpiryCheck\",{\"_type\":\"func\",\"N\":\"D2L.LP.Web.UI.Rpc.ConnectObject\",\"P\":[\"POST\",{\"_type\":\"url\",\"Url\":\"\/d2l\/lp\/auth\/session\/extend\"}],\"D\":true},{\"_type\":\"func\",\"N\":\"D2L.LP.Web.UI.Desktop.MasterPages.Dialog.OpenHelper\",\"P\":[{\"_type\":\"call\",\"N\":\"D2L.LP.Web.UI.Html.Dom.GetActiveElement\"},{\"_type\":\"url\",\"Url\":\"\/d2l\/lp\/auth\/session\/Expired?isLogout=0&isUsernamePasswordLogin=0&userId=79921\"}],\"D\":true},{\"_type\":\"func\",\"N\":\"D2L.LP.Web.UI.Desktop.MasterPages.Dialog.OpenHelper\",\"P\":[{\"_type\":\"call\",\"N\":\"D2L.LP.Web.UI.Html.Dom.GetActiveElement\"},{\"_type\":\"url\",\"Url\":\"\/d2l\/lp\/auth\/session\/Expired?isLogout=1&isUsernamePasswordLogin=0&userId=79921\"}],\"D\":true},{\"_type\":\"func\",\"N\":\"D2L.LP.Web.UI.Desktop.MasterPages.Dialog.ConfirmDialog\",\"P\":[null,{\"_type\":\"id\",\"Value\":\"d2l_1_61_56\"},\"New User Session\",\"\",\"The current user session has changed, so the links and content on this page may not behave as expected.\",\"OK\",\"\",true,false,false,true,false],\"D\":true},{\"_type\":\"func\",\"N\":\"D2L.LP.Web.UI.Desktop.MasterPages.Dialog.Confirm.Abort\",\"P\":[{\"_type\":\"id\",\"Value\":\"d2l_1_61_56\"}]}]}",
+"7":"{\"_type\":\"func\",\"N\":\"D2L.LP.Web.Authentication.Xsrf.Init\",\"P\":[\"d2l_referrer\",\"m4wZNf29DIriFOcs4hEJjoGq93v2XvD7\",-571114241]}",
+"8":"{\"_type\":\"func\",\"N\":\"D2L.LP.ActivityBar.Init\",\"P\":[{\"_type\":\"url\",\"Url\":\"\/d2l\/activityFeed\/checkForNewAlerts\"},120]}",
+"9":"{\"_type\":\"func\",\"N\":\"D2L.LP.Web.UI.Desktop.Controls.MessageArea.Init\",\"P\":[\"d2l_messagearea\",{\"_type\":\"url\",\"Url\":\"\/d2l\/lp\/validation\/errors\"}]}",
+"10":"{\"_type\":\"func\",\"N\":\"D2L.LP.Globalization.Locale.Init\",\"P\":[{\"_type\":\"anon\",\"DecimalSeparator\":\".\",\"GroupSeparator\":\",\",\"NumberNegativePattern\":1,\"PercentPositivePattern\":0,\"PercentNegativePattern\":0,\"PercentSymbol\":\"%\",\"NegativeSign\":\"-\",\"NativeDigits\":[\"0\",\"1\",\"2\",\"3\",\"4\",\"5\",\"6\",\"7\",\"8\",\"9\"],\"UseNativeDigits\":false,\"GroupSizes\":[3],\"IntegerRegex\":\"^([\\\\(-]*(([01234567890123456789]?[01234567890123456789]?([01234567890123456789](,[01234567890123456789][01234567890123456789][01234567890123456789])*)?))[\\\\)-]*)$|^([\\\\(-]*[01234567890123456789]+[\\\\)-]*)$\",\"DecimalRegex\":\"^([\\\\(-]*(([01234567890123456789]?[01234567890123456789]?([01234567890123456789](,[01234567890123456789][01234567890123456789][01234567890123456789])*)))(\\\\.[01234567890123456789]+)?[\\\\)-]*)$|^([\\\\(-]*[01234567890123456789]*\\\\.?[01234567890123456789]+[\\\\)-]*)$\"},{\"_type\":\"anon\",\"InputDateFormat\":\"M\/d\/yyyy\",\"Is24HourClock\":false,\"NativeDigits\":[\"0\",\"1\",\"2\",\"3\",\"4\",\"5\",\"6\",\"7\",\"8\",\"9\"],\"UseNativeDigits\":false,\"TimeFormat\":\"h:mm tt\",\"AmDesignator\":\"AM\",\"PmDesignator\":\"PM\",\"FirstDayOfWeek\":0,\"ShortMonthNames\":[\"Jan\",\"Feb\",\"Mar\",\"Apr\",\"May\",\"Jun\",\"Jul\",\"Aug\",\"Sep\",\"Oct\",\"Nov\",\"Dec\",\"\"],\"LongMonthNames\":[\"January\",\"February\",\"March\",\"April\",\"May\",\"June\",\"July\",\"August\",\"September\",\"October\",\"November\",\"December\",\"\"],\"ShortDayOfWeekNames\":[\"Sun\",\"Mon\",\"Tue\",\"Wed\",\"Thu\",\"Fri\",\"Sat\"]},{\"_type\":\"anon\",\"TextDirection\":1},{\"_type\":\"anon\",\"Culture\":\"en-us\"},{\"_type\":\"anon\",\"JustNow\":\"just now\",\"OneMinuteAgo\":\"1 minute ago\",\"TwoMinutesAgo\":\"2 minutes ago\",\"MinutesAgoMany\":\"[0] minutes ago\",\"OneHourAgo\":\"1 hour ago\",\"TwoHoursAgo\":\"2 hours ago\",\"ManyHoursAgo\":\"[0] hours ago\",\"YesterdayTime\":\"yesterday at [0]\",\"DayOfWeekTime\":\"[0] at [1]\",\"MonthDayTime\":\"[0] at [1]\",\"Now\":{\"_type\":\"D2L.LocalDateTime\",\"Year\":2026,\"Month\":2,\"Day\":17,\"Hour\":8,\"Minute\":38,\"Second\":7,\"Millisecond\":693}}]}",
+"11":"{\"_type\":\"func\",\"N\":\"D2L.LP.Web.UI.Rpc.Initialize\",\"P\":[{\"_type\":\"url\",\"Url\":\"\/d2l\/login?target=%2fd2l%2fhome%2f6662&sessionExpired=1\"},\"Error: unable to complete your request.\",{\"_type\":\"D2L.LP.Util.Dictionary\"},{\"_type\":\"D2L.LP.Util.Dictionary\",\"flash\":{\"_type\":\"func\",\"N\":\"D2L.LP.Web.UI.FlashMessages.RpcReceivePayloadProvider\"},\"session\":{\"_type\":\"func\",\"N\":\"D2L.PT.Auth.SessionTimeout.RpcReceivePayloadProvider\"},\"messageArea\":{\"_type\":\"func\",\"N\":\"D2L.LP.Web.UI.Desktop.Controls.MessageArea.RpcReceivePayloadProvider\"},\"OR\":{\"_type\":\"func\",\"N\":\"D2L.LP.Web.UI.ObjectRepository.RpcReceivePayloadProvider\"},\"JS\":{\"_type\":\"func\",\"N\":\"D2L.LP.Web.UI.Html.JavaScript.RpcReceiveJsPayloadProvider\"},\"CSS\":{\"_type\":\"func\",\"N\":\"D2L.LP.Web.UI.Html.JavaScript.RpcReceiveCssPayloadProvider\"},\"BSI\":{\"_type\":\"func\",\"N\":\"D2L.LP.Web.UI.Html.Bsi.RpcReceiveJsPayloadProvider\"},\"ariaMessages\":{\"_type\":\"func\",\"N\":\"D2L.LP.Web.UI.Html.Aria.RpcReceivePayloadProvider\"}}]}",
+"12":"{\"_type\":\"func\",\"N\":\"D2L.LP.Web.UI.Desktop.Controls.InlineHelp.Init\",\"P\":[{\"_type\":\"url\",\"Url\":\"\/d2l\/lp\/inlineHelp\/6662\/help\"}]}"}
+,
+"d2l_1_22_735":{"0":"{\"_type\":\"D2L.LP.Web.UI.Html.PartialRendering.PartialHtmlRenderContext\",\"HeadingLevel\":2,\"ValidClassNames\":[],\"Scope\":\"\"}"}
+,
+"d2l_1_23_666":{"select":"{\"_type\":\"func\",\"N\":\"D2L.LP.Web.UI.Html.Dom.OpenWindow\",\"P\":[\"https:\/\/sites.google.com\/maine.edu\/thehub\/your-tech\/brightspace\/brightspace-video-tutorials?authuser=0\",{\"_type\":\"url\",\"Url\":\"https:\/\/sites.google.com\/maine.edu\/thehub\/your-tech\/brightspace\/brightspace-video-tutorials?authuser=0\"},0,0,true,true,null,true]}"}
+,
+"d2l_1_24_427":{"select":"{\"_type\":\"func\",\"N\":\"D2L.LP.Web.UI.Html.Dom.OpenWindow\",\"P\":[\"https:\/\/tdx.maine.edu\/TDClient\/2624\/Portal\/Home\/?ID=1ee28f61-aea2-4452-8aa9-859961307402\",{\"_type\":\"url\",\"Url\":\"https:\/\/tdx.maine.edu\/TDClient\/2624\/Portal\/Home\/?ID=1ee28f61-aea2-4452-8aa9-859961307402\"},0,0,true,true,null,true]}"}
+,
+"d2l_1_25_533":{"select":"{\"_type\":\"func\",\"N\":\"D2L.LP.Web.UI.Html.Dom.OpenWindow\",\"P\":[\"\/d2l\/common\/dialogs\/quickLink\/quickLink.d2l?ou=6662&type=lti&rcode=F3C7BF8F-5062-472E-BD78-1E9087192E9D-277&srcou=6606\",{\"_type\":\"url\",\"Url\":\"\/d2l\/common\/dialogs\/quickLink\/quickLink.d2l?ou=6662&type=lti&rcode=F3C7BF8F-5062-472E-BD78-1E9087192E9D-277&srcou=6606\"},0,0,true,true,null,true]}"}
+,
+"d2l_1_26_434":{"select":"{\"_type\":\"func\",\"N\":\"D2L.LP.Web.UI.Html.Dom.OpenWindow\",\"P\":[\"https:\/\/sites.google.com\/maine.edu\/thehub\/your-tech\/brightspace\/brightspace-video-tutorials?authuser=0\",{\"_type\":\"url\",\"Url\":\"https:\/\/sites.google.com\/maine.edu\/thehub\/your-tech\/brightspace\/brightspace-video-tutorials?authuser=0\"},0,0,true,true,null,true]}"}
+,
+"d2l_1_27_325":{"select":"{\"_type\":\"func\",\"N\":\"D2L.LP.Web.UI.Html.Dom.OpenWindow\",\"P\":[\"https:\/\/tdx.maine.edu\/TDClient\/2624\/Portal\/Home\/?ID=1ee28f61-aea2-4452-8aa9-859961307402\",{\"_type\":\"url\",\"Url\":\"https:\/\/tdx.maine.edu\/TDClient\/2624\/Portal\/Home\/?ID=1ee28f61-aea2-4452-8aa9-859961307402\"},0,0,true,true,null,true]}"}
+,
+"d2l_1_28_937":{"select":"{\"_type\":\"func\",\"N\":\"D2L.LP.Web.UI.Html.Dom.OpenWindow\",\"P\":[\"\/d2l\/common\/dialogs\/quickLink\/quickLink.d2l?ou=6662&type=lti&rcode=F3C7BF8F-5062-472E-BD78-1E9087192E9D-2399069&srcou=6606\",{\"_type\":\"url\",\"Url\":\"\/d2l\/common\/dialogs\/quickLink\/quickLink.d2l?ou=6662&type=lti&rcode=F3C7BF8F-5062-472E-BD78-1E9087192E9D-2399069&srcou=6606\"},0,0,true,true,null,true]}"}
+,
+"d2l_1_29_132":{"select":"{\"_type\":\"func\",\"N\":\"D2L.LP.Web.UI.Html.Dom.OpenWindow\",\"P\":[\"\/d2l\/common\/dialogs\/quickLink\/quickLink.d2l?ou=6662&type=lti&rcode=F3C7BF8F-5062-472E-BD78-1E9087192E9D-277&srcou=6606\",{\"_type\":\"url\",\"Url\":\"\/d2l\/common\/dialogs\/quickLink\/quickLink.d2l?ou=6662&type=lti&rcode=F3C7BF8F-5062-472E-BD78-1E9087192E9D-277&srcou=6606\"},0,0,true,true,null,true]}"}
+,
+"d2l_1_30_136":{"select":"{\"_type\":\"func\",\"N\":\"D2L.LP.Web.UI.Html.Dom.OpenWindow\",\"P\":[\"https:\/\/sites.google.com\/maine.edu\/thehub\/your-tech\/brightspace\/brightspace-video-tutorials?authuser=0\",{\"_type\":\"url\",\"Url\":\"https:\/\/sites.google.com\/maine.edu\/thehub\/your-tech\/brightspace\/brightspace-video-tutorials?authuser=0\"},0,0,true,true,null,true]}"}
+,
+"d2l_1_31_521":{"select":"{\"_type\":\"func\",\"N\":\"D2L.LP.Web.UI.Html.Dom.OpenWindow\",\"P\":[\"https:\/\/tdx.maine.edu\/TDClient\/2624\/Portal\/Home\/?ID=1ee28f61-aea2-4452-8aa9-859961307402\",{\"_type\":\"url\",\"Url\":\"https:\/\/tdx.maine.edu\/TDClient\/2624\/Portal\/Home\/?ID=1ee28f61-aea2-4452-8aa9-859961307402\"},0,0,true,true,null,true]}"}
+,
+"d2l_1_32_307":{"select":"{\"_type\":\"func\",\"N\":\"D2L.LP.Web.UI.Html.Dom.OpenWindow\",\"P\":[\"\/d2l\/common\/dialogs\/quickLink\/quickLink.d2l?ou=6662&type=lti&rcode=F3C7BF8F-5062-472E-BD78-1E9087192E9D-2399069&srcou=6606\",{\"_type\":\"url\",\"Url\":\"\/d2l\/common\/dialogs\/quickLink\/quickLink.d2l?ou=6662&type=lti&rcode=F3C7BF8F-5062-472E-BD78-1E9087192E9D-2399069&srcou=6606\"},0,0,true,true,null,true]}"}
+,
+"CourseImageBannerPlaceholderId":{"0":"{\"_type\":\"D2L.LP.Web.UI.Html.PartialRendering.PartialHtmlRenderContext\",\"HeadingLevel\":2,\"ValidClassNames\":[],\"Scope\":\"\"}"}
+,
+"courseImageUploadCb":{"0":"{\"_type\":\"func\",\"N\":\"D2L.LP.Web.UI.Desktop.MasterPages.Dialog.FileSelectorDialog.OpenDialog\",\"P\":[{\"_type\":\"func\",\"N\":\"D2L.LP.Web.UI.Legacy.MasterPages.Dialog.Open\",\"P\":[{\"_type\":\"id\",\"Value\":\"d2l_1_42_371\"},{\"_type\":\"url\",\"Url\":\"\/d2l\/common\/dialogs\/file\/main.d2l?ou=6662&af=mycomputer%2coufiles%2csharedfiles%2cmylocker%2cgrouplocker&am=0&fsc=0&asc=0&mfs=0&afid=0&area&f=1&path\"},\"DialogCallback\",null,\"files\",700,520,\"Close this Dialog\",[{\"_type\":\"D2L.LP.Web.UI.Legacy.MasterPages.DialogLegacy+ButtonData\",\"IsPrimary\":true,\"Key\":\"BTN_next\",\"Param\":\"next\",\"Text\":\"Add\",\"ResponseType\":1,\"IsEnabled\":true},{\"_type\":\"D2L.LP.Web.UI.Legacy.MasterPages.DialogLegacy+ButtonData\",\"IsPrimary\":false,\"Key\":\"BTN_back\",\"Param\":\"back\",\"Text\":\"Back\",\"ResponseType\":1,\"IsEnabled\":true},{\"_type\":\"D2L.LP.Web.UI.Legacy.MasterPages.DialogLegacy+ButtonData\",\"IsPrimary\":false,\"Key\":\"\",\"Param\":\"\",\"Text\":\"Cancel\",\"ResponseType\":0,\"IsEnabled\":true}],false,\"\"],\"D\":true},{\"_type\":\"id\",\"Value\":\"d2l_1_43_665\"},{\"_type\":\"pipe\",\"P\":[{\"_type\":\"func\",\"N\":\"D2L.VS\",\"P\":[\"Files\",{\"_type\":\"call\",\"N\":\"D2L.LP.Web.UI.Desktop.MasterPages.Dialog.FileSelectorDialog.GetFiles\",\"P\":[{\"_type\":\"id\",\"Value\":\"d2l_1_43_665\"}]}]},{\"_type\":\"func\",\"N\":\"D2L.LP.Web.UI.Rpc.ConnectObject\",\"P\":[\"POST\",{\"_type\":\"url\",\"Url\":\"\/d2l\/lp\/homepages\/6662\/uploadcourseimage\"},{\"_type\":\"D2L.LP.Util.Dictionary\",\"files\":{\"_type\":\"call\",\"N\":\"D2L.VG\",\"P\":[\"Files\"]}}],\"D\":true},{\"_type\":\"func\",\"N\":\"D2L.LP.Homepage.Banner.ImageUploadSuccess\"}]}]}"}
+,
+"imageBannerMenuItemToggleBannerHandler":{"0":"{\"_type\":\"func\",\"N\":\"D2L.LP.Web.UI.Html.PartialRendering.PartialRender\",\"P\":[{\"_type\":\"id\",\"Value\":\"HomepageManageMenuPlaceholderId\"},{\"_type\":\"func\",\"N\":\"D2L.LP.Web.UI.Rpc.ConnectPartial\",\"P\":[{\"_type\":\"id\",\"Value\":\"HomepageManageMenuPlaceholderId\"},\"GET\",{\"_type\":\"url\",\"Url\":\"\/d2l\/home\/banner\/6662\/PartialRenderHomepageManageMenuView\"},{\"_type\":\"D2L.LP.Util.Dictionary\"},{\"_type\":\"D2L.LP.Web.UI.Rpc.RpcOptions\",\"keepAlive\":true,\"includeXsrfHeader\":false}],\"D\":true},0,false,null],\"D\":true}"}
+,
+"myCoursesImageUploadCb":{"0":"{\"_type\":\"func\",\"N\":\"D2L.LP.Web.UI.Desktop.MasterPages.Dialog.FileSelectorDialog.OpenDialog\",\"P\":[{\"_type\":\"func\",\"N\":\"D2L.LP.Web.UI.Legacy.MasterPages.Dialog.Open\",\"P\":[{\"_type\":\"id\",\"Value\":\"d2l_1_12_688\"},{\"_type\":\"url\",\"Url\":\"\/d2l\/common\/dialogs\/file\/main.d2l?ou=6662&af=mycomputer%2coufiles%2csharedfiles%2cmylocker%2cgrouplocker&am=0&fsc=0&asc=0&mfs=0&afid=0&area&f=1&path\"},\"DialogCallback\",null,\"files\",700,520,\"Close this Dialog\",[{\"_type\":\"D2L.LP.Web.UI.Legacy.MasterPages.DialogLegacy+ButtonData\",\"IsPrimary\":true,\"Key\":\"BTN_next\",\"Param\":\"next\",\"Text\":\"Add\",\"ResponseType\":1,\"IsEnabled\":true},{\"_type\":\"D2L.LP.Web.UI.Legacy.MasterPages.DialogLegacy+ButtonData\",\"IsPrimary\":false,\"Key\":\"BTN_back\",\"Param\":\"back\",\"Text\":\"Back\",\"ResponseType\":1,\"IsEnabled\":true},{\"_type\":\"D2L.LP.Web.UI.Legacy.MasterPages.DialogLegacy+ButtonData\",\"IsPrimary\":false,\"Key\":\"\",\"Param\":\"\",\"Text\":\"Cancel\",\"ResponseType\":0,\"IsEnabled\":true}],false,\"\"],\"D\":true},{\"_type\":\"id\",\"Value\":\"d2l_1_13_785\"},{\"_type\":\"pipe\",\"P\":[{\"_type\":\"func\",\"N\":\"D2L.VS\",\"P\":[\"Files\",{\"_type\":\"call\",\"N\":\"D2L.LP.Web.UI.Desktop.MasterPages.Dialog.FileSelectorDialog.GetFiles\",\"P\":[{\"_type\":\"id\",\"Value\":\"d2l_1_13_785\"}]}]},{\"_type\":\"func\",\"N\":\"D2L.LP.Web.UI.Rpc.ConnectObject\",\"P\":[\"POST\",{\"_type\":\"call\",\"N\":\"D2L.LP.Web.Mvc.RouteLocation.Create\",\"P\":[\"\/d2l\/lp\/homepages\/{orgUnitId}\/{action}\",{\"_type\":\"D2L.LP.Util.Dictionary\"},{\"_type\":\"D2L.LP.Util.Dictionary\",\"action\":\"uploadcourseimage\",\"orgUnitId\":{\"_type\":\"call\",\"N\":\"D2L.LP.Homepage.MyCoursesWidget.GetLastOrgUnitId\"}}]},{\"_type\":\"D2L.LP.Util.Dictionary\",\"files\":{\"_type\":\"call\",\"N\":\"D2L.VG\",\"P\":[\"Files\"]}}],\"D\":true},{\"_type\":\"func\",\"N\":\"D2L.LP.Homepage.MyCoursesWidget.ImageUploadSuccess\"}]}]}"}
+,
+"d2l_1_1_229_CollapseWidgetAction":{"select":"{\"_type\":\"pipe\",\"P\":[{\"_type\":\"func\",\"N\":\"D2L.LP.Homepage.Widget.CollapseWidgetContent\",\"P\":[{\"_type\":\"id\",\"Value\":\"d2l_1_15_356\"}]},{\"_type\":\"func\",\"N\":\"D2L.LP.Web.UI.Desktop.Controls.ContextMenu.SetItemIsVisible\",\"P\":[{\"_type\":\"id\",\"Value\":\"d2l_1_1_229\"},\"CollapseWidgetAction\",false]},{\"_type\":\"func\",\"N\":\"D2L.LP.Web.UI.Desktop.Controls.ContextMenu.SetItemIsVisible\",\"P\":[{\"_type\":\"id\",\"Value\":\"d2l_1_1_229\"},\"ExpandWidgetAction\",true]},{\"_type\":\"func\",\"N\":\"D2L.LP.Web.UI.Rpc.Connect\",\"P\":[\"POST\",{\"_type\":\"url\",\"Url\":\"\/d2l\/lp\/widgets\/6662\/UpdateWidgetCollapseStatus\"},{\"_type\":\"D2L.LP.Util.Dictionary\",\"HomepageId\":202,\"UserId\":79921,\"HomepageComponentId\":823}],\"D\":true}]}"}
+,
+"d2l_1_1_229_ExpandWidgetAction":{"select":"{\"_type\":\"pipe\",\"P\":[{\"_type\":\"func\",\"N\":\"D2L.LP.Homepage.Widget.ExpandWidgetContent\",\"P\":[{\"_type\":\"id\",\"Value\":\"d2l_1_15_356\"}]},{\"_type\":\"func\",\"N\":\"D2L.LP.Web.UI.Desktop.Controls.ContextMenu.SetItemIsVisible\",\"P\":[{\"_type\":\"id\",\"Value\":\"d2l_1_1_229\"},\"ExpandWidgetAction\",false]},{\"_type\":\"func\",\"N\":\"D2L.LP.Web.UI.Desktop.Controls.ContextMenu.SetItemIsVisible\",\"P\":[{\"_type\":\"id\",\"Value\":\"d2l_1_1_229\"},\"CollapseWidgetAction\",true]},{\"_type\":\"func\",\"N\":\"D2L.LP.Web.UI.Rpc.Connect\",\"P\":[\"POST\",{\"_type\":\"url\",\"Url\":\"\/d2l\/lp\/widgets\/6662\/UpdateWidgetCollapseStatus\"},{\"_type\":\"D2L.LP.Util.Dictionary\",\"HomepageId\":202,\"UserId\":79921,\"HomepageComponentId\":823}],\"D\":true}]}"}
+,
+"d2l_1_47_724":{"onClose":"{\"_type\":\"func\",\"N\":\"D2L.LP.Web.UI.Desktop.Controls.ContextMenu.OnCloseHandler\",\"P\":[{\"_type\":\"id\",\"Value\":\"d2l_1_1_229\"}]}"}
+,
+"d2l_1_9_52_CollapseWidgetAction":{"select":"{\"_type\":\"pipe\",\"P\":[{\"_type\":\"func\",\"N\":\"D2L.LP.Homepage.Widget.CollapseWidgetContent\",\"P\":[{\"_type\":\"id\",\"Value\":\"d2l_1_16_8\"}]},{\"_type\":\"func\",\"N\":\"D2L.LP.Web.UI.Desktop.Controls.ContextMenu.SetItemIsVisible\",\"P\":[{\"_type\":\"id\",\"Value\":\"d2l_1_9_52\"},\"CollapseWidgetAction\",false]},{\"_type\":\"func\",\"N\":\"D2L.LP.Web.UI.Desktop.Controls.ContextMenu.SetItemIsVisible\",\"P\":[{\"_type\":\"id\",\"Value\":\"d2l_1_9_52\"},\"ExpandWidgetAction\",true]},{\"_type\":\"func\",\"N\":\"D2L.LP.Web.UI.Rpc.Connect\",\"P\":[\"POST\",{\"_type\":\"url\",\"Url\":\"\/d2l\/lp\/widgets\/6662\/UpdateWidgetCollapseStatus\"},{\"_type\":\"D2L.LP.Util.Dictionary\",\"HomepageId\":202,\"UserId\":79921,\"HomepageComponentId\":547}],\"D\":true}]}"}
+,
+"d2l_1_9_52_ExpandWidgetAction":{"select":"{\"_type\":\"pipe\",\"P\":[{\"_type\":\"func\",\"N\":\"D2L.LP.Homepage.Widget.ExpandWidgetContent\",\"P\":[{\"_type\":\"id\",\"Value\":\"d2l_1_16_8\"}]},{\"_type\":\"func\",\"N\":\"D2L.LP.Web.UI.Desktop.Controls.ContextMenu.SetItemIsVisible\",\"P\":[{\"_type\":\"id\",\"Value\":\"d2l_1_9_52\"},\"ExpandWidgetAction\",false]},{\"_type\":\"func\",\"N\":\"D2L.LP.Web.UI.Desktop.Controls.ContextMenu.SetItemIsVisible\",\"P\":[{\"_type\":\"id\",\"Value\":\"d2l_1_9_52\"},\"CollapseWidgetAction\",true]},{\"_type\":\"func\",\"N\":\"D2L.LP.Web.UI.Rpc.Connect\",\"P\":[\"POST\",{\"_type\":\"url\",\"Url\":\"\/d2l\/lp\/widgets\/6662\/UpdateWidgetCollapseStatus\"},{\"_type\":\"D2L.LP.Util.Dictionary\",\"HomepageId\":202,\"UserId\":79921,\"HomepageComponentId\":547}],\"D\":true}]}"}
+,
+"d2l_1_51_62":{"onClose":"{\"_type\":\"func\",\"N\":\"D2L.LP.Web.UI.Desktop.Controls.ContextMenu.OnCloseHandler\",\"P\":[{\"_type\":\"id\",\"Value\":\"d2l_1_9_52\"}]}"}
+,
+"d2l_1_4_205_CollapseWidgetAction":{"select":"{\"_type\":\"pipe\",\"P\":[{\"_type\":\"func\",\"N\":\"D2L.LP.Homepage.Widget.CollapseWidgetContent\",\"P\":[{\"_type\":\"id\",\"Value\":\"d2l_1_17_832\"}]},{\"_type\":\"func\",\"N\":\"D2L.LP.Web.UI.Desktop.Controls.ContextMenu.SetItemIsVisible\",\"P\":[{\"_type\":\"id\",\"Value\":\"d2l_1_4_205\"},\"CollapseWidgetAction\",false]},{\"_type\":\"func\",\"N\":\"D2L.LP.Web.UI.Desktop.Controls.ContextMenu.SetItemIsVisible\",\"P\":[{\"_type\":\"id\",\"Value\":\"d2l_1_4_205\"},\"ExpandWidgetAction\",true]},{\"_type\":\"func\",\"N\":\"D2L.LP.Web.UI.Rpc.Connect\",\"P\":[\"POST\",{\"_type\":\"url\",\"Url\":\"\/d2l\/lp\/widgets\/6662\/UpdateWidgetCollapseStatus\"},{\"_type\":\"D2L.LP.Util.Dictionary\",\"HomepageId\":202,\"UserId\":79921,\"HomepageComponentId\":128603}],\"D\":true}]}"}
+,
+"d2l_1_4_205_ExpandWidgetAction":{"select":"{\"_type\":\"pipe\",\"P\":[{\"_type\":\"func\",\"N\":\"D2L.LP.Homepage.Widget.ExpandWidgetContent\",\"P\":[{\"_type\":\"id\",\"Value\":\"d2l_1_17_832\"}]},{\"_type\":\"func\",\"N\":\"D2L.LP.Web.UI.Desktop.Controls.ContextMenu.SetItemIsVisible\",\"P\":[{\"_type\":\"id\",\"Value\":\"d2l_1_4_205\"},\"ExpandWidgetAction\",false]},{\"_type\":\"func\",\"N\":\"D2L.LP.Web.UI.Desktop.Controls.ContextMenu.SetItemIsVisible\",\"P\":[{\"_type\":\"id\",\"Value\":\"d2l_1_4_205\"},\"CollapseWidgetAction\",true]},{\"_type\":\"func\",\"N\":\"D2L.LP.Web.UI.Rpc.Connect\",\"P\":[\"POST\",{\"_type\":\"url\",\"Url\":\"\/d2l\/lp\/widgets\/6662\/UpdateWidgetCollapseStatus\"},{\"_type\":\"D2L.LP.Util.Dictionary\",\"HomepageId\":202,\"UserId\":79921,\"HomepageComponentId\":128603}],\"D\":true}]}"}
+,
+"d2l_1_58_939":{"onClose":"{\"_type\":\"func\",\"N\":\"D2L.LP.Web.UI.Desktop.Controls.ContextMenu.OnCloseHandler\",\"P\":[{\"_type\":\"id\",\"Value\":\"d2l_1_4_205\"}]}"}
+
+};
+
+		</script>
+		<script>D2L.LP.Web.UI.Html.Bsi.Init('prod', 'https://s.brightspace.com/lib/bsi/2026.2.264/', ['unbundled/navigation.js','unbundled/navigation-main-header.js','unbundled/navigation-button-icon.js','unbundled/navigation-link-icon.js','unbundled/navigation-separator.js','unbundled/navigation-link-image.js','unbundled/navigation-dropdown-button-icon.js','unbundled/dropdown-content.js','unbundled/navigation-dropdown-button-custom.js','unbundled/d2l-profile-image-base.js','unbundled/navigation-main-footer.js','unbundled/dropdown.js','unbundled/dropdown-menu.js','unbundled/icon.js','unbundled/menu.js','unbundled/menu-item.js','unbundled/menu-item-link.js','unbundled/navigation-band.js','unbundled/button-icon.js','unbundled/menu-item-separator.js','unbundled/d2l-image-banner-overlay.js','unbundled/expand-collapse-content.js','unbundled/d2l-my-courses.js','unbundled/dropdown-context-menu.js','unbundled/html-block.js']);</script>
+	
+<iron-a11y-announcer></iron-a11y-announcer></body></html>

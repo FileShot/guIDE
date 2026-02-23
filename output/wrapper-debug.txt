@@ -1,0 +1,25 @@
+﻿
+2026-02-21T23:44:04.135Z WARN  [LLM] BUG-044: "Llama3_2LightweightChatWrapper" 
+selected for arch "llama" â€” overriding with JinjaTemplateChatWrapper (model 
+has embedded template with tool-call support)
+2026-02-21T23:44:04.147Z LOG   [LLM] Chat wrapper overridden to: 
+JinjaTemplateChatWrapper
+2026-02-21T23:44:10.607Z WARN  [LLM] BUG-044: "Llama3_2LightweightChatWrapper" 
+selected for arch "llama" â€” overriding with JinjaTemplateChatWrapper (model 
+has embedded template with tool-call support)
+2026-02-21T23:44:10.624Z LOG   [LLM] Chat wrapper overridden to: 
+JinjaTemplateChatWrapper
+2026-02-21T23:45:46.635Z WARN  [LLM] BUG-044: "Llama3_2LightweightChatWrapper" 
+selected for arch "llama" â€” overriding with JinjaTemplateChatWrapper (model 
+has embedded template with tool-call support)
+2026-02-21T23:45:46.647Z LOG   [LLM] Chat wrapper overridden to: 
+JinjaTemplateChatWrapper
+2026-02-22T00:26:47.620Z LOG   [LLM] _applyChatWrapperOverride: arch="llama" 
+wrapper="Llama3_2LightweightChatWrapper" hasJinja=true
+2026-02-22T00:26:47.620Z WARN  [LLM] BUG-044: "Llama3_2LightweightChatWrapper" 
+selected for arch "llama" â€” overriding with JinjaTemplateChatWrapper 
+(embedded template takes priority)
+2026-02-22T00:26:47.641Z LOG   [LLM] Chat wrapper overridden to: 
+JinjaTemplateChatWrapper (arch=llama)
+
+

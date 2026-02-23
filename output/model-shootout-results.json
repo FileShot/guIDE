@@ -1,0 +1,376 @@
+{
+  "timestamp": "2026-02-15T20:12:20.123Z",
+  "winner": "Qwen2.5-Coder-1.5B",
+  "comparison": [
+    {
+      "model": "Qwen3-0.6B",
+      "params": "0.6B",
+      "overall": 73.8,
+      "perTest": [
+        {
+          "id": "T1",
+          "score": 100,
+          "tools": [
+            "browser_navigate"
+          ]
+        },
+        {
+          "id": "T2",
+          "score": 15,
+          "tools": [
+            "get_project_structure"
+          ]
+        },
+        {
+          "id": "T3",
+          "score": 85,
+          "tools": [
+            "write_file"
+          ]
+        },
+        {
+          "id": "T4",
+          "score": 100,
+          "tools": [
+            "run_command",
+            "run_command"
+          ]
+        },
+        {
+          "id": "T5",
+          "score": 100,
+          "tools": []
+        },
+        {
+          "id": "T6",
+          "score": 100,
+          "tools": [
+            "list_directory"
+          ]
+        },
+        {
+          "id": "T7",
+          "score": 0,
+          "tools": []
+        },
+        {
+          "id": "T8",
+          "score": 85,
+          "tools": [
+            "write_file"
+          ]
+        },
+        {
+          "id": "T9",
+          "score": 60,
+          "tools": [
+            "web_search",
+            "read_file",
+            "run_command",
+            "browser_navigate",
+            "browser_get_content"
+          ]
+        },
+        {
+          "id": "T10",
+          "score": 85,
+          "tools": [
+            "browser_navigate",
+            "browser_snapshot",
+            "browser_click",
+            "write_file",
+            "web_search"
+          ]
+        }
+      ]
+    },
+    {
+      "model": "ruvltra-claude-code-0.5b",
+      "params": "0.5B",
+      "overall": 25.4,
+      "perTest": [
+        {
+          "id": "T1",
+          "score": 20,
+          "tools": [
+            "web_search"
+          ]
+        },
+        {
+          "id": "T2",
+          "score": 15,
+          "tools": [
+            "run_command"
+          ]
+        },
+        {
+          "id": "T3",
+          "score": 10,
+          "tools": [
+            "run_command"
+          ]
+        },
+        {
+          "id": "T4",
+          "score": 15,
+          "tools": [
+            "write_file"
+          ]
+        },
+        {
+          "id": "T5",
+          "score": 60,
+          "tools": []
+        },
+        {
+          "id": "T6",
+          "score": 15,
+          "tools": [
+            "read_file"
+          ]
+        },
+        {
+          "id": "T7",
+          "score": 0,
+          "tools": []
+        },
+        {
+          "id": "T8",
+          "score": 85,
+          "tools": [
+            "write_file"
+          ]
+        },
+        {
+          "id": "T9",
+          "score": 20,
+          "tools": [
+            "web_search"
+          ]
+        },
+        {
+          "id": "T10",
+          "score": 15,
+          "tools": [
+            "web_search"
+          ]
+        }
+      ]
+    },
+    {
+      "model": "Llama-3.2-1B-ToolCall",
+      "params": "1.0B",
+      "overall": 19.3,
+      "perTest": [
+        {
+          "id": "T1",
+          "score": 0,
+          "tools": []
+        },
+        {
+          "id": "T2",
+          "score": 0,
+          "tools": []
+        },
+        {
+          "id": "T3",
+          "score": 15,
+          "tools": []
+        },
+        {
+          "id": "T4",
+          "score": 0,
+          "tools": []
+        },
+        {
+          "id": "T5",
+          "score": 100,
+          "tools": []
+        },
+        {
+          "id": "T6",
+          "score": 0,
+          "tools": []
+        },
+        {
+          "id": "T7",
+          "score": 0,
+          "tools": []
+        },
+        {
+          "id": "T8",
+          "score": 85,
+          "tools": [
+            "write_file"
+          ]
+        },
+        {
+          "id": "T9",
+          "score": 8,
+          "tools": [
+            "create_directory",
+            "write_file"
+          ]
+        },
+        {
+          "id": "T10",
+          "score": 0,
+          "tools": []
+        }
+      ]
+    },
+    {
+      "model": "Qwen2.5-Coder-1.5B",
+      "params": "1.5B",
+      "overall": 79.6,
+      "perTest": [
+        {
+          "id": "T1",
+          "score": 100,
+          "tools": [
+            "browser_navigate"
+          ]
+        },
+        {
+          "id": "T2",
+          "score": 0,
+          "tools": []
+        },
+        {
+          "id": "T3",
+          "score": 100,
+          "tools": [
+            "write_file"
+          ]
+        },
+        {
+          "id": "T4",
+          "score": 100,
+          "tools": [
+            "run_command"
+          ]
+        },
+        {
+          "id": "T5",
+          "score": 100,
+          "tools": []
+        },
+        {
+          "id": "T6",
+          "score": 100,
+          "tools": [
+            "list_directory"
+          ]
+        },
+        {
+          "id": "T7",
+          "score": 100,
+          "tools": [
+            "web_search"
+          ]
+        },
+        {
+          "id": "T8",
+          "score": 85,
+          "tools": [
+            "write_file"
+          ]
+        },
+        {
+          "id": "T9",
+          "score": 75,
+          "tools": [
+            "read_file",
+            "run_command",
+            "list_directory",
+            "write_file"
+          ]
+        },
+        {
+          "id": "T10",
+          "score": 60,
+          "tools": [
+            "browser_navigate",
+            "browser_snapshot",
+            "browser_click",
+            "read_file",
+            "browser_click",
+            "read_file",
+            "browser_click",
+            "read_file",
+            "browser_click",
+            "read_file",
+            "browser_click",
+            "read_file",
+            "browser_click",
+            "read_file",
+            "browser_click",
+            "read_file",
+            "browser_click",
+            "read_file",
+            "browser_click",
+            "read_file",
+            "browser_click",
+            "read_file",
+            "browser_click",
+            "read_file",
+            "browser_click",
+            "read_file",
+            "browser_click",
+            "read_file",
+            "browser_click",
+            "read_file",
+            "browser_click",
+            "read_file",
+            "browser_click",
+            "read_file",
+            "browser_click",
+            "read_file",
+            "browser_click",
+            "read_file",
+            "browser_click",
+            "read_file",
+            "browser_click",
+            "read_file",
+            "browser_click",
+            "read_file",
+            "browser_click",
+            "read_file",
+            "browser_click",
+            "read_file",
+            "browser_click",
+            "read_file",
+            "browser_click",
+            "read_file",
+            "browser_click",
+            "read_file",
+            "browser_click",
+            "read_file",
+            "browser_click",
+            "read_file",
+            "browser_click",
+            "read_file",
+            "browser_click",
+            "read_file",
+            "browser_click",
+            "read_file",
+            "browser_click",
+            "read_file",
+            "browser_click",
+            "read_file",
+            "browser_click",
+            "read_file",
+            "browser_click",
+            "read_file",
+            "browser_click",
+            "read_file",
+            "browser_click",
+            "read_file",
+            "browser_click",
+            "read_file"
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+﻿
+2026-02-21T23:18:37.505Z LOG   [AI Chat] Generating final summary...
+2026-02-21T23:18:37.505Z LOG   [LLM] ThoughtTokenBudget: 256 (effort=medium, 
+profileDefault=256)
+2026-02-21T23:18:37.532Z LOG   [LLM] Empty response with KV reuse enabled; 
+retrying once with lastEvaluation cleared (rawLen=0 fullLen=0 thinkTokens=0)
+2026-02-21T23:18:38.210Z LOG   [AI Chat] Condensed chatHistory: 14 turns â†’ 3 
+entries (prevents template loop)
+2026-02-21T23:18:38.210Z LOG   [AI Chat] â•â• FINAL RETURN â•â• 3364 chars 
+â†’ UI | preview: "```json\n{\n  "tool": "browser_navigate",\n  "params": {\n  
+  "url": "https://develo"
+
+

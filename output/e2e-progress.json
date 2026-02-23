@@ -1,0 +1,118 @@
+{
+  "status": "done",
+  "scenario": "math-quiz",
+  "model": "qwen2.5-coder-3b-instruct-q4_k_m.gguf",
+  "totalIterations": 7,
+  "totalToolCalls": 7,
+  "validation": {
+    "ok": false,
+    "checks": {
+      "navigated": true,
+      "typed": true,
+      "clicked": true,
+      "wroteReport": false
+    }
+  },
+  "iterationLog": [
+    {
+      "iter": 1,
+      "genMs": 1110,
+      "totalMs": 32301,
+      "tools": [
+        "browser_navigate → https://zorocarto.com/math-quiz/"
+      ]
+    },
+    {
+      "iter": 2,
+      "genMs": 1938,
+      "totalMs": 34153,
+      "tools": [
+        "browser_click [ref=124]"
+      ]
+    },
+    {
+      "iter": 3,
+      "genMs": 2015,
+      "totalMs": 34190,
+      "tools": [
+        "browser_click [ref=125]"
+      ]
+    },
+    {
+      "iter": 4,
+      "genMs": 4124,
+      "totalMs": 9134,
+      "tools": [
+        "browser_click [ref=124] ❌"
+      ]
+    },
+    {
+      "iter": 5,
+      "genMs": 4199,
+      "totalMs": 9208,
+      "tools": [
+        "browser_click [ref=124] ❌"
+      ]
+    },
+    {
+      "iter": 6,
+      "genMs": 5214,
+      "totalMs": 10223,
+      "tools": [
+        "browser_type \"9\" [ref=124] ❌"
+      ]
+    },
+    {
+      "iter": 7,
+      "genMs": 5023,
+      "totalMs": 5026,
+      "tools": [
+        "browser_evaluate ❌"
+      ]
+    }
+  ],
+  "timings": [
+    {
+      "iteration": 1,
+      "genMs": 1110,
+      "toolCount": 1,
+      "totalMs": 32301
+    },
+    {
+      "iteration": 2,
+      "genMs": 1938,
+      "toolCount": 1,
+      "totalMs": 34153
+    },
+    {
+      "iteration": 3,
+      "genMs": 2015,
+      "toolCount": 1,
+      "totalMs": 34190
+    },
+    {
+      "iteration": 4,
+      "genMs": 4124,
+      "toolCount": 1,
+      "totalMs": 9134
+    },
+    {
+      "iteration": 5,
+      "genMs": 4199,
+      "toolCount": 1,
+      "totalMs": 9208
+    },
+    {
+      "iteration": 6,
+      "genMs": 5214,
+      "toolCount": 1,
+      "totalMs": 10223
+    },
+    {
+      "iteration": 7,
+      "genMs": 5023,
+      "toolCount": 1,
+      "totalMs": 5026
+    }
+  ]
+}

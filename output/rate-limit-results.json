@@ -1,0 +1,305 @@
+{
+  "timestamp": "2026-02-12T19:19:37.793Z",
+  "phases": {
+    "providerStatus": {
+      "cerebras": {
+        "label": "Cerebras",
+        "status": 200,
+        "latencyMs": 548,
+        "rateHeaders": {
+          "x-ratelimit-remaining-requests-minute": "29",
+          "x-ratelimit-remaining-requests-hour": "899",
+          "x-ratelimit-remaining-requests-day": "14365",
+          "x-ratelimit-remaining-tokens-minute": "63994",
+          "x-ratelimit-remaining-tokens-hour": "999994",
+          "x-ratelimit-remaining-tokens-day": "999994",
+          "x-ratelimit-limit-requests-minute": "30",
+          "x-ratelimit-limit-requests-hour": "900",
+          "x-ratelimit-limit-requests-day": "14400",
+          "x-ratelimit-limit-tokens-minute": "64000",
+          "x-ratelimit-limit-tokens-hour": "1000000",
+          "x-ratelimit-limit-tokens-day": "1000000"
+        },
+        "error": null,
+        "model": "llama-3.3-70b"
+      },
+      "groq": {
+        "label": "Groq",
+        "status": 200,
+        "latencyMs": 370,
+        "rateHeaders": {
+          "x-ratelimit-limit-requests": "1000",
+          "x-ratelimit-limit-tokens": "12000",
+          "x-ratelimit-remaining-requests": "990",
+          "x-ratelimit-remaining-tokens": "11960",
+          "x-ratelimit-reset-requests": "14m24s",
+          "x-ratelimit-reset-tokens": "200ms"
+        },
+        "error": null,
+        "model": "llama-3.3-70b-versatile"
+      },
+      "sambanova": {
+        "label": "SambaNova",
+        "status": 200,
+        "latencyMs": 461,
+        "rateHeaders": {
+          "x-ratelimit-limit-requests-day": "20",
+          "x-ratelimit-remaining-requests-day": "15",
+          "x-ratelimit-reset-requests-day": "1771010378"
+        },
+        "error": null,
+        "model": "Meta-Llama-3.3-70B-Instruct"
+      },
+      "google": {
+        "label": "Google Gemini",
+        "status": 429,
+        "latencyMs": 205,
+        "rateHeaders": {},
+        "error": "[{\n  \"error\": {\n    \"code\": 429,\n    \"message\": \"You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-",
+        "model": "gemini-2.0-flash"
+      },
+      "openai": {
+        "label": "OpenAI",
+        "status": 429,
+        "latencyMs": 2471,
+        "rateHeaders": {},
+        "error": "You exceeded your current quota, please check your plan and billing details. For more information on this error, read the docs: https://platform.openai.com/docs/guides/error-codes/api-errors.",
+        "model": "gpt-4o-mini"
+      },
+      "anthropic": {
+        "label": "Anthropic",
+        "status": 400,
+        "latencyMs": 196,
+        "rateHeaders": {
+          "x-should-retry": "false"
+        },
+        "error": "Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.",
+        "model": "claude-3-haiku-20240307"
+      },
+      "xai": {
+        "label": "xAI (Grok)",
+        "status": 403,
+        "latencyMs": 212,
+        "rateHeaders": {},
+        "error": "{\"code\":\"The caller does not have permission to execute the specified operation\",\"error\":\"Your newly created team doesn't have any credits or licenses yet. You can purchase those on https://console.x.",
+        "model": "grok-3-mini"
+      },
+      "mistral": {
+        "status": "no-key",
+        "label": "Mistral AI"
+      },
+      "cohere": {
+        "status": "no-key",
+        "label": "Cohere"
+      },
+      "nvidia": {
+        "status": "no-key",
+        "label": "NVIDIA NIM"
+      },
+      "huggingface": {
+        "status": "no-key",
+        "label": "HuggingFace"
+      },
+      "openrouter": {
+        "label": "OpenRouter",
+        "status": 429,
+        "latencyMs": 344,
+        "rateHeaders": {},
+        "error": "Provider returned error",
+        "model": "meta-llama/llama-3.3-70b-instruct:free"
+      },
+      "apifreellm": {
+        "label": "APIFreeLLM",
+        "status": 307,
+        "latencyMs": 286,
+        "rateHeaders": {},
+        "error": null,
+        "model": "apifreellm"
+      },
+      "together": {
+        "status": "no-key",
+        "label": "Together.ai"
+      },
+      "fireworks": {
+        "status": "no-key",
+        "label": "Fireworks.ai"
+      }
+    },
+    "cerebrasPerKey": [
+      {
+        "keyIndex": 1,
+        "keyMask": "csk-n5nf...r9cn",
+        "status": 200,
+        "ms": 382,
+        "rateHeaders": {
+          "x-ratelimit-remaining-requests-minute": "29",
+          "x-ratelimit-remaining-requests-hour": "899",
+          "x-ratelimit-remaining-requests-day": "14365",
+          "x-ratelimit-remaining-tokens-minute": "63994",
+          "x-ratelimit-remaining-tokens-hour": "999994",
+          "x-ratelimit-remaining-tokens-day": "999994",
+          "x-ratelimit-limit-requests-minute": "30",
+          "x-ratelimit-limit-requests-hour": "900",
+          "x-ratelimit-limit-requests-day": "14400",
+          "x-ratelimit-limit-tokens-minute": "64000",
+          "x-ratelimit-limit-tokens-hour": "1000000",
+          "x-ratelimit-limit-tokens-day": "1000000"
+        }
+      },
+      {
+        "keyIndex": 2,
+        "keyMask": "csk-tcff...c9h2",
+        "status": 200,
+        "ms": 284,
+        "rateHeaders": {
+          "x-ratelimit-remaining-requests-minute": "29",
+          "x-ratelimit-remaining-requests-hour": "899",
+          "x-ratelimit-remaining-requests-day": "14399",
+          "x-ratelimit-remaining-tokens-minute": "63994",
+          "x-ratelimit-remaining-tokens-hour": "999994",
+          "x-ratelimit-remaining-tokens-day": "999994",
+          "x-ratelimit-limit-requests-minute": "30",
+          "x-ratelimit-limit-requests-hour": "900",
+          "x-ratelimit-limit-requests-day": "14400",
+          "x-ratelimit-limit-tokens-minute": "64000",
+          "x-ratelimit-limit-tokens-hour": "1000000",
+          "x-ratelimit-limit-tokens-day": "1000000"
+        }
+      },
+      {
+        "keyIndex": 3,
+        "keyMask": "csk-m62f...wyje",
+        "status": 200,
+        "ms": 2395,
+        "rateHeaders": {
+          "x-ratelimit-remaining-requests-minute": "29",
+          "x-ratelimit-remaining-requests-hour": "899",
+          "x-ratelimit-remaining-requests-day": "14399",
+          "x-ratelimit-remaining-tokens-minute": "63994",
+          "x-ratelimit-remaining-tokens-hour": "999994",
+          "x-ratelimit-remaining-tokens-day": "999994",
+          "x-ratelimit-limit-requests-minute": "30",
+          "x-ratelimit-limit-requests-hour": "900",
+          "x-ratelimit-limit-requests-day": "14400",
+          "x-ratelimit-limit-tokens-minute": "64000",
+          "x-ratelimit-limit-tokens-hour": "1000000",
+          "x-ratelimit-limit-tokens-day": "1000000"
+        }
+      },
+      {
+        "keyIndex": 4,
+        "keyMask": "csk-chkh...2pm8",
+        "status": 200,
+        "ms": 1734,
+        "rateHeaders": {
+          "x-ratelimit-remaining-requests-minute": "29",
+          "x-ratelimit-remaining-requests-hour": "899",
+          "x-ratelimit-remaining-requests-day": "14399",
+          "x-ratelimit-remaining-tokens-minute": "63994",
+          "x-ratelimit-remaining-tokens-hour": "999994",
+          "x-ratelimit-remaining-tokens-day": "999994",
+          "x-ratelimit-limit-requests-minute": "30",
+          "x-ratelimit-limit-requests-hour": "900",
+          "x-ratelimit-limit-requests-day": "14400",
+          "x-ratelimit-limit-tokens-minute": "64000",
+          "x-ratelimit-limit-tokens-hour": "1000000",
+          "x-ratelimit-limit-tokens-day": "1000000"
+        }
+      },
+      {
+        "keyIndex": 5,
+        "keyMask": "csk-369r...p6hn",
+        "status": 200,
+        "ms": 383,
+        "rateHeaders": {
+          "x-ratelimit-remaining-requests-minute": "29",
+          "x-ratelimit-remaining-requests-hour": "899",
+          "x-ratelimit-remaining-requests-day": "14399",
+          "x-ratelimit-remaining-tokens-minute": "63994",
+          "x-ratelimit-remaining-tokens-hour": "999994",
+          "x-ratelimit-remaining-tokens-day": "999994",
+          "x-ratelimit-limit-requests-minute": "30",
+          "x-ratelimit-limit-requests-hour": "900",
+          "x-ratelimit-limit-requests-day": "14400",
+          "x-ratelimit-limit-tokens-minute": "64000",
+          "x-ratelimit-limit-tokens-hour": "1000000",
+          "x-ratelimit-limit-tokens-day": "1000000"
+        }
+      },
+      {
+        "keyIndex": 6,
+        "keyMask": "csk-fkv4...3f4v",
+        "status": 200,
+        "ms": 256,
+        "rateHeaders": {
+          "x-ratelimit-remaining-requests-minute": "29",
+          "x-ratelimit-remaining-requests-hour": "899",
+          "x-ratelimit-remaining-requests-day": "14399",
+          "x-ratelimit-remaining-tokens-minute": "63994",
+          "x-ratelimit-remaining-tokens-hour": "999994",
+          "x-ratelimit-remaining-tokens-day": "999994",
+          "x-ratelimit-limit-requests-minute": "30",
+          "x-ratelimit-limit-requests-hour": "900",
+          "x-ratelimit-limit-requests-day": "14400",
+          "x-ratelimit-limit-tokens-minute": "64000",
+          "x-ratelimit-limit-tokens-hour": "1000000",
+          "x-ratelimit-limit-tokens-day": "1000000"
+        }
+      },
+      {
+        "keyIndex": 7,
+        "keyMask": "csk-33x4...ehcm",
+        "status": 200,
+        "ms": 180,
+        "rateHeaders": {
+          "x-ratelimit-remaining-requests-minute": "29",
+          "x-ratelimit-remaining-requests-hour": "899",
+          "x-ratelimit-remaining-requests-day": "14399",
+          "x-ratelimit-remaining-tokens-minute": "63994",
+          "x-ratelimit-remaining-tokens-hour": "999994",
+          "x-ratelimit-remaining-tokens-day": "999994",
+          "x-ratelimit-limit-requests-minute": "30",
+          "x-ratelimit-limit-requests-hour": "900",
+          "x-ratelimit-limit-requests-day": "14400",
+          "x-ratelimit-limit-tokens-minute": "64000",
+          "x-ratelimit-limit-tokens-hour": "1000000",
+          "x-ratelimit-limit-tokens-day": "1000000"
+        }
+      }
+    ],
+    "cerebrasBurst": {
+      "singleKey": {
+        "ok": 37,
+        "rateLimit429": 3,
+        "fail": 0,
+        "avgMs": 380,
+        "first429At": 38
+      },
+      "rotation": {
+        "ok": 40,
+        "rateLimit429": 0,
+        "fail": 0,
+        "avgMs": 416,
+        "first429At": -1
+      },
+      "burstCount": 40,
+      "improvement": 3
+    },
+    "providerBurst": {
+      "groq": {
+        "ok": 10,
+        "rateLimit429": 0,
+        "fail": 0,
+        "avgMs": 163,
+        "first429At": -1
+      },
+      "sambanova": {
+        "ok": 10,
+        "rateLimit429": 0,
+        "fail": 0,
+        "avgMs": 423,
+        "first429At": -1
+      }
+    }
+  }
+}

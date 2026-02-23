@@ -1,0 +1,51 @@
+﻿
+[7m[1m[36m RUN [39m[22m[27m [36mv0.34.6[39m [90mC:/Users/brend/IDE[39m
+
+ [32mΓ£ô[39m tests/unit/keyPool.test.ts [2m ([22m[2m13 tests[22m[2m)[22m[90m 11[2mms[22m[39m
+ [32mΓ£ô[39m tests/unit/pathValidator.test.ts [2m ([22m[2m16 tests[22m[2m)[22m[90m 12[2mms[22m[39m
+ [33mΓ¥»[39m tests/unit/sanitize.test.ts [2m ([22m[2m15 tests[22m [2m|[22m [31m1 failed[39m[2m)[22m[90m 16[2mms[22m[39m
+[31m   [33mΓ¥»[31m tests/unit/sanitize.test.ts[2m > [22mmarkdownInlineToHTML regex pipeline[2m > [22mnested bold inside code stays literal[39m
+[31m     ΓåÆ expected '<code><strong>not bold</strong></code>' to be '<code>**not bold**</code>' // Object.is equality[39m
+ [32mΓ£ô[39m tests/unit/helpers.test.ts [2m ([22m[2m36 tests[22m[2m)[22m[90m 15[2mms[22m[39m
+
+node.exe : [31mΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[1m[7m Failed Tests 1 
+[27m[22mΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[39m
+At line:1 char:1
++ & "D:\Server/node.exe" "D:\Server/node_modules/npm/bin/npx-cli.js" vi ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ([31mΓÄ»ΓÄ»ΓÄ»Γ...»ΓÄ»ΓÄ»ΓÄ»[39m 
+   :String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+
+[31m[1m[7m FAIL [27m[22m[39m tests/unit/sanitize.test.ts[2m > 
+[22mmarkdownInlineToHTML regex pipeline[2m > [22mnested bold inside code 
+stays literal
+[31m[1mAssertionError[22m: expected '<code><strong>not 
+bold</strong></code>' to be '<code>**not bold**</code>' // Object.is 
+equality[39m
+
+- Expected
++ Received
+
+- <code>**not bold**</code>
++ <code><strong>not bold</strong></code>
+
+[36m [2mΓ¥»[22m tests/unit/sanitize.test.ts:[2m59:49[22m[39m
+    [90m 57| [39m  it('nested bold inside code stays literal', () => {
+    [90m 58| [39m    // backtick is greedier ΓÇö **bold** inside backticks 
+should be liteΓÇª
+    [90m 59| [39m    expect(markdownToRawHTML('`**not 
+bold**`')).toBe('<code>**not boldΓÇª
+    [90m   | [39m                                                [31m^[39m
+    [90m 60| [39m  });
+    [90m 61| [39m});
+
+[31m[2mΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»Γ
+Ä»[1/1]ΓÄ»[22m[39m
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m3 passed[39m[22m[90m (4)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m79 passed[39m[22m[90m (80)[39m
+[2m   Start at [22m 21:41:52
+[2m   Duration [22m 758ms[2m (transform 169ms, setup 0ms, collect 248ms, tests 54ms, environment 1ms, prepare 486ms)[22m
+

@@ -1,0 +1,66 @@
+﻿2026-02-22T00:29:16.911Z LOG   [LLM] Model profile: llama/3B (small) â†’ effectiveCtx=32768
+2026-02-22T00:29:16.911Z LOG   [LLM] Target context: 32768 (profile=32768, native=131072, user=auto)
+2026-02-22T00:29:17.043Z LOG   [LLM] Context: 4352 tokens (threads: 14, flash: true)
+2026-02-22T00:29:17.317Z LOG   [LLM] Chat wrapper auto-detected: Llama3_2LightweightChatWrapper
+2026-02-22T00:29:17.318Z LOG   [LLM] _applyChatWrapperOverride: arch="llama" wrapper="Llama3_2LightweightChatWrapper" hasJinja=true
+2026-02-22T00:29:17.318Z WARN  [LLM] BUG-044: "Llama3_2LightweightChatWrapper" selected for arch "llama" â€” overriding with JinjaTemplateChatWrapper (embedded template takes priority)
+2026-02-22T00:29:17.332Z LOG   [LLM] Chat wrapper overridden to: JinjaTemplateChatWrapper (arch=llama)
+2026-02-22T00:29:17.332Z LOG   [LLM] Ready: llama-3.2-3b-instruct-q8_0 â€” 4352 ctx, 16 GPU layers, flash: true, wrapper: JinjaTemplateChatWrapper
+2026-02-22T00:29:19.313Z LOG   [AI Chat] Profile: llama/small | ctx=4352 (hw=4352) | sysReserve=280 | compact=true
+2026-02-22T00:29:19.314Z LOG   [AI Chat] Detected task type: chat
+2026-02-22T00:29:19.314Z LOG   [AI Chat] Seeded local chatHistory from renderer (2 of 2 turns, max=11 for 4352-token context)
+2026-02-22T00:29:19.315Z LOG   [AI Chat] Model: llama/small (3B llama) â€” tools=8, grammar=limited, retry=3, quirks={"loopsFrequently":false,"truncatesMidTool":false,"overlyVerbose":false,"refusesOften":false,"halluccinatesToolResults":false,"needsExplicitStop":false,"emitsSpecialTokens":false,"poorMultiTool":false}
+2026-02-22T00:29:19.315Z LOG   [AI Chat] Agentic iteration 1/50
+2026-02-22T00:29:19.315Z LOG   [AI Chat] Prompt: ~63 tokens
+2026-02-22T00:29:19.315Z LOG   [LLM] ThoughtTokenBudget: 0 (effort=medium, profileDefault=0)
+2026-02-22T00:29:36.633Z LOG   [LLM] Resetting session (standard prompt, ~230 tokens)
+2026-02-22T00:29:36.925Z LOG   [LLM] Session reset complete
+2026-02-22T00:29:36.928Z ERROR [AI Chat] Generation error on iteration 1: Object is disposed
+2026-02-22T00:29:36.929Z LOG   [AI Chat] âš ï¸ cleanLocalResponse is EMPTY â€” displayResponseText was 0 chars (raw preview: "") | allToolResults: 0
+2026-02-22T00:29:36.929Z LOG   [AI Chat] â•â• FINAL RETURN â•â• 22 chars â†’ UI | preview: "No response generated."
+2026-02-22T00:29:40.526Z LOG   [LLM] Resetting session (standard prompt, ~230 tokens)
+2026-02-22T00:29:40.734Z LOG   [LLM] Session reset complete
+2026-02-22T00:29:40.965Z LOG   [LLM] Reusing existing llama instance (gpu=auto)
+2026-02-22T00:29:40.965Z LOG   [LLM] Backend gpu=auto: VRAM total=4.0GB free=3.2GB
+2026-02-22T00:29:42.973Z LOG   [LLM] Model loaded: 37 GPU layers (mode: auto)
+2026-02-22T00:29:42.973Z LOG   [LLM] Model train context size: 32768
+2026-02-22T00:29:42.973Z LOG   [LLM] Model profile: qwen/3B (small) â†’ effectiveCtx=32768
+2026-02-22T00:29:42.973Z LOG   [LLM] Target context: 32768 (profile=32768, native=32768, user=auto)
+2026-02-22T00:29:42.999Z LOG   [LLM] Context: 9216 tokens (threads: 14, flash: true)
+2026-02-22T00:29:43.332Z LOG   [LLM] Chat wrapper auto-detected: QwenChatWrapper
+2026-02-22T00:29:43.332Z LOG   [LLM] Ready: qwen2.5-3b-instruct-q4_k_m â€” 9216 ctx, 37 GPU layers, flash: true, wrapper: QwenChatWrapper
+2026-02-22T00:29:45.031Z LOG   [AI Chat] Profile: qwen/small | ctx=9216 (hw=9216) | sysReserve=280 | compact=true
+2026-02-22T00:29:45.032Z LOG   [AI Chat] Detected task type: chat
+2026-02-22T00:29:45.032Z LOG   [AI Chat] Seeded local chatHistory from renderer (4 of 4 turns, max=24 for 9216-token context)
+2026-02-22T00:29:45.032Z LOG   [AI Chat] Model: qwen/small (3B qwen) â€” tools=8, grammar=limited, retry=3, quirks={"loopsFrequently":false,"truncatesMidTool":false,"overlyVerbose":false,"refusesOften":false,"halluccinatesToolResults":false,"needsExplicitStop":false,"emitsSpecialTokens":true,"poorMultiTool":false}
+2026-02-22T00:29:45.032Z LOG   [AI Chat] Agentic iteration 1/50
+2026-02-22T00:29:45.032Z LOG   [AI Chat] Prompt: ~63 tokens
+2026-02-22T00:29:45.033Z LOG   [LLM] ThoughtTokenBudget: 256 (effort=medium, profileDefault=256)
+2026-02-22T00:29:45.278Z LOG   [AI Chat] Response committed to display: 34 chars | display total: 34 chars | preview: "Hello! How can I assist you today?"
+2026-02-22T00:29:45.278Z LOG   [AI Chat] Chat-type hard gate | USER_MSG="hi" | MODEL_GENERATED="Hello! How can I assist you today?" (34 raw chars) â€” skipping tool parsing
+2026-02-22T00:29:45.278Z LOG   [AI Chat] No more tool calls, ending agentic loop
+2026-02-22T00:29:45.279Z LOG   [AI Chat] â•â• FINAL RETURN â•â• 34 chars â†’ UI | preview: "Hello! How can I assist you today?"
+2026-02-22T00:29:53.349Z LOG   [RAG] Indexed 4 files in 0.0s
+2026-02-22T00:30:00.819Z LOG   [AI Chat] Profile: qwen/small | ctx=9216 (hw=9216) | sysReserve=280 | compact=true
+2026-02-22T00:30:00.820Z LOG   [AI Chat] Detected task type: general
+2026-02-22T00:30:00.821Z LOG   [AI Chat] Model: qwen/small (3B qwen) â€” tools=8, grammar=limited, retry=3, quirks={"loopsFrequently":false,"truncatesMidTool":false,"overlyVerbose":false,"refusesOften":false,"halluccinatesToolResults":false,"needsExplicitStop":false,"emitsSpecialTokens":true,"poorMultiTool":false}
+2026-02-22T00:30:00.821Z LOG   [AI Chat] Agentic iteration 1/50
+2026-02-22T00:30:00.821Z LOG   [AI Chat] Prompt: ~851 tokens
+2026-02-22T00:30:00.821Z LOG   [LLM] ThoughtTokenBudget: 256 (effort=medium, profileDefault=256)
+2026-02-22T00:30:01.761Z LOG   [AI Chat] Response committed to display: 112 chars | display total: 112 chars | preview: "```json\n{\n  "tool": "list_directory",\n  "params": {\n    "dir"
+2026-02-22T00:30:01.763Z LOG   [MCP] processResponse called, text preview: ```json
+{
+  "tool": "list_directory",
+  "params": {
+    "dirPath": "C:\\Users\\brend\\my-static-appdd"
+  }
+}
+```
+2026-02-22T00:30:01.763Z LOG   [MCP] Parsing response for tool calls, length: 112
+2026-02-22T00:30:01.764Z LOG   [MCP] Found tool call in code block: list_directory
+2026-02-22T00:30:01.764Z LOG   [MCP] Total tool calls found (pre-repair): 1
+2026-02-22T00:30:01.764Z LOG   [MCP] Executing 1 tool calls... (50ms pace)
+2026-02-22T00:30:01.765Z LOG   [MCP] Executed tool: list_directory result: success
+2026-02-22T00:30:01.765Z LOG   [AI Chat] Stripped hallucinated content: 112 â†’ 0 chars
+2026-02-22T00:30:01.767Z LOG   [AI Chat] Agentic iteration 2/50
+2026-02-22T00:30:01.767Z LOG   [AI Chat] Prompt: ~925 tokens

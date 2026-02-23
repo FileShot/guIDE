@@ -1,0 +1,67 @@
+﻿
+2026-02-21T23:16:16.076Z LOG   [AI Chat] Profile: llama/tiny | ctx=16384 
+(hw=16384) | sysReserve=280 | compact=true
+2026-02-21T23:16:16.078Z LOG   [AI Chat] Model: llama/tiny (1B llama) â€” 
+tools=3, grammar=never, retry=3, quirks={"loopsFrequently":true,"truncatesMidTo
+ol":true,"overlyVerbose":false,"refusesOften":false,"halluccinatesToolResults":
+false,"needsExplicitStop":false,"emitsSpecialTokens":false,"poorMultiTool":true
+}
+2026-02-21T23:16:30.723Z LOG   [AI Chat] Profile: llama/tiny | ctx=16384 
+(hw=16384) | sysReserve=280 | compact=true
+2026-02-21T23:16:30.724Z LOG   [AI Chat] Model: llama/tiny (1B llama) â€” 
+tools=3, grammar=never, retry=3, quirks={"loopsFrequently":true,"truncatesMidTo
+ol":true,"overlyVerbose":false,"refusesOften":false,"halluccinatesToolResults":
+false,"needsExplicitStop":false,"emitsSpecialTokens":false,"poorMultiTool":true
+}
+2026-02-21T23:44:03.839Z LOG   [LLM] Model profile: llama/1B (tiny) â†’ 
+effectiveCtx=16384
+2026-02-21T23:44:04.148Z LOG   [LLM] Ready: llama-3.2-1b-instruct-q8_0 â€” 
+16384 ctx, 17 GPU layers, flash: true, wrapper: JinjaTemplateChatWrapper
+2026-02-21T23:44:04.866Z LOG   [AI Chat] Profile: llama/tiny | ctx=16384 
+(hw=16384) | sysReserve=280 | compact=true
+2026-02-21T23:44:04.867Z LOG   [AI Chat] Model: llama/tiny (1B llama) â€” 
+tools=3, grammar=never, retry=3, quirks={"loopsFrequently":true,"truncatesMidTo
+ol":true,"overlyVerbose":false,"refusesOften":false,"halluccinatesToolResults":
+false,"needsExplicitStop":false,"emitsSpecialTokens":false,"poorMultiTool":true
+}
+2026-02-22T00:33:15.232Z LOG   [LLM] Model profile: llama/1B (tiny) â†’ 
+effectiveCtx=16384
+2026-02-22T00:33:15.517Z LOG   [LLM] Ready: llama-3.2-1b-instruct-q8_0 â€” 
+16384 ctx, 17 GPU layers, flash: true, wrapper: JinjaTemplateChatWrapper
+2026-02-22T00:33:17.138Z LOG   [AI Chat] Profile: llama/tiny | ctx=16384 
+(hw=16384) | sysReserve=280 | compact=true
+2026-02-22T00:33:17.138Z LOG   [AI Chat] Model: llama/tiny (1B llama) â€” 
+tools=3, grammar=never, retry=3, quirks={"loopsFrequently":true,"truncatesMidTo
+ol":true,"overlyVerbose":false,"refusesOften":false,"halluccinatesToolResults":
+false,"needsExplicitStop":false,"emitsSpecialTokens":false,"poorMultiTool":true
+}
+2026-02-22T00:33:24.226Z LOG   [AI Chat] Profile: llama/tiny | ctx=16384 
+(hw=16384) | sysReserve=280 | compact=true
+2026-02-22T00:33:24.228Z LOG   [AI Chat] Model: llama/tiny (1B llama) â€” 
+tools=3, grammar=never, retry=3, quirks={"loopsFrequently":true,"truncatesMidTo
+ol":true,"overlyVerbose":false,"refusesOften":false,"halluccinatesToolResults":
+false,"needsExplicitStop":false,"emitsSpecialTokens":false,"poorMultiTool":true
+}
+2026-02-22T00:33:30.417Z LOG   [AI Chat] Profile: llama/tiny | ctx=16384 
+(hw=16384) | sysReserve=280 | compact=true
+2026-02-22T00:33:30.418Z LOG   [AI Chat] Model: llama/tiny (1B llama) â€” 
+tools=3, grammar=never, retry=3, quirks={"loopsFrequently":true,"truncatesMidTo
+ol":true,"overlyVerbose":false,"refusesOften":false,"halluccinatesToolResults":
+false,"needsExplicitStop":false,"emitsSpecialTokens":false,"poorMultiTool":true
+}
+2026-02-22T00:33:43.206Z LOG   [AI Chat] Profile: llama/tiny | ctx=16384 
+(hw=16384) | sysReserve=280 | compact=true
+2026-02-22T00:33:43.206Z LOG   [AI Chat] Model: llama/tiny (1B llama) â€” 
+tools=3, grammar=never, retry=3, quirks={"loopsFrequently":true,"truncatesMidTo
+ol":true,"overlyVerbose":false,"refusesOften":false,"halluccinatesToolResults":
+false,"needsExplicitStop":false,"emitsSpecialTokens":false,"poorMultiTool":true
+}
+2026-02-22T00:33:46.827Z LOG   [AI Chat] Profile: llama/tiny | ctx=16384 
+(hw=16384) | sysReserve=280 | compact=true
+2026-02-22T00:33:46.827Z LOG   [AI Chat] Model: llama/tiny (1B llama) â€” 
+tools=3, grammar=never, retry=3, quirks={"loopsFrequently":true,"truncatesMidTo
+ol":true,"overlyVerbose":false,"refusesOften":false,"halluccinatesToolResults":
+false,"needsExplicitStop":false,"emitsSpecialTokens":false,"poorMultiTool":true
+}
+
+

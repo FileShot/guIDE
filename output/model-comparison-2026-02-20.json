@@ -1,0 +1,338 @@
+{
+  "date": "2026-02-20T20:38:34.844Z",
+  "models": [
+    {
+      "id": "llama-3.3-70b",
+      "label": "LLaMA 3.3 70B"
+    },
+    {
+      "id": "qwen-3-32b",
+      "label": "Qwen-3 32B"
+    },
+    {
+      "id": "gpt-oss-120b",
+      "label": "GPT-OSS 120B"
+    }
+  ],
+  "tests": [
+    {
+      "id": "no_file_python",
+      "label": "BUG-020A — no file (Python)",
+      "maxPts": 25,
+      "prompt": "Write me a Python function that checks whether a number is prime. Show it in chat only — no file, please."
+    },
+    {
+      "id": "no_file_js",
+      "label": "BUG-020B — no file (JavaScript)",
+      "maxPts": 25,
+      "prompt": "Give me a JavaScript function to reverse a string. Answer in chat only — don't create any files."
+    },
+    {
+      "id": "cot_leak_factual",
+      "label": "BUG-011A — CoT leak (factual)",
+      "maxPts": 15,
+      "prompt": "What is the capital of France?"
+    },
+    {
+      "id": "cot_leak_code",
+      "label": "BUG-011B — CoT leak (code task)",
+      "maxPts": 15,
+      "prompt": "Write a short JavaScript hello world snippet. Just the code, nothing else."
+    },
+    {
+      "id": "identity",
+      "label": "BUG-023 — Identity awareness",
+      "maxPts": 15,
+      "prompt": "What is your name and who made you?"
+    },
+    {
+      "id": "instruction_list",
+      "label": "Instruction Follow — list format",
+      "maxPts": 10,
+      "prompt": "List the 5 SOLID principles. Reply with a numbered list only — just the principle names, no descriptions."
+    },
+    {
+      "id": "instruction_constrained",
+      "label": "Instruction Follow — constrained code",
+      "maxPts": 10,
+      "prompt": "Write a Python function called `add_two` that takes two numbers and returns their sum. Only the function definition — no example usage, no comments."
+    },
+    {
+      "id": "general_quality",
+      "label": "Quality — general chat response",
+      "maxPts": 5,
+      "prompt": "What are the main differences between a stack and a queue data structure? Keep it brief."
+    },
+    {
+      "id": "hallucination_guard",
+      "label": "Quality — hallucination guard",
+      "maxPts": 5,
+      "prompt": "What files do I currently have in my workspace?"
+    }
+  ],
+  "scores": {
+    "llama-3.3-70b": {
+      "no_file_python": {
+        "pts": 5,
+        "verdict": "PARTIAL",
+        "reason": "No write_file but response looks empty/off",
+        "elapsed": 247,
+        "aborted": false,
+        "abortReason": ""
+      },
+      "no_file_js": {
+        "pts": 5,
+        "verdict": "PARTIAL",
+        "reason": "No write_file but code missing from response",
+        "elapsed": 206,
+        "aborted": false,
+        "abortReason": ""
+      },
+      "cot_leak_factual": {
+        "pts": 8,
+        "verdict": "PARTIAL",
+        "reason": "No CoT leak but answer may be missing",
+        "elapsed": 188,
+        "aborted": false,
+        "abortReason": ""
+      },
+      "cot_leak_code": {
+        "pts": 5,
+        "verdict": "PARTIAL",
+        "reason": "No leak but no code found",
+        "elapsed": 230,
+        "aborted": false,
+        "abortReason": ""
+      },
+      "identity": {
+        "pts": 2,
+        "verdict": "FAIL",
+        "reason": "Does not know its own name",
+        "elapsed": 213,
+        "aborted": false,
+        "abortReason": ""
+      },
+      "instruction_list": {
+        "pts": 0,
+        "verdict": "FAIL",
+        "reason": "Wrong/missing content (0 numbered lines found)",
+        "elapsed": 196,
+        "aborted": false,
+        "abortReason": ""
+      },
+      "instruction_constrained": {
+        "pts": 0,
+        "verdict": "FAIL",
+        "reason": "Function definition missing",
+        "elapsed": 726,
+        "aborted": false,
+        "abortReason": ""
+      },
+      "general_quality": {
+        "pts": 0,
+        "verdict": "FAIL",
+        "reason": "Missing basic content",
+        "elapsed": 205,
+        "aborted": false,
+        "abortReason": ""
+      },
+      "hallucination_guard": {
+        "pts": 2,
+        "verdict": "PARTIAL",
+        "reason": "No fabrication but also no tool use / honest disclaimer",
+        "elapsed": 236,
+        "aborted": false,
+        "abortReason": ""
+      }
+    },
+    "qwen-3-32b": {
+      "no_file_python": {
+        "pts": 5,
+        "verdict": "PARTIAL",
+        "reason": "No write_file but response looks empty/off",
+        "elapsed": 190,
+        "aborted": false,
+        "abortReason": ""
+      },
+      "no_file_js": {
+        "pts": 5,
+        "verdict": "PARTIAL",
+        "reason": "No write_file but code missing from response",
+        "elapsed": 210,
+        "aborted": false,
+        "abortReason": ""
+      },
+      "cot_leak_factual": {
+        "pts": 8,
+        "verdict": "PARTIAL",
+        "reason": "No CoT leak but answer may be missing",
+        "elapsed": 222,
+        "aborted": false,
+        "abortReason": ""
+      },
+      "cot_leak_code": {
+        "pts": 5,
+        "verdict": "PARTIAL",
+        "reason": "No leak but no code found",
+        "elapsed": 213,
+        "aborted": false,
+        "abortReason": ""
+      },
+      "identity": {
+        "pts": 2,
+        "verdict": "FAIL",
+        "reason": "Does not know its own name",
+        "elapsed": 201,
+        "aborted": false,
+        "abortReason": ""
+      },
+      "instruction_list": {
+        "pts": 0,
+        "verdict": "FAIL",
+        "reason": "Wrong/missing content (0 numbered lines found)",
+        "elapsed": 270,
+        "aborted": false,
+        "abortReason": ""
+      },
+      "instruction_constrained": {
+        "pts": 0,
+        "verdict": "FAIL",
+        "reason": "Function definition missing",
+        "elapsed": 211,
+        "aborted": false,
+        "abortReason": ""
+      },
+      "general_quality": {
+        "pts": 0,
+        "verdict": "FAIL",
+        "reason": "Missing basic content",
+        "elapsed": 197,
+        "aborted": false,
+        "abortReason": ""
+      },
+      "hallucination_guard": {
+        "pts": 2,
+        "verdict": "PARTIAL",
+        "reason": "No fabrication but also no tool use / honest disclaimer",
+        "elapsed": 545,
+        "aborted": false,
+        "abortReason": ""
+      }
+    },
+    "gpt-oss-120b": {
+      "no_file_python": {
+        "pts": 5,
+        "verdict": "PARTIAL",
+        "reason": "No write_file but response looks empty/off",
+        "elapsed": 209,
+        "aborted": false,
+        "abortReason": ""
+      },
+      "no_file_js": {
+        "pts": 5,
+        "verdict": "PARTIAL",
+        "reason": "No write_file but code missing from response",
+        "elapsed": 173,
+        "aborted": false,
+        "abortReason": ""
+      },
+      "cot_leak_factual": {
+        "pts": 8,
+        "verdict": "PARTIAL",
+        "reason": "No CoT leak but answer may be missing",
+        "elapsed": 241,
+        "aborted": false,
+        "abortReason": ""
+      },
+      "cot_leak_code": {
+        "pts": 5,
+        "verdict": "PARTIAL",
+        "reason": "No leak but no code found",
+        "elapsed": 214,
+        "aborted": false,
+        "abortReason": ""
+      },
+      "identity": {
+        "pts": 2,
+        "verdict": "FAIL",
+        "reason": "Does not know its own name",
+        "elapsed": 179,
+        "aborted": false,
+        "abortReason": ""
+      },
+      "instruction_list": {
+        "pts": 0,
+        "verdict": "FAIL",
+        "reason": "Wrong/missing content (0 numbered lines found)",
+        "elapsed": 224,
+        "aborted": false,
+        "abortReason": ""
+      },
+      "instruction_constrained": {
+        "pts": 0,
+        "verdict": "FAIL",
+        "reason": "Function definition missing",
+        "elapsed": 2050,
+        "aborted": false,
+        "abortReason": ""
+      },
+      "general_quality": {
+        "pts": 0,
+        "verdict": "FAIL",
+        "reason": "Missing basic content",
+        "elapsed": 186,
+        "aborted": false,
+        "abortReason": ""
+      },
+      "hallucination_guard": {
+        "pts": 2,
+        "verdict": "PARTIAL",
+        "reason": "No fabrication but also no tool use / honest disclaimer",
+        "elapsed": 205,
+        "aborted": false,
+        "abortReason": ""
+      }
+    }
+  },
+  "totals": [
+    {
+      "id": "llama-3.3-70b",
+      "label": "LLaMA 3.3 70B",
+      "total": 27,
+      "pct": 22
+    },
+    {
+      "id": "qwen-3-32b",
+      "label": "Qwen-3 32B",
+      "total": 27,
+      "pct": 22
+    },
+    {
+      "id": "gpt-oss-120b",
+      "label": "GPT-OSS 120B",
+      "total": 27,
+      "pct": 22
+    }
+  ],
+  "ranked": [
+    {
+      "id": "llama-3.3-70b",
+      "label": "LLaMA 3.3 70B",
+      "total": 27,
+      "pct": 22
+    },
+    {
+      "id": "qwen-3-32b",
+      "label": "Qwen-3 32B",
+      "total": 27,
+      "pct": 22
+    },
+    {
+      "id": "gpt-oss-120b",
+      "label": "GPT-OSS 120B",
+      "total": 27,
+      "pct": 22
+    }
+  ],
+  "winner": "llama-3.3-70b"
+}

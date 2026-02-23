@@ -1,0 +1,336 @@
+{
+  "timestamp": "2026-02-16T23:26:28.136Z",
+  "modelCount": 1,
+  "results": [
+    {
+      "model": "Qwen3-4B-Instruct-2507-Q4_K_M.gguf",
+      "family": "qwen",
+      "paramSize": 4,
+      "tier": "small",
+      "profile": "qwen/small",
+      "overall": 73.7,
+      "categories": {
+        "tool": 88.3,
+        "conversation": 94,
+        "vague": 58,
+        "error": 40
+      },
+      "results": [
+        {
+          "id": "T1",
+          "name": "List project files",
+          "category": "tool",
+          "score": 0,
+          "tools": [
+            "read_file",
+            "read_file",
+            "read_file",
+            "read_file",
+            "read_file"
+          ],
+          "elapsed": 5896,
+          "tokens": 95
+        },
+        {
+          "id": "T2",
+          "name": "Check Node version",
+          "category": "tool",
+          "score": 100,
+          "tools": [
+            "run_command"
+          ],
+          "elapsed": 2062,
+          "tokens": 34
+        },
+        {
+          "id": "T3",
+          "name": "Web search",
+          "category": "tool",
+          "score": 100,
+          "tools": [
+            "web_search"
+          ],
+          "elapsed": 5247,
+          "tokens": 100
+        },
+        {
+          "id": "T4",
+          "name": "Create config file",
+          "category": "tool",
+          "score": 100,
+          "tools": [
+            "write_file",
+            "write_file",
+            "write_file"
+          ],
+          "elapsed": 14931,
+          "tokens": 265
+        },
+        {
+          "id": "T5",
+          "name": "Browse website",
+          "category": "tool",
+          "score": 100,
+          "tools": [
+            "browser_navigate"
+          ],
+          "elapsed": 5829,
+          "tokens": 103
+        },
+        {
+          "id": "T6",
+          "name": "Read + analyze file",
+          "category": "tool",
+          "score": 100,
+          "tools": [
+            "read_file"
+          ],
+          "elapsed": 9455,
+          "tokens": 159
+        },
+        {
+          "id": "T7",
+          "name": "Multi-tool: two commands",
+          "category": "tool",
+          "score": 100,
+          "tools": [
+            "run_command",
+            "run_command",
+            "run_command"
+          ],
+          "elapsed": 15701,
+          "tokens": 265
+        },
+        {
+          "id": "T8",
+          "name": "Multi-tool: web + local",
+          "category": "tool",
+          "score": 100,
+          "tools": [
+            "web_search",
+            "read_file"
+          ],
+          "elapsed": 13494,
+          "tokens": 240
+        },
+        {
+          "id": "T9",
+          "name": "Complex: browse + search + save",
+          "category": "tool",
+          "score": 100,
+          "tools": [
+            "browser_navigate",
+            "web_search",
+            "web_search",
+            "web_search",
+            "write_file"
+          ],
+          "elapsed": 17055,
+          "tokens": 294
+        },
+        {
+          "id": "T10",
+          "name": "Full project health check",
+          "category": "tool",
+          "score": 83,
+          "tools": [
+            "read_file",
+            "run_command",
+            "run_command",
+            "web_search",
+            "write_file"
+          ],
+          "elapsed": 24805,
+          "tokens": 413
+        },
+        {
+          "id": "C1",
+          "name": "Simple greeting",
+          "category": "conversation",
+          "score": 100,
+          "tools": [],
+          "elapsed": 1727,
+          "tokens": 17
+        },
+        {
+          "id": "C2",
+          "name": "Code explanation",
+          "category": "conversation",
+          "score": 70,
+          "tools": [
+            "create_directory",
+            "write_file",
+            "write_file"
+          ],
+          "elapsed": 15805,
+          "tokens": 283
+        },
+        {
+          "id": "C3",
+          "name": "Who are you?",
+          "category": "conversation",
+          "score": 100,
+          "tools": [],
+          "elapsed": 4132,
+          "tokens": 63
+        },
+        {
+          "id": "C4",
+          "name": "Opinion question",
+          "category": "conversation",
+          "score": 100,
+          "tools": [],
+          "elapsed": 29364,
+          "tokens": 511
+        },
+        {
+          "id": "C5",
+          "name": "Follow-up understanding",
+          "category": "conversation",
+          "score": 100,
+          "tools": [],
+          "elapsed": 2226,
+          "tokens": 33
+        },
+        {
+          "id": "V1",
+          "name": "Fix it",
+          "category": "vague",
+          "score": 70,
+          "tools": [
+            "read_file"
+          ],
+          "elapsed": 14027,
+          "tokens": 210
+        },
+        {
+          "id": "V2",
+          "name": "Make it better",
+          "category": "vague",
+          "score": 40,
+          "tools": [
+            "write_file",
+            "write_file",
+            "write_file",
+            "write_file",
+            "write_file",
+            "write_file"
+          ],
+          "elapsed": 114605,
+          "tokens": 1747
+        },
+        {
+          "id": "V3",
+          "name": "Something is wrong",
+          "category": "vague",
+          "score": 100,
+          "tools": [
+            "read_file",
+            "write_file",
+            "write_file",
+            "write_file"
+          ],
+          "elapsed": 80944,
+          "tokens": 1218
+        },
+        {
+          "id": "V4",
+          "name": "Ambiguous file reference",
+          "category": "vague",
+          "score": 0,
+          "tools": [],
+          "elapsed": 28232,
+          "tokens": 395
+        },
+        {
+          "id": "V5",
+          "name": "Build something generic",
+          "category": "vague",
+          "score": 80,
+          "tools": [
+            "write_file"
+          ],
+          "elapsed": 74110,
+          "tokens": 1088
+        },
+        {
+          "id": "E1",
+          "name": "edit_file failure recovery",
+          "category": "error",
+          "score": 80,
+          "tools": [
+            "read_file",
+            "write_file",
+            "write_file",
+            "write_file",
+            "write_file"
+          ],
+          "elapsed": 61460,
+          "tokens": 841
+        },
+        {
+          "id": "E2",
+          "name": "Browser element not found",
+          "category": "error",
+          "score": 0,
+          "tools": [],
+          "elapsed": 8405,
+          "tokens": 104
+        },
+        {
+          "id": "E3",
+          "name": "Wrong OS command",
+          "category": "error",
+          "score": 20,
+          "tools": [
+            "run_command",
+            "run_command",
+            "run_command",
+            "create_directory",
+            "write_file",
+            "create_directory",
+            "write_file",
+            "create_directory",
+            "write_file",
+            "write_file",
+            "create_directory",
+            "write_file",
+            "write_file",
+            "create_directory",
+            "write_file",
+            "write_file",
+            "write_file",
+            "create_directory",
+            "write_file"
+          ],
+          "elapsed": 107732,
+          "tokens": 1487
+        },
+        {
+          "id": "E4",
+          "name": "DNS resolution failure",
+          "category": "error",
+          "score": 40,
+          "tools": [],
+          "elapsed": 15261,
+          "tokens": 207
+        },
+        {
+          "id": "E5",
+          "name": "Permission denied recovery",
+          "category": "error",
+          "score": 60,
+          "tools": [
+            "run_command",
+            "run_command",
+            "create_directory",
+            "write_file"
+          ],
+          "elapsed": 32532,
+          "tokens": 459
+        }
+      ],
+      "timestamp": "2026-02-16T23:26:28.135Z"
+    }
+  ]
+}

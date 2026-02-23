@@ -1,0 +1,256 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Audiowide font — bundled locally (no CDN dependency) ── */
+@font-face {
+  font-family: 'Audiowide';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/Audiowide-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Audiowide';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/Audiowide.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+    U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020,
+    U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+/* Brand font for "guIDE" text across the app */
+.brand-font {
+  font-family: 'Audiowide', sans-serif;
+  letter-spacing: 0.02em;
+}
+
+/* ── Glass / Frosted-glass utilities ── */
+@layer utilities {
+  .glass {
+    backdrop-filter: blur(12px) saturate(140%);
+    -webkit-backdrop-filter: blur(12px) saturate(140%);
+  }
+  .glass-subtle {
+    backdrop-filter: blur(8px) saturate(120%);
+    -webkit-backdrop-filter: blur(8px) saturate(120%);
+  }
+  .glass-strong {
+    backdrop-filter: blur(20px) saturate(160%);
+    -webkit-backdrop-filter: blur(20px) saturate(160%);
+  }
+}
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+  
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  }
+  
+  #root {
+    height: 100vh;
+    overflow: hidden;
+  }
+  
+  body {
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+@layer components {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: var(--theme-scrollbar, #3e3e42) transparent;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: var(--theme-scrollbar, #3e3e42);
+    border-radius: 4px;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background-color: var(--theme-scrollbar-hover, #4e4e52);
+  }
+}
+
+@layer utilities {
+  .text-foreground {
+    color: var(--theme-foreground, #cccccc);
+  }
+  
+  .text-foreground-subtle {
+    color: var(--theme-foreground-muted, #969696);
+  }
+  
+  .text-foreground-muted {
+    color: var(--theme-foreground-subtle, #6c6c6c);
+  }
+  
+  .bg-background {
+    background-color: var(--theme-bg, #1e1e1e);
+  }
+  
+  .bg-background-secondary {
+    background-color: var(--theme-bg-secondary, #252526);
+  }
+  
+  .bg-background-tertiary {
+    background-color: var(--theme-bg-tertiary, #2d2d30);
+  }
+  
+  .bg-background-input {
+    background-color: var(--theme-input-bg, #3c3c3c);
+  }
+  
+  .border-border {
+    border-color: var(--theme-border, #3e3e42);
+  }
+  
+  .border-border-focus {
+    border-color: var(--theme-border-focus, #007acc);
+  }
+  
+  .bg-sidebar {
+    background-color: var(--theme-sidebar, #252526);
+  }
+  
+  .text-sidebar-foreground {
+    color: var(--theme-foreground, #cccccc);
+  }
+  
+  .border-sidebar-border {
+    border-color: var(--theme-sidebar-border, #3e3e42);
+  }
+  
+  .bg-chat {
+    background-color: var(--theme-bg-secondary, #252526);
+  }
+  
+  .text-chat-foreground {
+    color: var(--theme-foreground, #cccccc);
+  }
+}
+
+/*
+ * ═══════════════════════════════════════════════════════════════════
+ *  THEME OVERRIDES — Map hardcoded Tailwind arbitrary color classes
+ *  to CSS variables so ALL components respect the active theme.
+ * ═══════════════════════════════════════════════════════════════════
+ */
+
+/* ── Background color overrides ── */
+.bg-\[\#1e1e1e\] { background-color: var(--theme-bg) !important; }
+.bg-\[\#1a1a1a\] { background-color: var(--theme-bg) !important; }
+.bg-\[\#252526\], .bg-\[\#252525\] { background-color: var(--theme-bg-secondary) !important; }
+.bg-\[\#2d2d2d\], .bg-\[\#2d2d30\] { background-color: var(--theme-bg-tertiary) !important; }
+.bg-\[\#333333\], .bg-\[\#333\] { background-color: var(--theme-bg-tertiary) !important; }
+.bg-\[\#3c3c3c\] { background-color: var(--theme-input-bg) !important; }
+.bg-\[\#181818\] { background-color: var(--theme-bg) !important; }
+.bg-\[\#323233\] { background-color: var(--theme-title-bar) !important; }
+.bg-\[\#094771\] { background-color: var(--theme-selection) !important; }
+.bg-\[\#007acc\] { background-color: var(--theme-accent) !important; }
+.bg-\[\#007acc20\] { background-color: color-mix(in srgb, var(--theme-accent) 12%, transparent) !important; }
+.bg-\[\#89d18520\] { background-color: rgba(137, 209, 133, 0.12) !important; }
+.bg-\[\#dcdcaa20\] { background-color: rgba(220, 220, 170, 0.12) !important; }
+
+/* ── Hover background overrides ── */
+.hover\:bg-\[\#2a2d2e\]:hover, .hover\:bg-\[\#2a2a2a\]:hover { background-color: var(--theme-selection-hover) !important; }
+.hover\:bg-\[\#252525\]:hover { background-color: var(--theme-bg-secondary) !important; }
+.hover\:bg-\[\#2d2d2d\]:hover { background-color: var(--theme-bg-tertiary) !important; }
+.hover\:bg-\[\#3c3c3c\]:hover { background-color: var(--theme-input-bg) !important; }
+.hover\:bg-\[\#4c4c4c\]:hover { background-color: var(--theme-scrollbar-hover) !important; }
+.hover\:bg-\[\#006bb3\]:hover { background-color: var(--theme-accent-hover) !important; }
+.hover\:bg-\[\#094771\]:hover { background-color: var(--theme-selection) !important; }
+.hover\:bg-\[\#2d2d2d\]\/80:hover { background-color: var(--theme-bg-tertiary) !important; }
+
+/* ── Text color overrides ── */
+.text-\[\#cccccc\] { color: var(--theme-foreground) !important; }
+.text-\[\#d4d4d4\] { color: var(--theme-foreground) !important; }
+.text-\[\#969696\] { color: var(--theme-foreground-muted) !important; }
+.text-\[\#858585\] { color: var(--theme-foreground-muted) !important; }
+.text-\[\#585858\] { color: var(--theme-foreground-subtle) !important; }
+.text-\[\#bbbbbb\] { color: var(--theme-foreground) !important; }
+.text-\[\#b0b0b0\] { color: var(--theme-foreground) !important; }
+.text-\[\#007acc\] { color: var(--theme-accent) !important; }
+.text-\[\#c586c0\] { color: var(--theme-accent) !important; }
+.text-\[\#c5c5c5\] { color: var(--theme-foreground) !important; }
+
+/* ── Border color overrides ── */
+.border-\[\#1e1e1e\] { border-color: var(--theme-bg) !important; }
+.border-\[\#252526\] { border-color: var(--theme-bg-secondary) !important; }
+.border-\[\#3c3c3c\] { border-color: var(--theme-border) !important; }
+.border-\[\#3e3e42\] { border-color: var(--theme-border) !important; }
+.border-\[\#454545\] { border-color: var(--theme-border) !important; }
+.border-\[\#007acc\] { border-color: var(--theme-border-focus) !important; }
+
+/* ── Active tab border top ── */
+.border-t-\[\#007acc\] { border-top-color: var(--theme-accent) !important; }
+
+/* ── Placeholder text ── */
+.placeholder-\[\#585858\]::placeholder { color: var(--theme-foreground-subtle) !important; }
+.placeholder-\[\#666\]::placeholder { color: var(--theme-foreground-subtle) !important; }
+
+/* ── Ring/focus colors ── */
+.focus\:border-\[\#007acc\]:focus { border-color: var(--theme-border-focus) !important; }
+.focus\:ring-\[\#007acc\]:focus { --tw-ring-color: var(--theme-border-focus) !important; }
+
+/* xterm.js terminal styles */
+.xterm {
+  position: relative;
+  user-select: none;
+}
+.xterm .xterm-viewport {
+  overflow-y: scroll;
+}
+
+/* Scrollbar customization */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background-color: var(--theme-scrollbar, #424242);
+  border-radius: 5px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--theme-scrollbar-hover, #4f4f4f);
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Chat message overflow fix */
+.whitespace-pre-wrap {
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+pre.whitespace-pre-wrap {
+  overflow-x: auto;
+  max-width: 100%;
+}

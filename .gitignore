@@ -1,0 +1,80 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+dist-electron/
+dist-electron-new/
+website/.next/
+website/.next-ready/
+
+# Website installer downloads (too large for git)
+website/public/downloads/
+website/public/*.exe
+website/public/*.exe.blockmap
+website/public/*.tar.gz
+website/public/*.dmg
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE/Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# GGUF model files (too large for git)
+*.gguf
+
+# guIDE runtime data
+.guide-memory/
+.guide-config.json
+.ide-memory/
+
+# Private API keys (NEVER commit)
+API_KEYS_PRIVATE.md
+
+# Scripts with embedded API keys (NEVER commit)
+scripts/
+
+# Code signing certificate (NEVER commit)
+*.pfx
+code-signing.pfx
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS
+Desktop.ini
+ehthumbs.db
+ehthumbs_vista.db
+
+# TypeScript
+*.tsbuildinfo
+
+# Test
+coverage/
+
+# Python virtual env
+.venv/
+
+# Next.js build
+.next/
+
+# Playwright test artifacts
+.playwright-mcp/
+
+# Root-level screenshot/test images
+/*.png
+
+# Pipeline backups
+_pipeline_backup*/

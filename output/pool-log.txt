@@ -1,0 +1,405 @@
+﻿[1m[90m[TAILING] Tailing last 200 lines for [pocket-guide] process (change the value with --lines option)[39m[22m
+[90mC:\Users\brend\.pm2\logs\pocket-guide-error.log last 200 lines:[39m
+[31m17|pocket- | [39m2026-02-13 17:21:03: [parseToolCalls] Method 1 JSON.parse failed: Bad escaped character in JSON at position 435 (line 1 column 436)
+[31m17|pocket- | [39m2026-02-13 17:21:03: [parseToolCalls] Method 1 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 124 (line 1 column 125)
+[31m17|pocket- | [39m2026-02-13 17:21:05: [parseToolCalls] Method 1 JSON.parse failed: Bad escaped character in JSON at position 762 (line 1 column 763)
+[31m17|pocket- | [39m2026-02-13 17:21:05: [parseToolCalls] Method 1 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 153 (line 1 column 154)
+[31m17|pocket- | [39m2026-02-13 17:34:05: [parseToolCalls] Method 1 JSON.parse failed: Expected ':' after property name in JSON at position 43 (line 1 column 44)
+[31m17|pocket- | [39m2026-02-13 17:34:15: [parseToolCalls] Method 1 JSON.parse failed: Expected ':' after property name in JSON at position 43 (line 1 column 44)
+[31m17|pocket- | [39m2026-02-13 17:34:31: [parseToolCalls] Method 1 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 93 (line 1 column 94)
+[31m17|pocket- | [39m2026-02-13 17:34:31: [parseToolCalls] Method 1 JSON.parse failed: Expected ':' after property name in JSON at position 43 (line 1 column 44)
+[31m17|pocket- | [39m2026-02-13 17:37:06: [parseToolCalls] Method 1 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 764 (line 1 column 765)
+[31m17|pocket- | [39m2026-02-13 17:43:41: [parseToolCalls] Method 1 JSON.parse failed: Bad escaped character in JSON at position 264 (line 1 column 265)
+[31m17|pocket- | [39m2026-02-13 18:28:38: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 12660 (line 1 column 12661)
+[31m17|pocket- | [39m2026-02-13 18:38:09: [ImageGen] pollinations failed: Pollinations HTTP 530
+[31m17|pocket- | [39m2026-02-13 18:40:48: [ImageGen] pollinations failed: Pollinations HTTP 530
+[31m17|pocket- | [39m2026-02-13 19:56:57: [parseToolCalls] Method 1 JSON.parse failed: Expected ':' after property name in JSON at position 81 (line 1 column 82)
+[31m17|pocket- | [39m2026-02-13 20:10:15: [parseToolCalls] Method 2 JSON.parse failed: Bad escaped character in JSON at position 192 (line 1 column 193)
+[31m17|pocket- | [39m2026-02-13 20:10:55: [ToolSystem] HTML validation skipped: page.setContent: Timeout 9000ms exceeded.
+[31m17|pocket- | [39m2026-02-13 20:10:55: Call log:
+[31m17|pocket- | [39m2026-02-13 20:10:55: [2m  - setting frame content, waiting until "load"[22m
+[31m17|pocket- | [39m2026-02-13 20:10:55: 
+[31m17|pocket- | [39m2026-02-13 20:15:55: [parseToolCalls] Method 2 JSON.parse failed: Bad escaped character in JSON at position 194 (line 1 column 195)
+[31m17|pocket- | [39m2026-02-13 20:15:55: [parseToolCalls] Method 2 JSON.parse failed: Bad escaped character in JSON at position 194 (line 1 column 195)
+[31m17|pocket- | [39m2026-02-13 20:17:25: [ToolSystem] HTML validation skipped: page.setContent: Timeout 9000ms exceeded.
+[31m17|pocket- | [39m2026-02-13 20:17:25: Call log:
+[31m17|pocket- | [39m2026-02-13 20:17:25: [2m  - setting frame content, waiting until "load"[22m
+[31m17|pocket- | [39m2026-02-13 20:17:25: 
+[31m17|pocket- | [39m2026-02-13 20:21:27: [parseToolCalls] Method 2 JSON.parse failed: Bad escaped character in JSON at position 224 (line 1 column 225)
+[31m17|pocket- | [39m2026-02-13 20:21:27: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 1504 (line 1 column 1505)
+[31m17|pocket- | [39m2026-02-13 20:22:32: [parseToolCalls] Method 2 JSON.parse failed: Bad escaped character in JSON at position 144 (line 1 column 145)
+[31m17|pocket- | [39m2026-02-13 20:24:44: [parseToolCalls] Method 2 JSON.parse failed: Bad escaped character in JSON at position 191 (line 1 column 192)
+[31m17|pocket- | [39m2026-02-13 20:24:44: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 3181 (line 1 column 3182)
+[31m17|pocket- | [39m2026-02-13 20:37:22: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 1499 (line 1 column 1500)
+[31m17|pocket- | [39m2026-02-13 20:40:14: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 3916 (line 1 column 3917)
+[31m17|pocket- | [39m2026-02-13 20:50:50: [parseToolCalls] Method 2 JSON.parse failed: Bad escaped character in JSON at position 188 (line 1 column 189)
+[31m17|pocket- | [39m2026-02-13 21:02:46: [parseToolCalls] Method 2 JSON.parse failed: Bad escaped character in JSON at position 215 (line 4 column 170)
+[31m17|pocket- | [39m2026-02-13 21:02:46: [parseToolCalls] Method 2 JSON.parse failed: Bad escaped character in JSON at position 172 (line 4 column 127)
+[31m17|pocket- | [39m2026-02-13 21:20:15: [parseToolCalls] Method 1 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 102 (line 1 column 103)
+[31m17|pocket- | [39m2026-02-13 21:23:34: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 1889 (line 1 column 1890)
+[31m17|pocket- | [39m2026-02-13 21:26:45: [parseToolCalls] Method 2 JSON.parse failed: Bad escaped character in JSON at position 216 (line 1 column 217)
+[31m17|pocket- | [39m2026-02-13 21:26:45: [parseToolCalls] Method 2 JSON.parse failed: Bad escaped character in JSON at position 295 (line 1 column 296)
+[31m17|pocket- | [39m2026-02-13 21:26:45: [parseToolCalls] Method 2 JSON.parse failed: Bad escaped character in JSON at position 203 (line 1 column 204)
+[31m17|pocket- | [39m2026-02-13 21:26:45: [parseToolCalls] Method 2 JSON.parse failed: Bad escaped character in JSON at position 349 (line 1 column 350)
+[31m17|pocket- | [39m2026-02-13 21:26:45: [parseToolCalls] Method 2 JSON.parse failed: Bad escaped character in JSON at position 344 (line 1 column 345)
+[31m17|pocket- | [39m2026-02-13 21:26:45: [parseToolCalls] Method 2 JSON.parse failed: Bad escaped character in JSON at position 344 (line 1 column 345)
+[31m17|pocket- | [39m2026-02-13 21:26:45: [parseToolCalls] Method 2 JSON.parse failed: Bad escaped character in JSON at position 220 (line 1 column 221)
+[31m17|pocket- | [39m2026-02-13 21:26:45: [parseToolCalls] Method 2 JSON.parse failed: Bad escaped character in JSON at position 305 (line 1 column 306)
+[31m17|pocket- | [39m2026-02-13 21:26:45: [parseToolCalls] Method 2 JSON.parse failed: Bad escaped character in JSON at position 207 (line 1 column 208)
+[31m17|pocket- | [39m2026-02-13 21:26:45: [parseToolCalls] Method 2 JSON.parse failed: Bad escaped character in JSON at position 357 (line 1 column 358)
+[31m17|pocket- | [39m2026-02-13 21:26:45: [parseToolCalls] Method 2 JSON.parse failed: Bad escaped character in JSON at position 352 (line 1 column 353)
+[31m17|pocket- | [39m2026-02-13 21:26:45: [parseToolCalls] Method 2 JSON.parse failed: Bad escaped character in JSON at position 352 (line 1 column 353)
+[31m17|pocket- | [39m2026-02-13 21:26:45: [parseToolCalls] Method 2 JSON.parse failed: Bad escaped character in JSON at position 703 (line 1 column 704)
+[31m17|pocket- | [39m2026-02-13 21:28:50: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 101 (line 1 column 102)
+[31m17|pocket- | [39m2026-02-13 21:28:50: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 65 (line 1 column 66)
+[31m17|pocket- | [39m2026-02-13 21:28:50: [parseToolCalls] Method 2 JSON.parse failed: Bad escaped character in JSON at position 269 (line 1 column 270)
+[31m17|pocket- | [39m2026-02-13 21:45:27: [parseToolCalls] Method 2 JSON.parse failed: Unexpected non-whitespace character after JSON at position 79 (line 1 column 80)
+[31m17|pocket- | [39m2026-02-13 21:46:37: [ToolSystem] HTML validation skipped: page.setContent: Timeout 9000ms exceeded.
+[31m17|pocket- | [39m2026-02-13 21:46:37: Call log:
+[31m17|pocket- | [39m2026-02-13 21:46:37: [2m  - setting frame content, waiting until "load"[22m
+[31m17|pocket- | [39m2026-02-13 21:46:37: 
+[31m17|pocket- | [39m2026-02-13 21:46:40: [parseToolCalls] Method 2 JSON.parse failed: Unexpected non-whitespace character after JSON at position 79 (line 1 column 80)
+[31m17|pocket- | [39m2026-02-13 21:46:42: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 187 (line 1 column 188)
+[31m17|pocket- | [39m2026-02-13 21:46:42: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 151 (line 1 column 152)
+[31m17|pocket- | [39m2026-02-13 21:46:49: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 109 (line 1 column 110)
+[31m17|pocket- | [39m2026-02-13 21:46:49: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 73 (line 1 column 74)
+[31m17|pocket- | [39m2026-02-13 21:46:49: [parseToolCalls] Method 2 JSON.parse failed: Unexpected non-whitespace character after JSON at position 296 (line 1 column 297)
+[31m17|pocket- | [39m2026-02-13 21:46:49: [parseToolCalls] Method 2 JSON.parse failed: Unexpected token '%', ...""content":%output%}}" is not valid JSON
+[31m17|pocket- | [39m2026-02-13 21:46:49: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 666 (line 1 column 667)
+[31m17|pocket- | [39m2026-02-13 21:46:49: [parseToolCalls] Method 2 JSON.parse failed: Unexpected token '%', ...""content":%output%}}" is not valid JSON
+[31m17|pocket- | [39m2026-02-13 21:46:49: [parseToolCalls] Method 2 JSON.parse failed: Bad escaped character in JSON at position 178 (line 1 column 179)
+[31m17|pocket- | [39m2026-02-13 21:46:49: [parseToolCalls] Method 2 JSON.parse failed: Unexpected token '%', ...""content":%output%}}" is not valid JSON
+[31m17|pocket- | [39m2026-02-13 21:46:49: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 474 (line 1 column 475)
+[31m17|pocket- | [39m2026-02-13 21:46:49: [parseToolCalls] Method 2 JSON.parse failed: Unexpected token '%', ...""content":%output%}}" is not valid JSON
+[31m17|pocket- | [39m2026-02-13 21:46:49: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 462 (line 1 column 463)
+[31m17|pocket- | [39m2026-02-13 21:46:49: [parseToolCalls] Method 2 JSON.parse failed: Unexpected token '%', ...""content":%output%}}" is not valid JSON
+[31m17|pocket- | [39m2026-02-13 21:46:49: [parseToolCalls] Method 2 JSON.parse failed: Bad escaped character in JSON at position 282 (line 1 column 283)
+[31m17|pocket- | [39m2026-02-13 21:53:53: [parseToolCalls] Method 1 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 91 (line 1 column 92)
+[31m17|pocket- | [39m2026-02-13 21:53:59: [parseToolCalls] Method 1 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 91 (line 1 column 92)
+[31m17|pocket- | [39m2026-02-13 21:54:01: [parseToolCalls] Method 1 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 94 (line 1 column 95)
+[31m17|pocket- | [39m2026-02-13 21:54:01: [parseToolCalls] Method 1 JSON.parse failed: Bad escaped character in JSON at position 290 (line 1 column 291)
+[31m17|pocket- | [39m2026-02-13 21:54:01: [parseToolCalls] Method 1 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 93 (line 1 column 94)
+[31m17|pocket- | [39m2026-02-13 21:54:01: [parseToolCalls] Method 1 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 96 (line 1 column 97)
+[31m17|pocket- | [39m2026-02-13 21:54:18: [parseToolCalls] Method 1 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 91 (line 1 column 92)
+[31m17|pocket- | [39m2026-02-13 21:54:18: [parseToolCalls] Method 1 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 94 (line 1 column 95)
+[31m17|pocket- | [39m2026-02-13 21:54:18: [parseToolCalls] Method 1 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 187 (line 1 column 188)
+[31m17|pocket- | [39m2026-02-13 21:54:18: [parseToolCalls] Method 1 JSON.parse failed: Bad escaped character in JSON at position 222 (line 1 column 223)
+[31m17|pocket- | [39m2026-02-13 21:54:18: [parseToolCalls] Method 1 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 93 (line 1 column 94)
+[31m17|pocket- | [39m2026-02-13 21:54:18: [parseToolCalls] Method 1 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 193 (line 1 column 194)
+[31m17|pocket- | [39m2026-02-13 21:54:18: [parseToolCalls] Method 1 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 96 (line 1 column 97)
+[31m17|pocket- | [39m2026-02-13 21:54:18: [parseToolCalls] Method 1 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 209 (line 1 column 210)
+[31m17|pocket- | [39m2026-02-13 21:54:59: [parseToolCalls] Method 1 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 91 (line 1 column 92)
+[31m17|pocket- | [39m2026-02-13 21:54:59: [parseToolCalls] Method 1 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 94 (line 1 column 95)
+[31m17|pocket- | [39m2026-02-13 21:54:59: [parseToolCalls] Method 1 JSON.parse failed: Bad escaped character in JSON at position 222 (line 1 column 223)
+[31m17|pocket- | [39m2026-02-13 21:54:59: [parseToolCalls] Method 1 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 93 (line 1 column 94)
+[31m17|pocket- | [39m2026-02-13 21:54:59: [parseToolCalls] Method 1 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 96 (line 1 column 97)
+[31m17|pocket- | [39m2026-02-13 21:54:59: [parseToolCalls] Method 1 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 187 (line 1 column 188)
+[31m17|pocket- | [39m2026-02-13 23:42:26: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 2147 (line 1 column 2148)
+[31m17|pocket- | [39m2026-02-13 23:42:40: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 99 (line 1 column 100)
+[31m17|pocket- | [39m2026-02-13 23:42:40: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 63 (line 1 column 64)
+[31m17|pocket- | [39m2026-02-13 23:42:40: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 104 (line 1 column 105)
+[31m17|pocket- | [39m2026-02-13 23:42:40: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 68 (line 1 column 69)
+[31m17|pocket- | [39m2026-02-13 23:42:40: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 102 (line 1 column 103)
+[31m17|pocket- | [39m2026-02-13 23:42:40: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 66 (line 1 column 67)
+[31m17|pocket- | [39m2026-02-13 23:55:50: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 92 (line 1 column 93)
+[31m17|pocket- | [39m2026-02-13 23:55:50: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 56 (line 1 column 57)
+[31m17|pocket- | [39m2026-02-13 23:55:50: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 97 (line 1 column 98)
+[31m17|pocket- | [39m2026-02-13 23:55:50: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 61 (line 1 column 62)
+[31m17|pocket- | [39m2026-02-13 23:55:50: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 97 (line 1 column 98)
+[31m17|pocket- | [39m2026-02-13 23:55:50: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 61 (line 1 column 62)
+[31m17|pocket- | [39m2026-02-13 23:55:50: [parseToolCalls] Method 2 JSON.parse failed: Bad escaped character in JSON at position 229 (line 1 column 230)
+[31m17|pocket- | [39m2026-02-13 23:56:41: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 103 (line 1 column 104)
+[31m17|pocket- | [39m2026-02-13 23:56:41: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 67 (line 1 column 68)
+[31m17|pocket- | [39m2026-02-13 23:56:41: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 103 (line 1 column 104)
+[31m17|pocket- | [39m2026-02-13 23:56:41: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 67 (line 1 column 68)
+[31m17|pocket- | [39m2026-02-13 23:56:41: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 100 (line 1 column 101)
+[31m17|pocket- | [39m2026-02-13 23:56:41: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 64 (line 1 column 65)
+[31m17|pocket- | [39m2026-02-13 23:56:41: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 100 (line 1 column 101)
+[31m17|pocket- | [39m2026-02-13 23:56:41: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 64 (line 1 column 65)
+[31m17|pocket- | [39m2026-02-13 23:56:51: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 100 (line 1 column 101)
+[31m17|pocket- | [39m2026-02-13 23:56:51: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 64 (line 1 column 65)
+[31m17|pocket- | [39m2026-02-14 00:10:35: [parseToolCalls] Method 1 JSON.parse failed: Bad escaped character in JSON at position 462 (line 1 column 463)
+[31m17|pocket- | [39m2026-02-14 00:18:49: [parseToolCalls] Method 1 JSON.parse failed: Bad escaped character in JSON at position 286 (line 1 column 287)
+[31m17|pocket- | [39m2026-02-14 00:18:49: [parseToolCalls] Method 2 JSON.parse failed: Bad escaped character in JSON at position 286 (line 1 column 287)
+[31m17|pocket- | [39m2026-02-14 00:47:30: [parseToolCalls] Method 1 JSON.parse failed: Bad escaped character in JSON at position 713 (line 1 column 714)
+[31m17|pocket- | [39m2026-02-14 00:47:30: [parseToolCalls] Method 2 JSON.parse failed: Bad escaped character in JSON at position 713 (line 1 column 714)
+[31m17|pocket- | [39m2026-02-14 00:47:36: [parseToolCalls] Method 1 JSON.parse failed: Bad escaped character in JSON at position 465 (line 1 column 466)
+[31m17|pocket- | [39m2026-02-14 00:50:41: [parseToolCalls] Method 1 JSON.parse failed: Bad escaped character in JSON at position 383 (line 1 column 384)
+[31m17|pocket- | [39m2026-02-14 00:50:41: [parseToolCalls] Method 2 JSON.parse failed: Bad escaped character in JSON at position 383 (line 1 column 384)
+[31m17|pocket- | [39m2026-02-14 00:50:42: [parseToolCalls] Method 1 JSON.parse failed: Bad escaped character in JSON at position 313 (line 1 column 314)
+[31m17|pocket- | [39m2026-02-14 00:50:42: [parseToolCalls] Method 2 JSON.parse failed: Bad escaped character in JSON at position 313 (line 1 column 314)
+[31m17|pocket- | [39m2026-02-14 00:50:47: [parseToolCalls] Method 1 JSON.parse failed: Bad escaped character in JSON at position 200 (line 1 column 201)
+[31m17|pocket- | [39m2026-02-14 00:50:47: [parseToolCalls] Method 2 JSON.parse failed: Bad escaped character in JSON at position 200 (line 1 column 201)
+[31m17|pocket- | [39m2026-02-14 06:18:56: [parseToolCalls] Method 1 JSON.parse failed: Bad escaped character in JSON at position 398 (line 1 column 399)
+[31m17|pocket- | [39m2026-02-14 06:18:56: [parseToolCalls] Method 2 JSON.parse failed: Bad escaped character in JSON at position 398 (line 1 column 399)
+[31m17|pocket- | [39m2026-02-14 06:19:02: [parseToolCalls] Method 1 JSON.parse failed: Bad escaped character in JSON at position 398 (line 1 column 399)
+[31m17|pocket- | [39m2026-02-14 06:19:02: [parseToolCalls] Method 2 JSON.parse failed: Bad escaped character in JSON at position 398 (line 1 column 399)
+[31m17|pocket- | [39m2026-02-14 06:32:20: [parseToolCalls] Method 1 JSON.parse failed: Bad escaped character in JSON at position 9056 (line 1 column 9057)
+[31m17|pocket- | [39m2026-02-14 06:32:20: [parseToolCalls] Method 2 JSON.parse failed: Bad escaped character in JSON at position 9056 (line 1 column 9057)
+[31m17|pocket- | [39m2026-02-14 07:45:44: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 9745 (line 1 column 9746)
+[31m17|pocket- | [39m2026-02-14 07:52:49: [parseToolCalls] Method 2 JSON.parse failed: Expected double-quoted property name in JSON at position 87 (line 1 column 88)
+[31m17|pocket- | [39m2026-02-14 10:08:33: [parseToolCalls] Method 1 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 26403 (line 1 column 26404)
+[31m17|pocket- | [39m2026-02-14 10:08:33: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 26403 (line 1 column 26404)
+[31m17|pocket- | [39m2026-02-14 10:57:25: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 153 (line 1 column 154)
+[31m17|pocket- | [39m2026-02-14 11:02:04: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 201 (line 1 column 202)
+[31m17|pocket- | [39m2026-02-14 11:02:13: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 238 (line 1 column 239)
+[31m17|pocket- | [39m2026-02-14 11:04:42: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 135 (line 1 column 136)
+[31m17|pocket- | [39m2026-02-14 11:15:24: [parseToolCalls] Method 2 JSON.parse failed: Expected ':' after property name in JSON at position 42 (line 1 column 43)
+[31m17|pocket- | [39m2026-02-14 11:45:32: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 223 (line 1 column 224)
+[31m17|pocket- | [39m2026-02-14 11:55:04: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 110 (line 1 column 111)
+[31m17|pocket- | [39m2026-02-14 11:55:32: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 48 (line 1 column 49)
+[31m17|pocket- | [39m2026-02-14 11:59:41: [parseToolCalls] Method 2 JSON.parse failed: Expected ':' after property name in JSON at position 42 (line 1 column 43)
+[31m17|pocket- | [39m2026-02-14 12:11:03: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 145 (line 1 column 146)
+[31m17|pocket- | [39m2026-02-14 12:11:03: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 145 (line 1 column 146)
+[31m17|pocket- | [39m2026-02-14 12:11:03: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 145 (line 1 column 146)
+[31m17|pocket- | [39m2026-02-14 12:11:03: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 145 (line 1 column 146)
+[31m17|pocket- | [39m2026-02-14 12:11:03: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 145 (line 1 column 146)
+[31m17|pocket- | [39m2026-02-14 12:11:14: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 304 (line 1 column 305)
+[31m17|pocket- | [39m2026-02-14 12:11:14: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 275 (line 1 column 276)
+[31m17|pocket- | [39m2026-02-14 12:11:14: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 237 (line 1 column 238)
+[31m17|pocket- | [39m2026-02-14 12:23:49: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 102 (line 1 column 103)
+[31m17|pocket- | [39m2026-02-14 12:23:49: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 66 (line 1 column 67)
+[31m17|pocket- | [39m2026-02-14 12:25:19: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 99 (line 1 column 100)
+[31m17|pocket- | [39m2026-02-14 12:25:19: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 63 (line 1 column 64)
+[31m17|pocket- | [39m2026-02-14 12:28:52: [parseToolCalls] Method 1 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 53 (line 2 column 52)
+[31m17|pocket- | [39m2026-02-14 12:28:52: [parseToolCalls] Method 1 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 53 (line 2 column 52)
+[31m17|pocket- | [39m2026-02-14 12:28:52: [parseToolCalls] Method 1 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 53 (line 2 column 52)
+[31m17|pocket- | [39m2026-02-14 12:29:02: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 115 (line 1 column 116)
+[31m17|pocket- | [39m2026-02-14 12:29:29: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 146 (line 1 column 147)
+[31m17|pocket- | [39m2026-02-14 12:29:29: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 115 (line 1 column 116)
+[31m17|pocket- | [39m2026-02-14 12:29:29: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 115 (line 1 column 116)
+[31m17|pocket- | [39m2026-02-14 12:29:29: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 115 (line 1 column 116)
+[31m17|pocket- | [39m2026-02-14 12:29:29: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 112 (line 1 column 113)
+[31m17|pocket- | [39m2026-02-14 12:29:29: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 112 (line 1 column 113)
+[31m17|pocket- | [39m2026-02-14 12:29:29: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 112 (line 1 column 113)
+[31m17|pocket- | [39m2026-02-14 12:29:45: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 115 (line 1 column 116)
+[31m17|pocket- | [39m2026-02-14 12:29:45: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 115 (line 1 column 116)
+[31m17|pocket- | [39m2026-02-14 12:31:36: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 145 (line 1 column 146)
+[31m17|pocket- | [39m2026-02-14 12:35:21: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 4444 (line 6 column 2)
+[31m17|pocket- | [39m2026-02-14 12:35:28: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 112 (line 1 column 113)
+[31m17|pocket- | [39m2026-02-14 12:35:57: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 97 (line 1 column 98)
+[31m17|pocket- | [39m2026-02-14 12:35:57: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 61 (line 1 column 62)
+[31m17|pocket- | [39m2026-02-14 12:37:26: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 247 (line 1 column 248)
+[31m17|pocket- | [39m2026-02-14 12:45:51: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 121 (line 1 column 122)
+[31m17|pocket- | [39m2026-02-14 12:50:27: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 97 (line 1 column 98)
+[31m17|pocket- | [39m2026-02-14 12:50:27: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 61 (line 1 column 62)
+[31m17|pocket- | [39m2026-02-14 12:50:27: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 102 (line 1 column 103)
+[31m17|pocket- | [39m2026-02-14 12:50:27: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 66 (line 1 column 67)
+[31m17|pocket- | [39m2026-02-14 12:50:27: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 104 (line 1 column 105)
+[31m17|pocket- | [39m2026-02-14 12:50:27: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 68 (line 1 column 69)
+[31m17|pocket- | [39m2026-02-14 12:50:27: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 108 (line 1 column 109)
+[31m17|pocket- | [39m2026-02-14 12:50:27: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 72 (line 1 column 73)
+[31m17|pocket- | [39m2026-02-14 12:50:27: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 96 (line 1 column 97)
+[31m17|pocket- | [39m2026-02-14 12:50:27: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 60 (line 1 column 61)
+[31m17|pocket- | [39m2026-02-14 13:15:39: [parseToolCalls] Method 2 JSON.parse failed: Expected ',' or '}' after property value in JSON at position 110 (line 1 column 111)
+[31m17|pocket- | [39m2026-02-14 13:28:03: [parseToolCalls] Method 1 JSON.parse failed: Expected double-quoted property name in JSON at position 69 (line 4 column 28)
+[31m17|pocket- | [39m2026-02-14 13:28:03: [parseToolCalls] Method 1 JSON.parse failed: Expected double-quoted property name in JSON at position 69 (line 4 column 28)
+[31m17|pocket- | [39m2026-02-14 13:28:03: [parseToolCalls] Method 1 JSON.parse failed: Expected double-quoted property name in JSON at position 69 (line 4 column 28)
+[31m17|pocket- | [39m2026-02-14 13:28:03: [parseToolCalls] Method 1 JSON.parse failed: Expected double-quoted property name in JSON at position 80 (line 4 column 30)
+[31m17|pocket- | [39m2026-02-14 13:28:03: [parseToolCalls] Method 1 JSON.parse failed: Expected double-quoted property name in JSON at position 67 (line 4 column 25)
+[31m17|pocket- | [39m2026-02-14 13:28:03: [parseToolCalls] Method 1 JSON.parse failed: Expected double-quoted property name in JSON at position 69 (line 4 column 27)
+[31m17|pocket- | [39m2026-02-14 13:28:03: [parseToolCalls] Method 1 JSON.parse failed: Expected double-quoted property name in JSON at position 66 (line 4 column 25)
+[31m17|pocket- | [39m2026-02-14 13:28:03: [parseToolCalls] Method 1 JSON.parse failed: Expected double-quoted property name in JSON at position 68 (line 4 column 26)
+
+[90mC:\Users\brend\.pm2\logs\pocket-guide-out.log last 200 lines:[39m
+[32m17|pocket- | [39m2026-02-14 13:29:53: [LLM] Cerebras key ...kc2wtk cooled down for 30s
+[32m17|pocket- | [39m2026-02-14 13:29:53: [LLM] Cerebras ...kc2wtk failed: Rate limited (429) ΓåÆ next key (1/41)
+[32m17|pocket- | [39m2026-02-14 13:29:54: [LLM] Cerebras key ...yx3mcv cooled down for 30s
+[32m17|pocket- | [39m2026-02-14 13:29:54: [LLM] Cerebras ...yx3mcv failed: Rate limited (429) ΓåÆ next key (2/41)
+[32m17|pocket- | [39m2026-02-14 13:29:54: [LLM] Cerebras key ...ke9k82 cooled down for 30s
+[32m17|pocket- | [39m2026-02-14 13:29:54: [LLM] Cerebras ...ke9k82 failed: Rate limited (429) ΓåÆ next key (3/41)
+[32m17|pocket- | [39m2026-02-14 13:29:54: [LLM] Cerebras key ...emvw6t cooled down for 7200s
+[32m17|pocket- | [39m2026-02-14 13:29:54: [LLM] Cerebras ...emvw6t failed: HTTP 401: {"message":"The organization this API key belongs is disabled.","type" ΓåÆ next key (4/41)
+[32m17|pocket- | [39m2026-02-14 13:29:54: [LLM] Cerebras key ...d9f9c4 cooled down for 7200s
+[32m17|pocket- | [39m2026-02-14 13:29:54: [LLM] Cerebras ...d9f9c4 failed: HTTP 401: {"message":"The organization this API key belongs is disabled.","type" ΓåÆ next key (5/41)
+[32m17|pocket- | [39m2026-02-14 13:29:54: [LLM] Cerebras key ...jcv4we cooled down for 30s
+[32m17|pocket- | [39m2026-02-14 13:29:54: [LLM] Cerebras ...jcv4we failed: Rate limited (429) ΓåÆ next key (6/41)
+[32m17|pocket- | [39m2026-02-14 13:29:54: [LLM] Cerebras key ...etm5kx cooled down for 7200s
+[32m17|pocket- | [39m2026-02-14 13:29:54: [LLM] Cerebras ...etm5kx failed: HTTP 401: {"message":"The organization this API key belongs is disabled.","type" ΓåÆ next key (7/41)
+[32m17|pocket- | [39m2026-02-14 13:29:55: [LLM] Cerebras key ...kdct9h cooled down for 7200s
+[32m17|pocket- | [39m2026-02-14 13:29:55: [LLM] Cerebras ...kdct9h failed: HTTP 401: {"message":"The organization this API key belongs is disabled.","type" ΓåÆ next key (8/41)
+[32m17|pocket- | [39m2026-02-14 13:29:55: [LLM] Cerebras key ...8kcx5x cooled down for 7200s
+[32m17|pocket- | [39m2026-02-14 13:29:55: [LLM] Cerebras ...8kcx5x failed: HTTP 401: {"message":"The organization this API key belongs is disabled.","type" ΓåÆ next key (9/41)
+[32m17|pocket- | [39m2026-02-14 13:29:55: [LLM] Cerebras key ...99xdmw cooled down for 7200s
+[32m17|pocket- | [39m2026-02-14 13:29:55: [LLM] Cerebras ...99xdmw failed: HTTP 401: {"message":"The organization this API key belongs is disabled.","type" ΓåÆ next key (10/41)
+[32m17|pocket- | [39m2026-02-14 13:29:55: [LLM] Cerebras key ...dv9vyc cooled down for 7200s
+[32m17|pocket- | [39m2026-02-14 13:29:55: [LLM] Cerebras ...dv9vyc failed: HTTP 401: {"message":"The organization this API key belongs is disabled.","type" ΓåÆ next key (11/41)
+[32m17|pocket- | [39m2026-02-14 13:29:55: [LLM] Groq key ...PYhOW8 cooled down for 30s
+[32m17|pocket- | [39m2026-02-14 13:29:55: [LLM] Groq ...PYhOW8 failed: Groq HTTP 429: Rate limit reached for model `llama-3.3-70b-versatile` in organiz ΓåÆ next key (12/41)
+[32m17|pocket- | [39m2026-02-14 13:29:55: [LLM] Groq key ...0QUtFf cooled down for 30s
+[32m17|pocket- | [39m2026-02-14 13:29:55: [LLM] Groq ...0QUtFf failed: Groq HTTP 413: Request too large for model `llama-3.3-70b-versatile` in organiza ΓåÆ next key (13/41)
+[32m17|pocket- | [39m2026-02-14 13:29:59: [Agent] Parsed 1 tool calls
+[32m17|pocket- | [39m2026-02-14 13:29:59: [Agent] Iteration 5: response length=544, toolCalls=1
+[32m17|pocket- | [39m2026-02-14 13:29:59: [Agent] Tools: browser_click
+[32m17|pocket- | [39m2026-02-14 13:29:59: [Agent] Calling tool: browser_click, callId: tc-1771093799325-kfh2
+[32m17|pocket- | [39m2026-02-14 13:29:59: [browserClick] sel=aria-ref=e83 role=none name=none
+[32m17|pocket- | [39m2026-02-14 13:30:00: [Agent] Tool result: success=true, 877ms
+[32m17|pocket- | [39m2026-02-14 13:30:05: [Agent] Parsed 1 tool calls
+[32m17|pocket- | [39m2026-02-14 13:30:05: [Agent] Iteration 6: response length=1114, toolCalls=1
+[32m17|pocket- | [39m2026-02-14 13:30:05: [Agent] Tools: browser_click
+[32m17|pocket- | [39m2026-02-14 13:30:05: [Agent] Calling tool: browser_click, callId: tc-1771093805933-ev5b
+[32m17|pocket- | [39m2026-02-14 13:30:05: [browserClick] sel=aria-ref=e87 role=none name=none
+[32m17|pocket- | [39m2026-02-14 13:30:06: [Agent] Tool result: success=true, 568ms
+[32m17|pocket- | [39m2026-02-14 13:30:15: [dotenv@17.2.4] injecting env (43) from .env -- tip: ΓÜÖ∩╕Å  enable debug logging with { debug: true }
+[32m17|pocket- | [39m2026-02-14 13:30:15: [ImageGen] Added Pollinations API key (pool: 1)
+[32m17|pocket- | [39m2026-02-14 13:30:15: [ImageGen] Added Pollinations API key (pool: 2)
+[32m17|pocket- | [39m2026-02-14 13:30:15: [ImageGen] Added Pollinations API key (pool: 3)
+[32m17|pocket- | [39m2026-02-14 13:30:15: [ImageGen] Loaded 3 Pollinations keys, 0 Google keys
+[32m17|pocket- | [39m2026-02-14 13:30:15: Pocket guIDE running on http://localhost:3300
+[32m17|pocket- | [39m2026-02-14 13:30:15: Storage directory: E:\pocketguidestorage
+[32m17|pocket- | [39m2026-02-14 13:30:15: Stripe: enabled
+[32m17|pocket- | [39m2026-02-14 13:30:17: [LLM] Loaded 24 Cerebras API keys
+[32m17|pocket- | [39m2026-02-14 13:30:17: [LLM] Provider ready: Groq (2 keys)
+[32m17|pocket- | [39m2026-02-14 13:30:17: [LLM] Provider ready: SambaNova (5 keys)
+[32m17|pocket- | [39m2026-02-14 13:30:17: [LLM] Provider ready: OpenRouter (8 keys)
+[32m17|pocket- | [39m2026-02-14 13:30:17: [LLM] Provider ready: Google Gemini (1 key)
+[32m17|pocket- | [39m2026-02-14 13:30:17: [LLM] Provider ready: Pollinations (free) (no key required)
+[32m17|pocket- | [39m2026-02-14 13:30:17: [LLM] Unified pool: 41 total keys [Cerebras:24, Groq:2, SambaNova:5, OpenRouter:8, Google Gemini:1, Pollinations (free):1]
+[32m17|pocket- | [39m2026-02-14 13:30:17: [LLM] 5 fallback provider(s) configured
+[32m17|pocket- | [39m2026-02-14 13:30:17: [LLM] Loaded 24 Cerebras API keys
+[32m17|pocket- | [39m2026-02-14 13:30:17: [LLM] Provider ready: Groq (2 keys)
+[32m17|pocket- | [39m2026-02-14 13:30:17: [LLM] Provider ready: SambaNova (5 keys)
+[32m17|pocket- | [39m2026-02-14 13:30:17: [LLM] Provider ready: OpenRouter (8 keys)
+[32m17|pocket- | [39m2026-02-14 13:30:17: [LLM] Provider ready: Google Gemini (1 key)
+[32m17|pocket- | [39m2026-02-14 13:30:17: [LLM] Provider ready: Pollinations (free) (no key required)
+[32m17|pocket- | [39m2026-02-14 13:30:17: [LLM] Unified pool: 41 total keys [Cerebras:24, Groq:2, SambaNova:5, OpenRouter:8, Google Gemini:1, Pollinations (free):1]
+[32m17|pocket- | [39m2026-02-14 13:30:17: [LLM] 5 fallback provider(s) configured
+[32m17|pocket- | [39m2026-02-14 13:30:18: [DBG] WS msg: get_models
+[32m17|pocket- | [39m2026-02-14 13:30:18: [DBG] WS msg: set_model
+[32m17|pocket- | [39m2026-02-14 13:30:18: [LLM] Model switched to: zai-glm-4.7
+[32m17|pocket- | [39m2026-02-14 13:30:18: [DBG] WS msg: get_models
+[32m17|pocket- | [39m2026-02-14 13:30:18: [DBG] WS msg: set_model
+[32m17|pocket- | [39m2026-02-14 13:30:18: [LLM] Model switched to: llama3.1-8b
+[32m17|pocket- | [39m2026-02-14 13:30:33: [LLM] Loaded 24 Cerebras API keys
+[32m17|pocket- | [39m2026-02-14 13:30:33: [LLM] Provider ready: Groq (2 keys)
+[32m17|pocket- | [39m2026-02-14 13:30:33: [LLM] Provider ready: SambaNova (5 keys)
+[32m17|pocket- | [39m2026-02-14 13:30:33: [LLM] Provider ready: OpenRouter (8 keys)
+[32m17|pocket- | [39m2026-02-14 13:30:33: [LLM] Provider ready: Google Gemini (1 key)
+[32m17|pocket- | [39m2026-02-14 13:30:33: [LLM] Provider ready: Pollinations (free) (no key required)
+[32m17|pocket- | [39m2026-02-14 13:30:33: [LLM] Unified pool: 41 total keys [Cerebras:24, Groq:2, SambaNova:5, OpenRouter:8, Google Gemini:1, Pollinations (free):1]
+[32m17|pocket- | [39m2026-02-14 13:30:33: [LLM] 5 fallback provider(s) configured
+[32m17|pocket- | [39m2026-02-14 13:30:33: [DBG] WS msg: set_model
+[32m17|pocket- | [39m2026-02-14 13:30:33: [LLM] Model switched to: gpt-oss-120b
+[32m17|pocket- | [39m2026-02-14 13:30:34: [LLM] Cerebras key ...nhr9cn cooled down for 30s
+[32m17|pocket- | [39m2026-02-14 13:30:34: [LLM] Cerebras ...nhr9cn failed: Rate limited (429) ΓåÆ next key (1/41)
+[32m17|pocket- | [39m2026-02-14 13:30:34: [LLM] Cerebras key ...tnvx85 cooled down for 30s
+[32m17|pocket- | [39m2026-02-14 13:30:34: [LLM] Cerebras ...tnvx85 failed: Rate limited (429) ΓåÆ next key (2/41)
+[32m17|pocket- | [39m2026-02-14 13:30:34: [LLM] Cerebras key ...ync9h2 cooled down for 30s
+[32m17|pocket- | [39m2026-02-14 13:30:34: [LLM] Cerebras ...ync9h2 failed: Rate limited (429) ΓåÆ next key (3/41)
+[32m17|pocket- | [39m2026-02-14 13:30:36: [LLM] Cerebras key ...3ywyje cooled down for 3600s
+[32m17|pocket- | [39m2026-02-14 13:30:36: [Agent] Parsed 17 tool calls
+[32m17|pocket- | [39m2026-02-14 13:30:36: [Agent] Iteration 0: response length=2349, toolCalls=17
+[32m17|pocket- | [39m2026-02-14 13:30:36: [Agent] Tools: write_todos, browser_navigate, browser_snapshot, browser_evaluate, browser_evaluate, browser_evaluate, fetch_webpage, read_scratchpad, web_search, read_scratchpad, browser_navigate, web_search, read_scratchpad, browser_evaluate, list_directory, run_command, read_scratchpad
+[32m17|pocket- | [39m2026-02-14 13:30:36: [Agent] Calling tool: write_todos, callId: tc-1771093836418-hesa
+[32m17|pocket- | [39m2026-02-14 13:30:36: [Agent] Tool result: success=true, 0ms
+[32m17|pocket- | [39m2026-02-14 13:30:36: [Agent] Calling tool: browser_navigate, callId: tc-1771093836419-eyt5
+[32m17|pocket- | [39m2026-02-14 13:30:39: [Tools] Page captured: https://pocket.graysoft.dev/challenge/login.html (462 chars text)
+[32m17|pocket- | [39m2026-02-14 13:30:39: [Agent] Tool result: success=true, 2986ms
+[32m17|pocket- | [39m2026-02-14 13:30:39: [Agent] Calling tool: browser_snapshot, callId: tc-1771093839560-oc2u
+[32m17|pocket- | [39m2026-02-14 13:30:39: [Agent] Tool result: success=true, 4ms
+[32m17|pocket- | [39m2026-02-14 13:30:39: [Agent] Calling tool: browser_evaluate, callId: tc-1771093839718-gkab
+[32m17|pocket- | [39m2026-02-14 13:30:39: [Agent] Tool result: success=true, 2ms
+[32m17|pocket- | [39m2026-02-14 13:30:39: [Agent] Calling tool: browser_evaluate, callId: tc-1771093839879-m0at
+[32m17|pocket- | [39m2026-02-14 13:30:40: [Agent] Tool result: success=true, 3ms
+[32m17|pocket- | [39m2026-02-14 13:30:40: [Agent] Calling tool: browser_evaluate, callId: tc-1771093840036-1i3d
+[32m17|pocket- | [39m2026-02-14 13:30:40: [Agent] Tool result: success=true, 1ms
+[32m17|pocket- | [39m2026-02-14 13:30:40: [Agent] Calling tool: fetch_webpage, callId: tc-1771093840192-fl9o
+[32m17|pocket- | [39m2026-02-14 13:30:40: [Agent] Tool result: success=true, 166ms
+[32m17|pocket- | [39m2026-02-14 13:30:40: [Agent] Calling tool: read_scratchpad, callId: tc-1771093840358-kt9t
+[32m17|pocket- | [39m2026-02-14 13:30:40: [Agent] Tool result: success=false, 0ms
+[32m17|pocket- | [39m2026-02-14 13:30:40: [Agent] Calling tool: web_search, callId: tc-1771093840359-s4p0
+[32m17|pocket- | [39m2026-02-14 13:30:40: [Agent] Tool result: success=true, 165ms
+[32m17|pocket- | [39m2026-02-14 13:30:40: [Agent] Calling tool: read_scratchpad, callId: tc-1771093840524-gxg9
+[32m17|pocket- | [39m2026-02-14 13:30:40: [Agent] Tool result: success=false, 0ms
+[32m17|pocket- | [39m2026-02-14 13:30:40: [Agent] Calling tool: browser_navigate, callId: tc-1771093840525-yzhs
+[32m17|pocket- | [39m2026-02-14 13:30:42: [Tools] Page captured: https://pocket.graysoft.dev/challenge/login.html (462 chars text)
+[32m17|pocket- | [39m2026-02-14 13:30:42: [Agent] Tool result: success=true, 2036ms
+[32m17|pocket- | [39m2026-02-14 13:30:42: [Agent] Calling tool: web_search, callId: tc-1771093842720-419x
+[32m17|pocket- | [39m2026-02-14 13:30:42: [Agent] Tool result: success=true, 99ms
+[32m17|pocket- | [39m2026-02-14 13:30:42: [Agent] Calling tool: read_scratchpad, callId: tc-1771093842819-eoqg
+[32m17|pocket- | [39m2026-02-14 13:30:42: [Agent] Tool result: success=false, 0ms
+[32m17|pocket- | [39m2026-02-14 13:30:42: [Agent] Calling tool: browser_evaluate, callId: tc-1771093842820-wcs6
+[32m17|pocket- | [39m2026-02-14 13:30:42: [Agent] Tool result: success=true, 2ms
+[32m17|pocket- | [39m2026-02-14 13:30:42: [Agent] Calling tool: list_directory, callId: tc-1771093842972-m05x
+[32m17|pocket- | [39m2026-02-14 13:30:42: [Agent] Tool result: success=true, 1ms
+[32m17|pocket- | [39m2026-02-14 13:30:42: [Agent] Calling tool: run_command, callId: tc-1771093842973-16lr
+[32m17|pocket- | [39m2026-02-14 13:30:43: [Agent] Tool result: success=true, 853ms
+[32m17|pocket- | [39m2026-02-14 13:30:43: [Agent] Skipping read_scratchpad ΓÇö failed 3 times consecutively
+[32m17|pocket- | [39m2026-02-14 13:30:44: [LLM] Cerebras key ...nd2pm8 cooled down for 30s
+[32m17|pocket- | [39m2026-02-14 13:30:44: [LLM] Cerebras ...nd2pm8 failed: Rate limited (429) ΓåÆ next key (1/41)
+[32m17|pocket- | [39m2026-02-14 13:30:44: [LLM] Cerebras key ...pmp6hn cooled down for 30s
+[32m17|pocket- | [39m2026-02-14 13:30:44: [LLM] Cerebras ...pmp6hn failed: Rate limited (429) ΓåÆ next key (2/41)
+[32m17|pocket- | [39m2026-02-14 13:30:44: [LLM] Cerebras key ...cv3f4v cooled down for 30s
+[32m17|pocket- | [39m2026-02-14 13:30:44: [LLM] Cerebras ...cv3f4v failed: Rate limited (429) ΓåÆ next key (3/41)
+[32m17|pocket- | [39m2026-02-14 13:30:45: [LLM] Cerebras key ...2hehcm cooled down for 30s
+[32m17|pocket- | [39m2026-02-14 13:30:45: [LLM] Cerebras ...2hehcm failed: Rate limited (429) ΓåÆ next key (4/41)
+[32m17|pocket- | [39m2026-02-14 13:30:45: [LLM] Cerebras key ...5jjfv2 cooled down for 30s
+[32m17|pocket- | [39m2026-02-14 13:30:45: [LLM] Cerebras ...5jjfv2 failed: Rate limited (429) ΓåÆ next key (5/41)
+[32m17|pocket- | [39m2026-02-14 13:30:46: [LLM] Cerebras key ...n4n23k cooled down for 30s
+[32m17|pocket- | [39m2026-02-14 13:30:46: [LLM] Cerebras ...n4n23k failed: Rate limited (429) ΓåÆ next key (6/41)
+[32m17|pocket- | [39m2026-02-14 13:30:46: [LLM] Cerebras key ...xwjdtx cooled down for 30s
+[32m17|pocket- | [39m2026-02-14 13:30:46: [LLM] Cerebras ...xwjdtx failed: Rate limited (429) ΓåÆ next key (7/41)
+[32m17|pocket- | [39m2026-02-14 13:30:46: [LLM] Cerebras key ...cc5my2 cooled down for 30s
+[32m17|pocket- | [39m2026-02-14 13:30:46: [LLM] Cerebras ...cc5my2 failed: Rate limited (429) ΓåÆ next key (8/41)
+[32m17|pocket- | [39m2026-02-14 13:30:47: [LLM] Cerebras key ...h4n4n2 cooled down for 30s
+[32m17|pocket- | [39m2026-02-14 13:30:47: [LLM] Cerebras ...h4n4n2 failed: Rate limited (429) ΓåÆ next key (9/41)
+[32m17|pocket- | [39m2026-02-14 13:30:49: [LLM] Cerebras key ...kc2wtk cooled down for 3600s
+[32m17|pocket- | [39m2026-02-14 13:30:49: [Agent] Parsed 11 tool calls (capped: dropped 4 excess browser calls)
+[32m17|pocket- | [39m2026-02-14 13:30:49: [Agent] Iteration 1: response length=1988, toolCalls=11
+[32m17|pocket- | [39m2026-02-14 13:30:49: [Agent] Tools: browser_type, browser_type, browser_type, browser_select_option, browser_click, browser_click, browser_click, browser_snapshot, read_scratchpad, read_scratchpad, read_scratchpad
+[32m17|pocket- | [39m2026-02-14 13:30:49: [Agent] Calling tool: browser_type, callId: tc-1771093849406-oe8c
+[32m17|pocket- | [39m2026-02-14 13:30:49: [browserType] sel=aria-ref=e7 role=none text=astudent2026
+[32m17|pocket- | [39m2026-02-14 13:30:49: [Agent] Tool result: success=true, 85ms
+[32m17|pocket- | [39m2026-02-14 13:30:49: [Agent] Calling tool: browser_type, callId: tc-1771093849643-ppsu
+[32m17|pocket- | [39m2026-02-14 13:30:49: [browserType] sel=aria-ref=e11 role=none text=Pr0m3th3us!Academy
+[32m17|pocket- | [39m2026-02-14 13:30:49: [Agent] Tool result: success=true, 93ms
+[32m17|pocket- | [39m2026-02-14 13:30:49: [Agent] Calling tool: browser_type, callId: tc-1771093849888-lv2c
+[32m17|pocket- | [39m2026-02-14 13:30:49: [browserType] sel=aria-ref=e17 role=none text=Lisbon
+[32m17|pocket- | [39m2026-02-14 13:30:50: [Agent] Tool result: success=true, 101ms
+[32m17|pocket- | [39m2026-02-14 13:30:50: [Agent] Calling tool: browser_select_option, callId: tc-1771093850144-nt7e
+[32m17|pocket- | [39m2026-02-14 13:30:50: [browserSelectOption] sel=aria-ref=e20 role=none value=none label=School of Computer Science
+[32m17|pocket- | [39m2026-02-14 13:30:50: [Agent] Tool result: success=true, 370ms
+[32m17|pocket- | [39m2026-02-14 13:30:50: [Agent] Calling tool: browser_click, callId: tc-1771093850671-x13e
+[32m17|pocket- | [39m2026-02-14 13:30:50: [browserClick] sel=aria-ref=e22 role=none name=none
+[32m17|pocket- | [39m2026-02-14 13:30:51: [Agent] Tool result: success=true, 599ms
+[32m17|pocket- | [39m2026-02-14 13:30:51: [Agent] Calling tool: browser_click, callId: tc-1771093851422-urnw
+[32m17|pocket- | [39m2026-02-14 13:30:51: [browserClick] sel=aria-ref=e25 role=none name=none
+[32m17|pocket- | [39m2026-02-14 13:30:52: [Agent] Tool result: success=true, 585ms
+[32m17|pocket- | [39m2026-02-14 13:30:52: [Agent] Calling tool: browser_click, callId: tc-1771093852172-uztm
+[32m17|pocket- | [39m2026-02-14 13:30:52: [browserClick] sel=aria-ref=e27 role=none name=none
+[32m17|pocket- | [39m2026-02-14 13:30:53: [Agent] Tool result: success=true, 712ms
+[32m17|pocket- | [39m2026-02-14 13:30:53: [Agent] Calling tool: browser_snapshot, callId: tc-1771093853039-qz7m
+[32m17|pocket- | [39m2026-02-14 13:30:53: [Agent] Tool result: success=true, 4ms
+[32m17|pocket- | [39m2026-02-14 13:30:53: [Agent] Calling tool: read_scratchpad, callId: tc-1771093853200-bzww
+[32m17|pocket- | [39m2026-02-14 13:30:53: [Agent] Tool result: success=false, 0ms
+[32m17|pocket- | [39m2026-02-14 13:30:53: [Agent] Calling tool: read_scratchpad, callId: tc-1771093853200-5zc2
+[32m17|pocket- | [39m2026-02-14 13:30:53: [Agent] Tool result: success=false, 0ms
+[32m17|pocket- | [39m2026-02-14 13:30:53: [Agent] Calling tool: read_scratchpad, callId: tc-1771093853201-33m7
+[32m17|pocket- | [39m2026-02-14 13:30:53: [Agent] Tool result: success=false, 0ms
+[32m17|pocket- | [39m2026-02-14 13:30:53: [LLM] Cerebras key ...yx3mcv cooled down for 30s
+[32m17|pocket- | [39m2026-02-14 13:30:53: [LLM] Cerebras ...yx3mcv failed: Rate limited (429) ΓåÆ next key (1/41)
+[32m17|pocket- | [39m2026-02-14 13:30:53: [LLM] Cerebras key ...ke9k82 cooled down for 30s
+[32m17|pocket- | [39m2026-02-14 13:30:53: [LLM] Cerebras ...ke9k82 failed: Rate limited (429) ΓåÆ next key (2/41)
+[32m17|pocket- | [39m2026-02-14 13:30:54: [LLM] Cerebras key ...emvw6t cooled down for 7200s
+[32m17|pocket- | [39m2026-02-14 13:30:54: [LLM] Cerebras ...emvw6t failed: HTTP 401: {"message":"The organization this API key belongs is disabled.","type" ΓåÆ next key (3/41)
+[32m17|pocket- | [39m2026-02-14 13:30:54: [LLM] Cerebras key ...d9f9c4 cooled down for 7200s
+[32m17|pocket- | [39m2026-02-14 13:30:54: [LLM] Cerebras ...d9f9c4 failed: HTTP 401: {"message":"The organization this API key belongs is disabled.","type" ΓåÆ next key (4/41)
+[32m17|pocket- | [39m2026-02-14 13:30:54: [LLM] Cerebras key ...jcv4we cooled down for 30s
+[32m17|pocket- | [39m2026-02-14 13:30:54: [LLM] Cerebras ...jcv4we failed: Rate limited (429) ΓåÆ next key (5/41)
+[32m17|pocket- | [39m2026-02-14 13:30:55: [LLM] Cerebras key ...etm5kx cooled down for 7200s
+[32m17|pocket- | [39m2026-02-14 13:30:55: [LLM] Cerebras ...etm5kx failed: HTTP 401: {"message":"The organization this API key belongs is disabled.","type" ΓåÆ next key (6/41)
+[32m17|pocket- | [39m2026-02-14 13:30:55: [LLM] Cerebras key ...kdct9h cooled down for 7200s
+[32m17|pocket- | [39m2026-02-14 13:30:55: [LLM] Cerebras ...kdct9h failed: HTTP 401: {"message":"The organization this API key belongs is disabled.","type" ΓåÆ next key (7/41)
+[32m17|pocket- | [39m2026-02-14 13:30:56: [LLM] Cerebras key ...8kcx5x cooled down for 7200s
+[32m17|pocket- | [39m2026-02-14 13:30:56: [LLM] Cerebras ...8kcx5x failed: HTTP 401: {"message":"The organization this API key belongs is disabled.","type" ΓåÆ next key (8/41)
+[32m17|pocket- | [39m2026-02-14 13:30:56: [LLM] Cerebras key ...99xdmw cooled down for 7200s
+[32m17|pocket- | [39m2026-02-14 13:30:56: [LLM] Cerebras ...99xdmw failed: HTTP 401: {"message":"The organization this API key belongs is disabled.","type" ΓåÆ next key (9/41)
+[32m17|pocket- | [39m2026-02-14 13:30:57: [LLM] Cerebras key ...dv9vyc cooled down for 7200s
+[32m17|pocket- | [39m2026-02-14 13:30:57: [LLM] Cerebras ...dv9vyc failed: HTTP 401: {"message":"The organization this API key belongs is disabled.","type" ΓåÆ next key (10/41)
+[32m17|pocket- | [39m2026-02-14 13:30:57: [LLM] Groq key ...PYhOW8 cooled down for 30s
+[32m17|pocket- | [39m2026-02-14 13:30:57: [LLM] Groq ...PYhOW8 failed: Groq HTTP 429: Rate limit reached for model `llama-3.3-70b-versatile` in organiz ΓåÆ next key (11/41)
+[32m17|pocket- | [39m2026-02-14 13:30:57: [LLM] Groq key ...0QUtFf cooled down for 30s
+[32m17|pocket- | [39m2026-02-14 13:30:57: [LLM] Groq ...0QUtFf failed: Groq HTTP 413: Request too large for model `llama-3.3-70b-versatile` in organiza ΓåÆ next key (12/41)
+[32m17|pocket- | [39m2026-02-14 13:31:02: [Agent] Iteration 2: response length=1306, toolCalls=0
+[32m17|pocket- | [39m2026-02-14 13:31:02: [Agent] Model stopped but 7 todos incomplete ΓÇö nudging continuation (iter 2)
+

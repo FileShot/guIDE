@@ -1,0 +1,101 @@
+{
+  "timestamp": "2026-02-15T20:54:25.507Z",
+  "model": "Qwen3-0.6B-Q8_0",
+  "average": 72.8,
+  "pass": false,
+  "results": [
+    {
+      "id": "P1",
+      "name": "List src files",
+      "score": 100,
+      "tools": [
+        "list_directory"
+      ],
+      "elapsed": 4716
+    },
+    {
+      "id": "P2",
+      "name": "Check Node version",
+      "score": 100,
+      "tools": [
+        "run_command"
+      ],
+      "elapsed": 3507
+    },
+    {
+      "id": "P3",
+      "name": "Search the web",
+      "score": 100,
+      "tools": [
+        "web_search"
+      ],
+      "elapsed": 3224
+    },
+    {
+      "id": "P4",
+      "name": "Create config file",
+      "score": 80,
+      "tools": [
+        "write_file"
+      ],
+      "elapsed": 4548
+    },
+    {
+      "id": "P5",
+      "name": "Browse Tailwind docs",
+      "score": 70,
+      "tools": [
+        "web_search"
+      ],
+      "elapsed": 3418
+    },
+    {
+      "id": "P6",
+      "name": "Read package.json",
+      "score": 100,
+      "tools": [
+        "read_file"
+      ],
+      "elapsed": 5849
+    },
+    {
+      "id": "P7",
+      "name": "npm checks (two commands)",
+      "score": 50,
+      "tools": [
+        "run_command"
+      ],
+      "elapsed": 6490
+    },
+    {
+      "id": "P8",
+      "name": "Web + read local file",
+      "score": 50,
+      "tools": [
+        "web_search"
+      ],
+      "elapsed": 11230
+    },
+    {
+      "id": "P9",
+      "name": "Browse + search + save",
+      "score": 30,
+      "tools": [
+        "browser_navigate"
+      ],
+      "elapsed": 7484
+    },
+    {
+      "id": "P10",
+      "name": "Full project health check",
+      "score": 48,
+      "tools": [
+        "list_directory",
+        "web_search",
+        "write_file",
+        "write_file"
+      ],
+      "elapsed": 10623
+    }
+  ]
+}

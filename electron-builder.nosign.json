@@ -1,0 +1,78 @@
+{
+  "appId": "com.guide.ide",
+  "productName": "guIDE",
+  "copyright": "Copyright © 2025",
+  "directories": {
+    "output": "dist-electron"
+  },
+  "files": [
+    "dist/**/*",
+    "electron-main.js",
+    "preload.js",
+    "main/**/*",
+    "scripts/**/*",
+    "node_modules/**/*",
+    "!node_modules/.cache",
+    "LICENSE"
+  ],
+  "mac": {
+    "category": "public.app-category.developer-tools",
+    "icon": "icon.ico",
+    "target": [
+      {
+        "target": "dmg",
+        "arch": ["x64", "arm64"]
+      }
+    ],
+    "artifactName": "guIDE-${version}-${arch}.${ext}"
+  },
+  "win": {
+    "icon": "icon.ico",
+    "publisherName": "GraySoft LLC",
+    "signingHashAlgorithms": ["sha256"],
+    "target": [
+      {
+        "target": "nsis",
+        "arch": ["x64"]
+      }
+    ]
+  },
+  "nsis": {
+    "oneClick": false,
+    "perMachine": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "guIDE",
+    "installerIcon": "icon.ico",
+    "uninstallerIcon": "icon.ico",
+    "include": "build/installer.nsh",
+    "installerSidebar": "build/installerSidebar.bmp",
+    "installerHeader": "build/installerHeader.bmp",
+    "uninstallerSidebar": "build/installerSidebar.bmp",
+    "license": "LICENSE",
+    "displayLanguageSelector": false,
+    "runAfterFinish": true,
+    "artifactName": "guIDE-Setup-${version}.${ext}"
+  },
+  "linux": {
+    "icon": "icon.ico",
+    "target": [
+      {
+        "target": "AppImage",
+        "arch": ["x64"]
+      }
+    ],
+    "category": "Development",
+    "artifactName": "guIDE-${version}-${arch}.${ext}"
+  },
+  "asar": true,
+  "publish": {
+    "provider": "generic",
+    "url": "https://graysoft.dev/updates"
+  },
+  "asarUnpack": [
+    "node_modules/**",
+    "main/**"
+  ]
+}

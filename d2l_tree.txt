@@ -1,0 +1,289 @@
+- generic [active] [ref=e1]:
+  - banner [ref=e2]:
+    - navigation [ref=e3]:
+      - generic [ref=e4]:
+        - link "skip to main content" [ref=e5] [cursor=pointer]:
+          - /url: javascript:void(0);
+        - generic:
+          - generic [ref=e10]:
+            - generic [ref=e12]:
+              - link "My Home" [ref=e14] [cursor=pointer]:
+                - /url: /d2l/lp/ouHome/defaultHome.d2l
+                - generic [ref=e16]:
+                  - img
+              - generic [ref=e18]:
+                - img
+              - link "University of Maine at Augusta" [ref=e20] [cursor=pointer]:
+                - /url: /d2l/lp/ouHome/home.d2l?ou=6662
+                - img "University of Maine at Augusta" [ref=e23]
+              - generic [ref=e25]:
+                - img
+              - link "University of Maine at Augusta" [ref=e27] [cursor=pointer]:
+                - /url: /d2l/home/6662
+            - generic [ref=e28]:
+              - button "Select a course..." [ref=e31] [cursor=pointer]:
+                - generic [ref=e33]:
+                  - img
+              - generic [ref=e35]:
+                - img
+              - generic [ref=e37]:
+                - button "Subscription alerts" [ref=e40] [cursor=pointer]:
+                  - generic [ref=e42]:
+                    - img
+                - generic [ref=e44]:
+                  - button "Update alerts" [ref=e45] [cursor=pointer]:
+                    - generic [ref=e48]:
+                      - img
+                  - generic [ref=e51]: Update alerts - You have new alerts
+              - generic [ref=e53]:
+                - img
+              - button "Brendan Gray, avatar" [ref=e56] [cursor=pointer]:
+                - generic [ref=e58]:
+                  - img [ref=e60]
+                  - generic [ref=e61]: Brendan Gray
+              - button "Admin Tools" [ref=e64] [cursor=pointer]:
+                - generic [ref=e66]:
+                  - img
+          - list [ref=e71]:
+            - listitem [ref=e72]:
+              - link "Announcements" [ref=e73] [cursor=pointer]:
+                - /url: /d2l/lms/news/main.d2l?ou=6662
+            - listitem [ref=e74]:
+              - link "Discover" [ref=e75] [cursor=pointer]:
+                - /url: /d2l/le/discovery/view/
+            - listitem [ref=e76]:
+              - link "My Media" [ref=e77] [cursor=pointer]:
+                - /url: /d2l/common/dialogs/quickLink/quickLink.d2l?ou=6662&type=lti&rcode=F3C7BF8F-5062-472E-BD78-1E9087192E9D-277&srcou=6606
+            - listitem [ref=e78]:
+              - button "Help" [ref=e80]:
+                - generic [ref=e81]:
+                  - generic [ref=e82]: Help
+                  - generic [ref=e83]:
+                    - img
+            - listitem [ref=e84]:
+              - link "Course Evaluations" [ref=e85] [cursor=pointer]:
+                - /url: /d2l/common/dialogs/quickLink/quickLink.d2l?ou=6662&type=lti&rcode=F3C7BF8F-5062-472E-BD78-1E9087192E9D-2399069&srcou=6606
+  - main [ref=e86]:
+    - generic [ref=e90]:
+      - generic:
+        - generic:
+          - heading "University of Maine at Augusta" [level=1]:
+            - generic:
+              - generic: University of Maine at Augusta
+    - generic [ref=e95]:
+      - generic:
+        - generic [ref=e96]:
+          - region "My Courses" [ref=e97]:
+            - heading "My Courses" [level=2] [ref=e100]
+            - generic [ref=e106]:
+              - generic [ref=e108]:
+                - button "Scroll Backward" [ref=e110] [cursor=pointer]:
+                  - generic [ref=e111]:
+                    - img
+                - tablist [ref=e113]:
+                  - generic:
+                    - tab "All" [ref=e114]:
+                      - generic [ref=e117]: All
+                    - tab "2023 Fall" [ref=e118]:
+                      - generic [ref=e121]: 2023 Fall
+                    - tab "2024 Fall" [ref=e122]:
+                      - generic [ref=e125]: 2024 Fall
+                    - tab "2024 Spring" [ref=e126]:
+                      - generic [ref=e129]: 2024 Spring
+                    - tab "2025 Fall" [ref=e130]:
+                      - generic [ref=e133]: 2025 Fall
+                    - tab "2025 Spring" [ref=e134]:
+                      - generic [ref=e137]: 2025 Spring
+                    - tab "2025 Summer" [ref=e138]:
+                      - generic [ref=e141]: 2025 Summer
+                    - tab "2026 Spring" [selected] [ref=e142]:
+                      - generic [ref=e145]: 2026 Spring
+              - tabpanel "2026 Spring" [ref=e149]:
+                - generic [ref=e150]:
+                  - generic [ref=e152]:
+                    - generic [ref=e155]:
+                      - link "CIS 150:9000-Introduction to Data Science (2026 Spring), 2620.UMS01-S.42746.1, 2026 Spring, Ends May 23, 2026 at 12:00 AM" [ref=e156] [cursor=pointer]:
+                        - /url: /d2l/home/450587
+                        - generic [ref=e157]: CIS 150:9000-Introduction to Data Science (2026 Spring), 2620.UMS01-S.42746.1, 2026 Spring, Ends May 23, 2026 at 12:00 AM
+                      - generic [ref=e158]:
+                        - img [ref=e164]
+                        - generic [ref=e168]:
+                          - generic [ref=e169]: CIS 150:9000-Introduction to Data Science (2026 Spring)
+                          - generic [ref=e171]:
+                            - generic [ref=e174]:
+                              - generic [ref=e175]: ","
+                              - generic [ref=e176]:
+                                - generic [ref=e177]: 2620.UMS01-S.42746.1
+                                - generic [ref=e178]:
+                                  - generic [ref=e179]: ","
+                                  - generic [ref=e180]:
+                                    - img
+                              - generic [ref=e182]: 2026 Spring
+                            - generic [ref=e186]: Closes May 23, 2026 at 12:00 AM
+                      - button "CIS 150:9000-Introduction to Data Science (2026 Spring) course settings" [ref=e190] [cursor=pointer]:
+                        - generic [ref=e192]:
+                          - img
+                      - link "232 Unread Discussions" [ref=e195] [cursor=pointer]:
+                        - /url: https://courses.maine.edu/d2l/p/le/discussions/450587
+                        - generic [ref=e196]: 232 Unread Discussions
+                        - generic [ref=e198]:
+                          - generic [ref=e200]: 99+
+                          - img [ref=e202]:
+                            - img
+                    - generic [ref=e205]:
+                      - link "CIS 216:9000-Programming in C# (2026 Spring), 2620.UMS01-S.42747.1, 2026 Spring, Ends May 23, 2026 at 12:00 AM" [ref=e206] [cursor=pointer]:
+                        - /url: /d2l/home/450018
+                        - generic [ref=e207]: CIS 216:9000-Programming in C# (2026 Spring), 2620.UMS01-S.42747.1, 2026 Spring, Ends May 23, 2026 at 12:00 AM
+                      - generic [ref=e208]:
+                        - img [ref=e214]
+                        - generic [ref=e218]:
+                          - generic [ref=e219]: CIS 216:9000-Programming in C# (2026 Spring)
+                          - generic [ref=e221]:
+                            - generic [ref=e224]:
+                              - generic [ref=e225]: ","
+                              - generic [ref=e226]:
+                                - generic [ref=e227]: 2620.UMS01-S.42747.1
+                                - generic [ref=e228]:
+                                  - generic [ref=e229]: ","
+                                  - generic [ref=e230]:
+                                    - img
+                              - generic [ref=e232]: 2026 Spring
+                            - generic [ref=e236]: Closes May 23, 2026 at 12:00 AM
+                      - button "CIS 216:9000-Programming in C# (2026 Spring) course settings" [ref=e240] [cursor=pointer]:
+                        - generic [ref=e242]:
+                          - img
+                    - generic [ref=e245]:
+                      - link "CIS 218:9000(UMA) | 4190(UMM)-Introduction to SQL (2026 Spring), 2620.UMS01-S.42748.1, 2026 Spring, Ends May 23, 2026 at 12:00 AM" [ref=e246] [cursor=pointer]:
+                        - /url: /d2l/home/449658
+                        - generic [ref=e247]: CIS 218:9000(UMA) | 4190(UMM)-Introduction to SQL (2026 Spring), 2620.UMS01-S.42748.1, 2026 Spring, Ends May 23, 2026 at 12:00 AM
+                      - generic [ref=e248]:
+                        - img [ref=e254]
+                        - generic [ref=e258]:
+                          - generic [ref=e259]: CIS 218:9000(UMA) | 4190(UMM)-Introduction to SQL (2026 Spring)
+                          - generic [ref=e261]:
+                            - generic [ref=e264]:
+                              - generic [ref=e265]: ","
+                              - generic [ref=e266]:
+                                - generic [ref=e267]: 2620.UMS01-S.42748.1
+                                - generic [ref=e268]:
+                                  - generic [ref=e269]: ","
+                                  - generic [ref=e270]:
+                                    - img
+                              - generic [ref=e272]: 2026 Spring
+                            - generic [ref=e276]: Closes May 23, 2026 at 12:00 AM
+                      - button "CIS 218:9000(UMA) | 4190(UMM)-Introduction to SQL (2026 Spring) course settings" [ref=e280] [cursor=pointer]:
+                        - generic [ref=e282]:
+                          - img
+                    - generic [ref=e285]:
+                      - 'link "MAT 261: Applied Linear Algebra (2026 Spring), 2620.UMS01-C.0162.1, 2026 Spring, Ends May 23, 2026 at 12:00 AM" [ref=e286] [cursor=pointer]':
+                        - /url: /d2l/home/449780
+                        - generic [ref=e287]: "MAT 261: Applied Linear Algebra (2026 Spring), 2620.UMS01-C.0162.1, 2026 Spring, Ends May 23, 2026 at 12:00 AM"
+                      - generic [ref=e288]:
+                        - img [ref=e294]
+                        - generic [ref=e298]:
+                          - generic [ref=e299]: "MAT 261: Applied Linear Algebra (2026 Spring)"
+                          - generic [ref=e301]:
+                            - generic [ref=e304]:
+                              - generic [ref=e305]: ","
+                              - generic [ref=e306]:
+                                - generic [ref=e307]: 2620.UMS01-C.0162.1
+                                - generic [ref=e308]:
+                                  - generic [ref=e309]: ","
+                                  - generic [ref=e310]:
+                                    - img
+                              - generic [ref=e312]: 2026 Spring
+                            - generic [ref=e316]: Closes May 23, 2026 at 12:00 AM
+                      - 'button "MAT 261: Applied Linear Algebra (2026 Spring) course settings" [ref=e320] [cursor=pointer]':
+                        - generic [ref=e322]:
+                          - img
+                      - link [ref=e325] [cursor=pointer]:
+                        - /url: https://courses.maine.edu/d2l/p/le/discussions/449780
+                        - generic [ref=e328]:
+                          - generic [ref=e330]: "49"
+                          - img [ref=e332]:
+                            - img
+                  - link "View All Courses (4)" [ref=e335] [cursor=pointer]:
+                    - /url: javascript:void(0);
+                    - heading "View All Courses (4)" [level=3] [ref=e337]
+          - region "UMS Announcements" [ref=e338]:
+            - generic [ref=e339]:
+              - heading "UMS Announcements" [level=2] [ref=e341]
+              - button "Actions for UMS Announcements" [ref=e345] [cursor=pointer]:
+                - generic [ref=e347]:
+                  - img
+            - generic [ref=e354]:
+              - paragraph [ref=e355]:
+                - link "Click to View the latest changes to Brightspace" [ref=e356] [cursor=pointer]:
+                  - /url: https://courses.maine.edu/d2l/le/content/6606/viewContent/2232410/View
+              - paragraph [ref=e357]:
+                - link "Attention New Employees - You must complete FERPA training before working in Brightspace" [ref=e358] [cursor=pointer]:
+                  - /url: https://courses.maine.edu/d2l/le/content/6606/viewContent/2572842/View
+        - generic [ref=e359]:
+          - region "Access Google Workspace" [ref=e360]:
+            - generic [ref=e361]:
+              - heading "Access Google Workspace" [level=2] [ref=e363]
+              - button "Actions for Access Google Workspace" [ref=e367] [cursor=pointer]:
+                - generic [ref=e369]:
+                  - img
+            - iframe [ref=e375]:
+              - generic [ref=f10e14]:
+                - text: Authorize your Google account.
+                - text: "Google Workspace Username: brendan.gray@maine.edu"
+                - text: If this is not your Google account, please contact your administrator
+                - button "Authorize" [ref=f10e15] [cursor=pointer]
+          - 'region "🟢 Students: Hello, Brendan!" [ref=e376]':
+            - generic [ref=e377]:
+              - 'heading "🟢 Students: Hello, Brendan!" [level=2] [ref=e379]'
+              - 'button "Actions for 🟢 Students: Hello, Brendan!" [ref=e383] [cursor=pointer]':
+                - generic [ref=e385]:
+                  - img
+            - iframe [ref=e391]:
+              - generic [ref=f11e2]:
+                - paragraph [ref=f11e3]:
+                  - strong [ref=f11e5]:
+                    - strong [ref=f11e8]: "REMINDERS:"
+                - paragraph [ref=f11e9]:
+                  - strong [ref=f11e11]: Open Date vs. Date Classes Begin
+                - paragraph [ref=f11e12]:
+                  - text: The
+                  - strong [ref=f11e13]: Open Date
+                  - text: for your course might be sooner than the date
+                  - strong [ref=f11e14]: Classes begin.
+                - paragraph [ref=f11e15]:
+                  - strong
+                  - text: 🟢
+                  - strong [ref=f11e16]: Spring 2026 Courses Become "Open" on Tuesday, 1/13/2026
+                  - text: . The date
+                  - strong [ref=f11e17]: Classes begin is Tuesday, 1/20/2026.
+                - paragraph [ref=f11e18]: When classes open before the official start date, this gives you more time to review introductory material when it becomes available.
+                - paragraph [ref=f11e19]:
+                  - text: The
+                  - strong [ref=f11e20]: D
+                  - generic [ref=f11e21]:
+                    - strong [ref=f11e22]: ate
+                    - strong [ref=f11e23]: Classes Begin
+                    - text: for each semester can be found on the UMA Academic Calendar by
+                    - link "following this link" [ref=f11e25] [cursor=pointer]:
+                      - /url: https://www.uma.edu/academics/calendar/
+                    - text: . 🔗
+                - generic [ref=f11e27]:
+                  - paragraph [ref=f11e28]:
+                    - link "Visit the Tech Hub" [ref=f11e29] [cursor=pointer]:
+                      - /url: https://sites.google.com/maine.edu/thehub/
+                      - img "Visit the Tech Hub" [ref=f11e30]
+                  - paragraph [ref=f11e31]: The UMA Student Tech Hub
+                  - button "Visit The Hub!" [ref=f11e32] [cursor=pointer]
+                - generic [ref=f11e34]:
+                  - paragraph [ref=f11e35]:
+                    - text: Contact the UMS IT Helpdesk For Live Support!
+                    - text: 1-800-696-4357 (Phone or Chat preferred for CRITICAL issues)
+                    - text: "email: help@maine.edu"
+                  - button "Call/Chat/Email the IT Help Desk" [ref=f11e36] [cursor=pointer]
+                - generic [ref=f11e38]:
+                  - paragraph [ref=f11e39]:
+                    - text: Brightspace Student Orientation Course.
+                    - text: Learn about how Brightspace works.
+                  - button "Get Started" [ref=f11e40] [cursor=pointer]
+                - generic [ref=f11e42]:
+                  - paragraph [ref=f11e43]: "ACCESS: Accessible Content Creation that Ensures Support and Success"
+                  - button "Enroll" [ref=f11e44] [cursor=pointer]

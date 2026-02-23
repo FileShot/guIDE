@@ -1,0 +1,8 @@
+version: 2.0.0
+files:
+  - url: guIDE-Setup-2.0.0.exe
+    sha512: 8bieZs3obKnUm69MlqX9tquyx0NrT+PBcvssb+rjCa1Mep5xKwOnDboOp8+xKvF2Gbi8ZUWf0rkN65eUhVG0cQ==
+    size: 409040164
+path: guIDE-Setup-2.0.0.exe
+sha512: 8bieZs3obKnUm69MlqX9tquyx0NrT+PBcvssb+rjCa1Mep5xKwOnDboOp8+xKvF2Gbi8ZUWf0rkN65eUhVG0cQ==
+releaseDate: '2026-02-19T19:19:40.385Z'

@@ -1,0 +1,344 @@
+{
+  "Qwen3-4B-Instruct-2507": {
+    "tests": {
+      "T1": {
+        "score": 100,
+        "reason": "Perfect tool call",
+        "weight": 2,
+        "responseTokens": 24,
+        "thinkingTokens": 0,
+        "elapsedMs": 2410,
+        "toolCallCount": 1,
+        "toolNames": [
+          "browser_navigate"
+        ]
+      },
+      "T2": {
+        "score": 50,
+        "reason": "Only one file read: src/App.tsx",
+        "weight": 3,
+        "responseTokens": 23,
+        "thinkingTokens": 0,
+        "elapsedMs": 1340,
+        "toolCallCount": 1,
+        "toolNames": [
+          "read_file"
+        ]
+      },
+      "T3": {
+        "score": 100,
+        "reason": "File: hello.js, content length: 73",
+        "weight": 3,
+        "responseTokens": 81,
+        "thinkingTokens": 0,
+        "elapsedMs": 4276,
+        "toolCallCount": 1,
+        "toolNames": [
+          "write_file"
+        ]
+      },
+      "T4": {
+        "score": 40,
+        "reason": "Used browser_navigate instead of web_search",
+        "weight": 2,
+        "responseTokens": 39,
+        "thinkingTokens": 0,
+        "elapsedMs": 2225,
+        "toolCallCount": 1,
+        "toolNames": [
+          "browser_navigate"
+        ]
+      },
+      "T5": {
+        "score": 100,
+        "reason": "Correct navigation to HN",
+        "weight": 2,
+        "responseTokens": 28,
+        "thinkingTokens": 0,
+        "elapsedMs": 1781,
+        "toolCallCount": 1,
+        "toolNames": [
+          "browser_navigate"
+        ]
+      }
+    },
+    "totalScore": 930,
+    "totalWeight": 12,
+    "tokPerSec": 16.2,
+    "percentage": 77.5
+  },
+  "Qwen3-Coder-30B-A3B": {
+    "tests": {
+      "T1": {
+        "score": 100,
+        "reason": "Perfect tool call",
+        "weight": 2,
+        "responseTokens": 24,
+        "thinkingTokens": 0,
+        "elapsedMs": 8822,
+        "toolCallCount": 1,
+        "toolNames": [
+          "browser_navigate"
+        ]
+      },
+      "T2": {
+        "score": 100,
+        "reason": "Both files read correctly",
+        "weight": 3,
+        "responseTokens": 72,
+        "thinkingTokens": 0,
+        "elapsedMs": 12106,
+        "toolCallCount": 2,
+        "toolNames": [
+          "read_file",
+          "read_file"
+        ]
+      },
+      "T3": {
+        "score": 100,
+        "reason": "File: hello.js, content length: 59",
+        "weight": 3,
+        "responseTokens": 46,
+        "thinkingTokens": 0,
+        "elapsedMs": 6475,
+        "toolCallCount": 1,
+        "toolNames": [
+          "write_file"
+        ]
+      },
+      "T4": {
+        "score": 40,
+        "reason": "Used browser_navigate instead of web_search",
+        "weight": 2,
+        "responseTokens": 26,
+        "thinkingTokens": 0,
+        "elapsedMs": 3590,
+        "toolCallCount": 1,
+        "toolNames": [
+          "browser_navigate"
+        ]
+      },
+      "T5": {
+        "score": 100,
+        "reason": "Correct navigation to HN",
+        "weight": 2,
+        "responseTokens": 45,
+        "thinkingTokens": 0,
+        "elapsedMs": 5993,
+        "toolCallCount": 2,
+        "toolNames": [
+          "browser_navigate",
+          "browser_snapshot"
+        ]
+      }
+    },
+    "totalScore": 1080,
+    "totalWeight": 12,
+    "tokPerSec": 5.8,
+    "percentage": 90
+  },
+  "Qwen3-0.6B": {
+    "tests": {
+      "T1": {
+        "score": 50,
+        "reason": "Missing url param",
+        "weight": 2,
+        "responseTokens": 25,
+        "thinkingTokens": 157,
+        "elapsedMs": 1697,
+        "toolCallCount": 1,
+        "toolNames": [
+          "browser_navigate"
+        ]
+      },
+      "T2": {
+        "score": 10,
+        "reason": "No read_file calls, got: browser_navigate",
+        "weight": 3,
+        "responseTokens": 25,
+        "thinkingTokens": 457,
+        "elapsedMs": 3745,
+        "toolCallCount": 1,
+        "toolNames": [
+          "browser_navigate"
+        ]
+      },
+      "T3": {
+        "score": 30,
+        "reason": "File: , content length: 0",
+        "weight": 3,
+        "responseTokens": 71,
+        "thinkingTokens": 206,
+        "elapsedMs": 2120,
+        "toolCallCount": 2,
+        "toolNames": [
+          "write_file",
+          "write_file"
+        ]
+      },
+      "T4": {
+        "score": 40,
+        "reason": "Used browser_navigate instead of web_search",
+        "weight": 2,
+        "responseTokens": 30,
+        "thinkingTokens": 202,
+        "elapsedMs": 1778,
+        "toolCallCount": 1,
+        "toolNames": [
+          "browser_navigate"
+        ]
+      },
+      "T5": {
+        "score": 100,
+        "reason": "Correct navigation to HN",
+        "weight": 2,
+        "responseTokens": 29,
+        "thinkingTokens": 251,
+        "elapsedMs": 2207,
+        "toolCallCount": 1,
+        "toolNames": [
+          "browser_navigate"
+        ]
+      }
+    },
+    "totalScore": 500,
+    "totalWeight": 12,
+    "tokPerSec": 125.8,
+    "percentage": 41.7
+  },
+  "Qwen3-1.7B": {
+    "tests": {
+      "T1": {
+        "score": 100,
+        "reason": "Perfect tool call",
+        "weight": 2,
+        "responseTokens": 25,
+        "thinkingTokens": 218,
+        "elapsedMs": 2875,
+        "toolCallCount": 1,
+        "toolNames": [
+          "browser_navigate"
+        ]
+      },
+      "T2": {
+        "score": 10,
+        "reason": "No read_file calls, got: write_todos",
+        "weight": 3,
+        "responseTokens": 41,
+        "thinkingTokens": 473,
+        "elapsedMs": 5432,
+        "toolCallCount": 1,
+        "toolNames": [
+          "write_todos"
+        ]
+      },
+      "T3": {
+        "score": 80,
+        "reason": "File: , content length: 64",
+        "weight": 3,
+        "responseTokens": 44,
+        "thinkingTokens": 352,
+        "elapsedMs": 4200,
+        "toolCallCount": 1,
+        "toolNames": [
+          "write_file"
+        ]
+      },
+      "T4": {
+        "score": 40,
+        "reason": "Used browser_navigate instead of web_search",
+        "weight": 2,
+        "responseTokens": 40,
+        "thinkingTokens": 747,
+        "elapsedMs": 8331,
+        "toolCallCount": 1,
+        "toolNames": [
+          "browser_navigate"
+        ]
+      },
+      "T5": {
+        "score": 100,
+        "reason": "Correct navigation to HN",
+        "weight": 2,
+        "responseTokens": 29,
+        "thinkingTokens": 177,
+        "elapsedMs": 2203,
+        "toolCallCount": 1,
+        "toolNames": [
+          "browser_navigate"
+        ]
+      }
+    },
+    "totalScore": 750,
+    "totalWeight": 12,
+    "tokPerSec": 93.1,
+    "percentage": 62.5
+  },
+  "Qwen2.5-Coder-1.5B": {
+    "tests": {
+      "T1": {
+        "score": 100,
+        "reason": "Perfect tool call",
+        "weight": 2,
+        "responseTokens": 65,
+        "thinkingTokens": 0,
+        "elapsedMs": 1099,
+        "toolCallCount": 1,
+        "toolNames": [
+          "browser_navigate"
+        ]
+      },
+      "T2": {
+        "score": 40,
+        "reason": "Read wrong files: , ",
+        "weight": 3,
+        "responseTokens": 47,
+        "thinkingTokens": 0,
+        "elapsedMs": 442,
+        "toolCallCount": 2,
+        "toolNames": [
+          "read_file",
+          "read_file"
+        ]
+      },
+      "T3": {
+        "score": 20,
+        "reason": "Code in prose but no tool call",
+        "weight": 3,
+        "responseTokens": 106,
+        "thinkingTokens": 0,
+        "elapsedMs": 963,
+        "toolCallCount": 0,
+        "toolNames": []
+      },
+      "T4": {
+        "score": 40,
+        "reason": "Used browser_navigate instead of web_search",
+        "weight": 2,
+        "responseTokens": 54,
+        "thinkingTokens": 0,
+        "elapsedMs": 498,
+        "toolCallCount": 1,
+        "toolNames": [
+          "browser_navigate"
+        ]
+      },
+      "T5": {
+        "score": 100,
+        "reason": "Correct navigation to HN",
+        "weight": 2,
+        "responseTokens": 36,
+        "thinkingTokens": 0,
+        "elapsedMs": 356,
+        "toolCallCount": 1,
+        "toolNames": [
+          "browser_navigate"
+        ]
+      }
+    },
+    "totalScore": 660,
+    "totalWeight": 12,
+    "tokPerSec": 91.7,
+    "percentage": 55
+  }
+}

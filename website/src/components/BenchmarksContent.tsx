@@ -33,6 +33,16 @@ export default function BenchmarksContent() {
           </p>
         </div>
 
+        {/* Ad banner — 728×90 desktop / 320×50 mobile */}
+        <div className="flex justify-center mb-8">
+          <div className="hidden sm:block">
+            <iframe src="//shopsuptight.com/watchnew?key=394217cb689e940d870aef10bfeecd47" width="728" height="90" frameBorder="0" scrolling="no" style={{border:0,maxWidth:'100%'}} />
+          </div>
+          <div className="block sm:hidden w-full px-2" style={{maxWidth:'100vw'}}>
+            <iframe src="//shopsuptight.com/watchnew?key=0496beb6abbf30571b993deaa7013d86" width="100%" height="50" frameBorder="0" scrolling="no" style={{border:0,display:'block'}} />
+          </div>
+        </div>
+
         <CommunityLeaderboard />
 
         {/* CTA */}

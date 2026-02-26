@@ -69,11 +69,11 @@ const DEFAULTS: SettingsState = {
 const CLOUD_PROVIDERS = [
   { id: 'none', label: 'Local Model (default)' },
   { id: 'groq', label: 'Groq (Free, Ultra-Fast)', models: ['llama-3.3-70b-versatile', 'meta-llama/llama-4-maverick-17b-128e-instruct', 'meta-llama/llama-4-scout-17b-16e-instruct', 'moonshotai/kimi-k2-instruct', 'openai/gpt-oss-120b', 'qwen/qwen3-32b', 'llama-3.1-8b-instant'] },
-  { id: 'cerebras', label: 'Cerebras (Free, Ultra-Fast)', models: ['zai-glm-4.7', 'gpt-oss-120b', 'qwen-3-235b-a22b-instruct-2507', 'llama3.1-8b'] },
+  { id: 'cerebras', label: 'Cerebras (Free, Ultra-Fast)', models: ['gpt-oss-120b', 'qwen-3-235b-a22b-instruct-2507', 'llama3.1-8b'] },
   { id: 'google', label: 'Google Gemini', models: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash', 'gemini-2.0-flash-lite'] },
   { id: 'openai', label: 'OpenAI', models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'o1', 'o1-mini', 'o3-mini'] },
   { id: 'anthropic', label: 'Anthropic', models: ['claude-sonnet-4-20250514', 'claude-3-5-sonnet-20241022', 'claude-3-5-haiku-20241022'] },
-  { id: 'sambanova', label: 'SambaNova (Free)', models: ['DeepSeek-V3.2', 'DeepSeek-V3.1', 'DeepSeek-R1-0528', 'Meta-Llama-3.3-70B-Instruct', 'Llama-4-Maverick-17B-128E-Instruct', 'Qwen3-235B', 'Qwen3-32B', 'gpt-oss-120b', 'MiniMax-M2.5'] },
+  { id: 'sambanova', label: 'SambaNova (Free)', models: ['DeepSeek-V3.2', 'DeepSeek-V3.1', 'DeepSeek-R1-0528', 'Meta-Llama-3.3-70B-Instruct', 'Llama-4-Maverick-17B-128E-Instruct', 'Qwen3-235B', 'Qwen3-32B', 'MiniMax-M2.5'] },
   { id: 'openrouter', label: 'OpenRouter', models: [] },
   { id: 'xai', label: 'xAI / Grok', models: ['grok-3', 'grok-3-mini'] },
   { id: 'apifreellm', label: 'APIFreeLLM (Free)', models: [] },
@@ -212,6 +212,7 @@ export const AdvancedSettingsPanel: React.FC = () => {
   const [saved, setSaved] = useState(false);
   const [toolDefsPreview, setToolDefsPreview] = useState<string>('');
   const [defaultPreamble, setDefaultPreamble] = useState<string>('');
+  const [applyStatus, setApplyStatus] = useState<{ appliedToEngine: boolean; needsReload: string[] } | null>(null);
 
   // Load settings on mount
   useEffect(() => {
@@ -260,10 +261,16 @@ export const AdvancedSettingsPanel: React.FC = () => {
 
   const save = useCallback(async () => {
     try {
-      await (window as any).electronAPI?.saveSettings?.(settings);
+      const result = await (window as any).electronAPI?.saveSettings?.(settings);
       setDirty(false);
       setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
+      if (result) {
+        setApplyStatus({
+          appliedToEngine: result.appliedToEngine ?? false,
+          needsReload: result.needsReload ?? [],
+        });
+      }
+      setTimeout(() => { setSaved(false); setApplyStatus(null); }, 4000);
     } catch (e) {
       console.error('Failed to save settings:', e);
     }
@@ -306,7 +313,24 @@ export const AdvancedSettingsPanel: React.FC = () => {
             Reset
           </button>
         </div>
-        {dirty && <span className="text-[10px]" style={{ color: 'var(--theme-accent)' }}>Unsaved changes</span>}
+        <div className="flex items-center gap-2">
+          {dirty && <span className="text-[10px]" style={{ color: 'var(--theme-accent)' }}>Unsaved changes</span>}
+          {saved && applyStatus && (
+            <span
+              className="text-[10px] px-1.5 py-0.5 rounded"
+              style={{
+                backgroundColor: applyStatus.appliedToEngine ? 'rgba(34,197,94,0.15)' : 'rgba(251,191,36,0.15)',
+                color: applyStatus.appliedToEngine ? '#22c55e' : '#fbbf24',
+                border: `1px solid ${applyStatus.appliedToEngine ? '#22c55e' : '#fbbf24'}`,
+              }}
+              title={applyStatus.appliedToEngine
+                ? 'Inference parameters updated — active for next generation'
+                : 'Saved to disk. Load a model to apply inference settings.'}
+            >
+              {applyStatus.appliedToEngine ? '✓ Applied to engine' : '⚠ Saved — no model loaded'}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Scrollable settings body */}
@@ -354,7 +378,10 @@ export const AdvancedSettingsPanel: React.FC = () => {
         <Section title="LLM / Inference" defaultOpen={true}>
           <SliderField label="Temperature" value={settings.temperature} min={0} max={2} step={0.05} onChange={v => update('temperature', v)} hint="Lower = more focused, higher = more creative" />
           <SliderField label="Max Tokens" value={settings.maxTokens} min={256} max={8192} step={256} onChange={v => update('maxTokens', v)} hint="Maximum tokens per generation" />
-          <SliderField label="Context Size" value={settings.contextSize} min={2048} max={131072} step={1024} onChange={v => update('contextSize', v)} hint="Total context window for the model" />
+          <div>
+            <SliderField label="Context Size" value={settings.contextSize} min={2048} max={131072} step={1024} onChange={v => update('contextSize', v)} hint="Total context window — requires model reload to apply" />
+            <div className="text-[10px] mt-0.5" style={{ color: '#fbbf24', opacity: 0.8 }}>&#9888; Requires model reload to apply</div>
+          </div>
           <SliderField label="Top-P" value={settings.topP} min={0} max={1} step={0.05} onChange={v => update('topP', v)} />
           <SliderField label="Top-K" value={settings.topK} min={1} max={100} step={1} onChange={v => update('topK', v)} />
           <SliderField label="Repeat Penalty" value={settings.repeatPenalty} min={1} max={2} step={0.05} onChange={v => update('repeatPenalty', v)} />
@@ -442,7 +469,10 @@ export const AdvancedSettingsPanel: React.FC = () => {
             onChange={v => update('gpuPreference', v as 'auto' | 'cpu')}
             hint="Auto will use your GPU if available."
           />
-          <SliderField label="GPU Layers" value={settings.gpuLayers} min={0} max={64} step={1} onChange={v => update('gpuLayers', v)} hint="Layers offloaded to GPU. More = faster but uses more VRAM." />
+          <div>
+            <SliderField label="GPU Layers" value={settings.gpuLayers} min={0} max={64} step={1} onChange={v => update('gpuLayers', v)} hint="Layers offloaded to GPU. More = faster but uses more VRAM." />
+            <div className="text-[10px] mt-0.5" style={{ color: '#fbbf24', opacity: 0.8 }}>&#9888; Requires model reload to apply</div>
+          </div>
         </Section>
 
         {/* ── Editor ───────────────────────────── */}

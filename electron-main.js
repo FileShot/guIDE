@@ -59,6 +59,7 @@ const { PlaywrightBrowser } = require('./main/playwrightBrowser');
 const { MemoryStore } = require('./main/memoryStore');
 const { CloudLLMService } = require('./main/cloudLLMService');
 const { ImageGenerationService } = require('./main/imageGenerationService');
+const { LocalImageEngine } = require('./main/localImageEngine');
 const { GitManager } = require('./main/gitManager');
 const LicenseManager = require('./main/licenseManager');
 const { DebugService } = require('./main/debugService');
@@ -73,6 +74,7 @@ const { encryptApiKey, decryptApiKey, loadSavedApiKeys } = require('./main/apiKe
 const { _truncateResult, _detectGPU, getCpuUsage } = require('./main/mainUtils');
 const { createMenu } = require('./main/appMenu');
 const { register: registerAgenticChat } = require('./main/agenticChat');
+const { runFirstRunSetup } = require('./main/firstRunSetup');
 
 // IPC handler modules — Core (loaded eagerly at startup)
 const { register: registerFileSystem } = require('./main/ipc/fileSystemHandlers');
@@ -94,6 +96,9 @@ const { register: registerUtility } = require('./main/ipc/utilityHandlers');
 const { register: registerImageGen } = require('./main/ipc/imageGenHandlers');
 const { register: registerBenchmark } = require('./main/ipc/benchmarkHandlers');
 const { register: registerTemplates } = require('./main/ipc/templateHandlers');
+const { register: registerTodoTree } = require('./main/ipc/todoTreeHandlers');
+const { register: registerLiveServer } = require('./main/ipc/liveServerHandlers');
+const { register: registerRestClient } = require('./main/ipc/restClientHandlers');
 
 // IPC handler modules — Deferred (loaded after window shows for faster startup)
 let _deferredRegistered = false;
@@ -139,6 +144,7 @@ const playwrightBrowser = new PlaywrightBrowser();
 const memoryStore = new MemoryStore(userDataPath);
 const cloudLLM = new CloudLLMService();
 const imageGen = new ImageGenerationService();
+const localImageEngine = new LocalImageEngine();
 const gitManager = new GitManager();
 const licenseManager = new LicenseManager();
 // Wire LicenseManager so cloudLLM can retrieve session token for server proxy routing
@@ -197,7 +203,7 @@ const ctx = {
   // Services
   llmEngine, modelManager, ragEngine, terminalManager,
   webSearch, browserManager, playwrightBrowser,
-  memoryStore, cloudLLM, imageGen, gitManager, licenseManager,
+  memoryStore, cloudLLM, imageGen, localImageEngine, gitManager, licenseManager,
   debugService, mcpToolServer, ConversationSummarizer,
 
   // Utilities
@@ -232,6 +238,9 @@ registerUtility(ctx);
 registerImageGen(ctx);
 registerBenchmark(ctx);
 registerTemplates(ctx);
+registerTodoTree(ctx);
+registerLiveServer(ctx);
+registerRestClient(ctx);
 registerAgenticChat(ctx);
 
 // ─── Auto-Update IPC ─────────────────────────────────────────────────
@@ -387,55 +396,17 @@ async function initializeServices() {
     }
   } catch (_) {}
 
-  // Built-in Cerebras key pool — free cloud AI out of the box
-  // Keys are obfuscated to prevent casual discovery; not encryption, just obscurity
+  // Built-in Pollinations key pool — video generation works out of the box
+  // Keys use guIDE-built-in-2026 XOR scheme (different from cloudLLMService.js 0x5A scheme)
   const _S = 'guIDE-built-in-2026';
   const _d = (e) => { const b = Buffer.from(e, 'base64'); let r = ''; for (let i = 0; i < b.length; i++) r += String.fromCharCode(b[i] ^ _S.charCodeAt(i % _S.length)); return r; };
-  const _ck = [
-    _d('BAYiaSsYDBMdAQ0eBAtIUUlCTlIMIyIyWhseWxoDSR5XWkQIUQ4CFnA0MkUJQAcEBhQKAA=='),
-    _d('BAYiaTFOBBMCBEBdHhYUQkYAUAwbLS9xSRYDWwEMXR0eG0YGV11SEywwfE4KEBACFxQBXA=='),
-    _d('BAYiaSgbUBMeVANZDQYbVEgGUAIfIjQ9TlodHQIMGxFcS19EX1IJTXEgPBVbR1oVA1QDCw=='),
-    _d('BAYiaSZFCR0BBgxdAwZDRkABD19GPSw3H1pAGwceQ1wXWgAFXwJfAnwwPUZaEAcIRl0EVg=='),
-    _d('BAYiaXYbWwcMHkdFWgpHRkJLAANBLHYgWg8WWxgfThlbRVFURk4EAzk0N0cITRkBBBsBAA=='),
-    _d('BAYiaSNGFEEQXhlGA1YfWkZCUxANLSc3TgEHGwJNFVFbVEJaWAUfQH0uLVlaQwoaR0tdGA=='),
-    _d('BAYiaXYeGkFbHhlGG10ZAUcGUwpDKip8SAYNHRwfSw9aSFRGRgVTEywzfBQQQ1sEEUUKAw=='),
-    _d('BAYiaS1FBx0HWBoYXA1ZRVQEXVRMLzArGFATDFhCWh4YGF8GXw4MDSIsIE4BHwwBAlpfGg=='),
-    _d('BAYiaXNDChYDVEYVXRxfBFtWWwQffz1xHxpMARVCG1FaFAtVRgBeGHw9IUsEBQ1VEhQKWg=='),
-    _d('BAYiaSFdBwcBCAwVH1sZAUdRXFNHMCB3GBYYH18QRVoDVAFJVg8TA38qcxQJFgMPAhkeCw=='),
-    _d('BAYiaSYfVxsECAJZCgBdXwVfXhAbOSwxXRRMAQlHVRldVFlUSlgQQ3EpPE4bQwwYGRgCFg=='),
-    _d('BAYiaSgZVxNbGwRbAlhLUUhZBB4CPSohRQkMDQhNGV0GWUYEB15UTDkyd1tQGwIIF1lQBg=='),
-    _d('BAYiaXdHEgcRXhFOHQhGVEJGQBFGfzAvWRVMAR5GHhEeHlxGV14JRnsqIU4bEFEHF1VcFg=='),
-    _d('BAYiaXYUFBYEAgQbB1xLCkdWDg8HLyJzSQkRHxQMGxkAH0BHWUYKTSw0IEgHE1BVDEkEGQ=='),
-    _d('BAYiaXAVBAEHWU1bGxdGV0RaW1MBcTRxGFQFH18fFQwGW1dYV1IDQy93d1QPBQ0aTVsQDQ=='),
-    _d('BAYiaSEYCQ1dBkJDA1hLWFRaAlVDez0oRlRAHw8DXV1aH1QDSkYCFip8MxkIA1oGBB4CBg=='),
-    _d('BAYiaXBdEg0dVAJaURhaBgIBTgwNI3IoFAYdDx5BFQQKWUIEAQIJBzEgLkBRQB9VQV9RCw=='),
-    _d('BAYiaXAfBhAEWgYZXQpfVwVcXVEFPTMxRglHHQdBRQ8ISARaS0IfA3E9fRRbQ1pfQUceXA=='),
-    _d('BAYiaSBaUBYCGEBUXAsURFMGWxAffykmTlodH1oeRVxXX1QFRAIfDDl2I1oPHhFVGkhQBQ=='),
-  ];
-  for (const k of _ck) cloudLLM.addKeyToPool('cerebras', k);
-  if (!cloudLLM.apiKeys.cerebras) cloudLLM.setApiKey('cerebras', _ck[0]);
-
-  // Built-in Groq key pool — 7 keys × 1000 RPM = 7000 RPM combined
-  const _gk = [
-    _d('AAYiGzVDLiEjXz9qIT9acwcCBgEyBTF8eiUREA5HazA0GlFCYngpMA0xDVQbRiEuHn05N0V9Zwo='),
-    _d('AAYiGykUWjodLzVmDSl0SFQGRgMAICsveiUREA5HazA4alVKUA8sBTgAM0EoPAU1NlQgGRUCZks='),
-    _d('AAYiGyBfAUAbIz9JXD11UVpFZS8kLTwLeiUREA5HazBWYVtdYWwgNA83NF4wPl4uEGEmGmJzXkA='),
-    _d('AAYiGxIYKDg4HURjPz5VXml3BjNGeiYseiUREA5HazAJe31IeGEjRHAqP0AWOzsZEF4eBX0CBHA='),
-    _d('AAYiGwFcABYdIwd1CzQeA3h0czYtfzQweiUREA5HazAiewZKdwEOJHsMdmMaRwsuDh0ACUBnY0E='),
-    _d('AAYiGxNVLEFZJxN1E1lden1hfCQGGXUreiUREA5HazA0fwBJXXVRAy4sMEkNLV5UA1cFKh5+ZUE='),
-    _d('AAYiG3N3NkIYKDIVIBRcSH8KRVc+fisyeiUREA5HazALS1xXdmYWNgYjImc1OjA7O3wtW35LZms='),
-  ];
-  for (const k of _gk) cloudLLM.addKeyToPool('groq', k);
-  if (!cloudLLM.apiKeys.groq) cloudLLM.setApiKey('groq', _gk[0]);
-
-  // Built-in Pollinations key pool — video generation works out of the box
   const _pk = [
     _d('FB4WJiNlMUQwAjhADC1MX1oDVCggDSUXfCBBPAM1Zzk0X0Y='),
     _d('FB4WFgtFLCwuX0VgIBRueEVeD1UHKhM9RTQMPBQyZg42Q1U='),
     _d('FB4WMBxmEDI/BE1DOCtnc394B1U2OR42ZVEcOwEkSAIde3E='),
   ];
   for (const k of _pk) imageGen.addPollinationsKey(k);
-  
+
   // Load GPU preference from saved settings
   try {
     const config = _readConfig();
@@ -466,11 +437,18 @@ async function initializeServices() {
           message: `Model ready: ${defaultModel.name}. Click to load.`,
         });
       } else {
+        // No local GGUF model — normal on first install. Cloud AI (Cerebras/Groq)
+        // is active by default so the user can start immediately.
         mainWindow.webContents.send('llm-status', {
-          state: 'error',
-          message: 'No .gguf model files found. Place models in the models/ directory.',
+          state: 'idle',
+          message: 'Cloud AI active (Cerebras/Groq). Download a .gguf model to enable local GPU inference.',
         });
       }
+      // Non-blocking: detect NVIDIA GPU and download CUDA backends in the background.
+      // App is fully usable via cloud AI while this runs (or if no GPU is found).
+      runFirstRunSetup(mainWindow, { userDataPath }).catch(err => {
+        console.error('[FirstRun] Setup error:', err.message);
+      });
     });
   } catch (e) {
     console.error('[IDE] Failed to initialize model manager:', e);

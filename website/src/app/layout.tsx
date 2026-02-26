@@ -143,6 +143,13 @@ function gtag(){dataLayer.push(arguments);}
 gtag('js', new Date());
 gtag('config', 'G-MT0SYC8BJE');`}
         </Script>
+        {/* Google AdSense */}
+        <Script
+          async
+          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8992203205244704"
+          crossOrigin="anonymous"
+          strategy="afterInteractive"
+        />
         {/* Structured Data */}
         <script
           type="application/ld+json"
@@ -201,13 +208,22 @@ gtag('config', 'G-MT0SYC8BJE');`}
         <PageTracker />
         <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:z-[100] focus:bg-white focus:text-black focus:px-4 focus:py-2" aria-label="Skip to content">Skip to content</a>
         <Header />
-        <main id="main-content" role="main" aria-label="Main content" className="flex-1">
+        <main id="main-content" role="main" aria-label="Main content" className="flex-1" style={{paddingBottom: 'clamp(58px, 8vw, 100px)'}}>
           <article>{children}</article>
           <aside className="sr-only" aria-label="Supplementary information">
             <p>guIDE by GraySoft — the first native LLM IDE. Run AI models locally with complete privacy, no subscriptions, and unlimited completions.</p>
           </aside>
         </main>
         <Footer />
+        {/* Sticky bottom banner ad — 320×50 mobile, 728×90 desktop */}
+        <div style={{position:'fixed',bottom:0,left:0,right:0,zIndex:9999,display:'flex',justifyContent:'center',alignItems:'center',backgroundColor:'rgba(0,0,0,0.95)',borderTop:'1px solid rgba(255,255,255,0.08)',padding:'4px 0',overflow:'hidden'}}>
+          <div className="hidden sm:block">
+            <iframe src="//shopsuptight.com/watchnew?key=394217cb689e940d870aef10bfeecd47" width="728" height="90" frameBorder="0" scrolling="no" style={{border:0,maxWidth:'100%'}} />
+          </div>
+          <div className="block sm:hidden">
+            <iframe src="//shopsuptight.com/watchnew?key=0496beb6abbf30571b993deaa7013d86" width="320" height="50" frameBorder="0" scrolling="no" style={{border:0,maxWidth:'100%'}} />
+          </div>
+        </div>
         <Script src="/pwa.js" strategy="afterInteractive" />
       </body>
     </html>

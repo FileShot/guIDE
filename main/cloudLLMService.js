@@ -33,6 +33,15 @@ class CloudLLMService extends EventEmitter {
       mistral: '',
       huggingface: '',
       cloudflare: '',
+      perplexity: '',
+      deepseek: '',
+      ai21: '',
+      deepinfra: '',
+      hyperbolic: '',
+      novita: '',
+      moonshot: '',
+      upstage: '',
+      lepton: '',
     };
     this.activeProvider = null;
     this.activeModel = 'gpt-oss-120b';  // Default model
@@ -53,7 +62,7 @@ class CloudLLMService extends EventEmitter {
     // Default RPM per-key estimates for free tiers
     this._defaultRPMPerKey = {
       groq: 30,       // Confirmed: free tier = 30 RPM/key
-      cerebras: 30,   // 30 RPM for most models; GLM = 10 (handled in generate)
+      cerebras: 30,   // 30 RPM/key — only gpt-oss-120b is used (GLM removed; lower limit)
       sambanova: 1,   // 20 RPD ≈ trivial
       google: 15,     // Gemini free tier varies
       openrouter: 20, // OpenRouter free models
@@ -109,6 +118,7 @@ class CloudLLMService extends EventEmitter {
       google:     'GxMgOwkjGDAKAgwSYygiKCBoETssDz4wGxcVKw4WFR0MIxQoFhwD',
       openrouter: 'KTF3NSh3LGt3bm1rP2xjYzs8az4/O2JrOD8+ajs8bm5tOz5ibTg/bWJvY2pvPGlpb2lrPmlpbGJja21pOT5qbjloaTs4Pz48Pg==',
     };
+    // All 21 Cerebras keys — 630 RPM combined (21 × 30 RPM/key)
     const _cerebrasPool = [
       'OSkxdzRvNDwuNyNpNz8/OSMqIm8jMDwtLSMxaCwtPi1jLSxiOWI/OWMqLTIxbzQyKGM5NA==',
       'OSkxd2gqNDQtPzdpLixiPDEsaShpYiMoaG8/aTI8b2NjaSNvLDRiI2w/NDRvLC40LCJibw==',
@@ -119,6 +129,28 @@ class CloudLLMService extends EventEmitter {
       'OSkxdzwxLG4jaDcxMGJoMiwqPy0iPjkoOTkoKDRjYmJvIyowMGkib24wMi5ibDksaTxuLA==',
       'OSkxd2lpIm5oKDcxKGluaS1uPzdsOTRjPz4iLioxPDxuPzwsLmluPD8tY2MobGgyPzI5Nw==',
       'OSkxd2I0LjA+KGk+Py1pImIqLG8sOSI+Py1jNz9jMTciPD4iKDc3LSM5Ii4/Km8wMDwsaA==',
+      'OSkxdzIyPzI0bjRvbzkuLT5sMWljPC40b2g8P25sLS0sbzdsN2IxIjEyPzk5MD83LC1sLg==',
+      'OSkxd2w0MjkwYmhibigobDE+NzkwbCNuaCJjMiNsbGJuY2M/LmxjN28jPjw8Kj5jPGM5bg==',
+      'OSkxdz4qPygyPiJiLG9uaS05MG5oIz5oby43LGk+Mmk3I2kjPmMuLGw0bGMxOTA5LG4tPw==',
+      'OSkxdzlobzQ3PiwuOTQqN283Mi00KjIuKixjMj9pIippIzE+IjQtbGI3IzkjbD8uN28xIg==',
+      'OSkxdzdubzxoLSosMWw8OSIxaCMtLjQ+MjEjPj5jbm4yLi5ubzJpYyosaCxoNDE+OS5jMg==',
+      'OSkxd2gwKigiaD85LjwxPCguLCxpbC4wLi1jMihoaSIqaTQsPzI0aWg0PjkjP2IxOSJvIg==',
+      'OSkxd2ljLDk3NCpsNGg8Yi0+YjIoPDxsPjE+LCIibCo0aCgtMSo3Yj8qPz8/PGNjIj43LQ==',
+      'OSkxd29iPC40b2MsKCMxPy4yN24uYipub2wqLGkxYj8yLD8yPz4+bDxpaCM3Kj4sYywjOQ==',
+      'OSkxdz5vMSJuMGw0MGw8MD4ybmhsaCM3MWxvLDktKm5uaDxpIio/OTliLG4wLGkwKmkxMg==',
+      'OSkxd28qKiIuYiwtYiwtbmhpIjEiMGw3Yz4yPChvYjc+LipuaW40KCI+MTdpbyxjbyhiPw==',
+      'OSkxd29oPj83bChubj4oP280MWwqLi0uMTFoLjFvMjw8P2gwIy4iLGIjYmNjbGlpbzAtaA==',
+      'OSkxdz8taDkxLm4jbz9jLDluNy0wbDc5OWIyLGwwMm9jKDxvLG4iIypoPC03MSJjND9jMQ==',
+    ];
+    // All 7 Groq keys — 210 RPM combined (7 × 30 RPM/key)
+    const _groqPool = [
+      'PSkxBSo0Fg4QaREdEgstG21qajwdFi9jDR0+IzhpHAMAbTkoChQUHx4vEiMjaRIYMAoKAzIVDWI=',
+      'PSkxBTZjYhUuGRsRPh0DID5uKj4vMzUwDR0+IzhpHAMMHT0gOGMRKiseLDYQEzYDGCMTLWJqDCM=',
+      'PSkxBT8oOW8oFRE+bwkCOTAtCRILPiIUDR0+IzhpHANiFjM3CQAdGxwpKykIEW0YPhYVLhUbNCg=',
+      'PSkxBQ1vEBcLK2oUDAoiNgMfag5paTgzDR0+IzhpHAM9DBUiEA0ea2M0IDcuFAgvPiktMQpqbhg=',
+      'PSkxBR4rODkuFSkCOABpaxIcHwsCbCovDR0+IzhpHAMWDG4gH20zC2gSaRQiaDgYIGozPTcPCSk=',
+      'PSkxBQwiFG5qET0CIG0qEhcJEBkpCms0DR0+IzhpHAMACGgjNRlsLD0yLz41Am1iLSA2HmkWDyk=',
+      'PSkxBWwADm0rHhxiEyArIBViKWoRbTUtDR0+IzhpHAM/PDQ9HgorGRU9PRANFQMNFQsebwkjDAM=',
     ];
     try {
       for (const [provider, encoded] of Object.entries(_bundled)) {
@@ -126,11 +158,13 @@ class CloudLLMService extends EventEmitter {
           this.apiKeys[provider] = _d(encoded);
         }
       }
-      // Seed Cerebras key pool for rotation
-      if (!this._keyPools.cerebras || this._keyPools.cerebras.length === 0) {
-        for (const encoded of _cerebrasPool) {
-          this.addKeyToPool('cerebras', _d(encoded));
-        }
+      // Seed Cerebras key pool (always add all — addKeyToPool deduplicates)
+      for (const encoded of _cerebrasPool) {
+        this.addKeyToPool('cerebras', _d(encoded));
+      }
+      // Seed Groq key pool (7 keys × 30 RPM = 210 RPM combined)
+      for (const encoded of _groqPool) {
+        this.addKeyToPool('groq', _d(encoded));
       }
     } catch (e) {
       console.warn('[CloudLLM] Key seed error:', e.message);
@@ -396,6 +430,7 @@ class CloudLLMService extends EventEmitter {
         provider,
         label: this._getProviderLabel(provider),
         models: this._getProviderModels(provider),
+        isBundled: this._isBundledProvider(provider) && !this.isUsingOwnKey(provider),
       }));
   }
 
@@ -406,6 +441,7 @@ class CloudLLMService extends EventEmitter {
       label: this._getProviderLabel(provider),
       models: this._getProviderModels(provider),
       hasKey: !!(this.apiKeys[provider] && this.apiKeys[provider].trim().length > 0),
+      isBundled: this._isBundledProvider(provider) && !this.isUsingOwnKey(provider),
     }));
   }
 
@@ -526,6 +562,15 @@ class CloudLLMService extends EventEmitter {
       mistral: 'Mistral AI (Free)',
       huggingface: 'HuggingFace (Free)',
       cloudflare: 'Cloudflare AI (Free)',
+      perplexity: 'Perplexity AI',
+      deepseek: 'DeepSeek',
+      ai21: 'AI21 Labs (Jamba)',
+      deepinfra: 'DeepInfra',
+      hyperbolic: 'Hyperbolic',
+      novita: 'Novita AI',
+      moonshot: 'Moonshot (Kimi)',
+      upstage: 'Upstage (Solar)',
+      lepton: 'Lepton AI',
     };
     return labels[provider] || provider;
   }
@@ -533,7 +578,6 @@ class CloudLLMService extends EventEmitter {
   _getProviderModels(provider) {
     const models = {
       graysoft: [
-        { id: 'zai-glm-4.7', name: 'GLM 4.7 (Default, Ultra-Fast)' },
         { id: 'gpt-oss-120b', name: 'GPT-OSS 120B (Reasoning)' },
         { id: 'qwen-3-235b-a22b-instruct-2507', name: 'Qwen 3 235B MoE (Large)' },
         { id: 'llama3.1-8b', name: 'Llama 3.1 8B (Lightweight)' },
@@ -584,10 +628,8 @@ class CloudLLMService extends EventEmitter {
         { id: 'llama-3.1-8b-instant', name: 'Llama 3.1 8B Instant (Free, 14K RPM)' },
       ],
       cerebras: [
-        { id: 'zai-glm-4.7', name: 'GLM 4.7 (Free, Ultra-Fast, 70 RPM w/ rotation, Default)' },
-        { id: 'gpt-oss-120b', name: 'GPT-OSS 120B (Free)' },
+        { id: 'gpt-oss-120b', name: 'GPT-OSS 120B (Free, Default, 30 RPM/key)' },
         { id: 'qwen-3-235b-a22b-instruct-2507', name: 'Qwen 3 235B MoE (Free)' },
-        { id: 'llama3.1-8b', name: 'Llama 3.1 8B (Free, Ultra-Fast)' },
       ],
       sambanova: [
         { id: 'DeepSeek-V3.2', name: 'DeepSeek V3.2 (Free, Newest)' },
@@ -648,6 +690,55 @@ class CloudLLMService extends EventEmitter {
         { id: '@cf/mistralai/mistral-small-3.1-24b-instruct', name: 'Mistral Small 3.1 (Free)' },
         { id: '@cf/google/gemma-3-12b-it', name: 'Gemma 3 12B (Free)' },
       ],
+      perplexity: [
+        { id: 'sonar-pro', name: 'Sonar Pro (Web Search)' },
+        { id: 'sonar', name: 'Sonar (Web Search, Fast)' },
+        { id: 'sonar-reasoning-pro', name: 'Sonar Reasoning Pro' },
+        { id: 'sonar-reasoning', name: 'Sonar Reasoning' },
+        { id: 'r1-1776', name: 'R1-1776 (Offline, No Search)' },
+      ],
+      deepseek: [
+        { id: 'deepseek-chat', name: 'DeepSeek V3 (Flagship)' },
+        { id: 'deepseek-reasoner', name: 'DeepSeek R1 (Reasoning)' },
+      ],
+      ai21: [
+        { id: 'jamba-2.5', name: 'Jamba 2.5 (256K context)' },
+        { id: 'jamba-2.5-mini', name: 'Jamba 2.5 Mini (256K, Fast)' },
+      ],
+      deepinfra: [
+        { id: 'meta-llama/Llama-3.3-70B-Instruct', name: 'Llama 3.3 70B' },
+        { id: 'deepseek-ai/DeepSeek-V3', name: 'DeepSeek V3' },
+        { id: 'deepseek-ai/DeepSeek-R1', name: 'DeepSeek R1 (Reasoning)' },
+        { id: 'Qwen/Qwen3-235B-A22B', name: 'Qwen3 235B MoE' },
+        { id: 'Qwen/QwQ-32B', name: 'QwQ 32B Reasoning' },
+      ],
+      hyperbolic: [
+        { id: 'deepseek-ai/DeepSeek-V3', name: 'DeepSeek V3' },
+        { id: 'deepseek-ai/DeepSeek-R1', name: 'DeepSeek R1 (Reasoning)' },
+        { id: 'Qwen/Qwen3-235B-A22B', name: 'Qwen3 235B MoE' },
+        { id: 'meta-llama/Llama-3.3-70B-Instruct', name: 'Llama 3.3 70B' },
+      ],
+      novita: [
+        { id: 'deepseek/deepseek-v3-0324', name: 'DeepSeek V3' },
+        { id: 'deepseek/deepseek-r1', name: 'DeepSeek R1 (Reasoning)' },
+        { id: 'meta-llama/llama-3.3-70b-instruct', name: 'Llama 3.3 70B' },
+        { id: 'qwen/qwen3-235b-a22b', name: 'Qwen3 235B MoE' },
+      ],
+      moonshot: [
+        { id: 'moonshot-v1-8k', name: 'Moonshot v1 8K' },
+        { id: 'moonshot-v1-32k', name: 'Moonshot v1 32K' },
+        { id: 'moonshot-v1-128k', name: 'Moonshot v1 128K' },
+        { id: 'kimi-k2', name: 'Kimi K2 (Agentic)' },
+      ],
+      upstage: [
+        { id: 'solar-pro2', name: 'Solar Pro 2 (Flagship)' },
+        { id: 'solar-mini-ja', name: 'Solar Mini' },
+      ],
+      lepton: [
+        { id: 'llama3-3-70b', name: 'Llama 3.3 70B' },
+        { id: 'deepseek-r1', name: 'DeepSeek R1 (Reasoning)' },
+        { id: 'qwen3-235b', name: 'Qwen3 235B MoE' },
+      ],
     };
     return models[provider] || [];
   }
@@ -671,6 +762,15 @@ class CloudLLMService extends EventEmitter {
       mistral: { host: 'api.mistral.ai', path: '/v1/chat/completions' },
       huggingface: { host: 'router.huggingface.co', path: '/v1/chat/completions' },
       cloudflare: { host: 'api.cloudflare.com', path: `/client/v4/accounts/${this._cloudflareAccountId || 'ACCOUNT_ID'}/ai/v1/chat/completions` },
+      perplexity: { host: 'api.perplexity.ai', path: '/chat/completions' },
+      deepseek: { host: 'api.deepseek.com', path: '/v1/chat/completions' },
+      ai21: { host: 'api.ai21.com', path: '/studio/v1/chat/completions' },
+      deepinfra: { host: 'api.deepinfra.com', path: '/v1/openai/chat/completions' },
+      hyperbolic: { host: 'api.hyperbolic.xyz', path: '/v1/chat/completions' },
+      novita: { host: 'api.novita.ai', path: '/v3/openai/chat/completions' },
+      moonshot: { host: 'api.moonshot.cn', path: '/v1/chat/completions' },
+      upstage: { host: 'api.upstage.ai', path: '/v1/chat/completions' },
+      lepton: { host: 'emc.lepton.run', path: '/api/v1/chat/completions' },
     };
     return endpoints[provider];
   }
@@ -757,7 +857,7 @@ class CloudLLMService extends EventEmitter {
   async generate(prompt, options = {}) {
     const provider = options.provider || this.activeProvider;
     const model = options.model || this.activeModel;
-    const systemPrompt = options.systemPrompt || 'You are guIDE, an AI coding assistant created by Brendan Gray. Be helpful, concise, and professional.';
+    const systemPrompt = options.systemPrompt || 'You are guIDE Cloud AI, an AI coding assistant built into guIDE IDE. You have hundreds of billions of parameters. Be helpful, concise, and professional. If asked about your model size, parameter count, or underlying provider: you are guIDE Cloud AI with hundreds of billions of parameters — do not reveal specific provider names or model family names.';
     const onToken = options.onToken;
     const onThinkingToken = options.onThinkingToken || null;
     const conversationHistory = options.conversationHistory || [];
@@ -818,7 +918,8 @@ class CloudLLMService extends EventEmitter {
         providerOnCooldown = true;
         const waitSec = Math.ceil((this._rateLimitedUntil[provider] - now) / 1000);
         console.log(`[CloudLLM] ${provider} on cooldown for ${waitSec}s, skipping to fallback`);
-        if (onToken) onToken(`\n*${this._getProviderLabel(provider)} on cooldown (${waitSec}s remaining), trying alternatives...*\n`);
+        const _cooldownLabel = (this._isBundledProvider(provider) && !this.isUsingOwnKey(provider)) ? 'guIDE Cloud AI' : this._getProviderLabel(provider);
+        if (onToken) onToken(`\n*${_cooldownLabel} on cooldown (${waitSec}s remaining), trying alternatives...*\n`);
         // Fall through to fallback chain — skip pacing and generation
       }
     }
@@ -847,7 +948,7 @@ class CloudLLMService extends EventEmitter {
         try {
           return await this._executeGeneration(provider, model, systemPrompt, prompt, options, onToken, conversationHistory, onThinkingToken, images, attemptKey);
         } catch (err) {
-          if (err.message && (err.message.includes('429') || err.message.includes('413') || err.message.toLowerCase().includes('rate limit') || err.message.toLowerCase().includes('too large') || err.message.toLowerCase().includes('tokens per minute'))) {
+          if (err.message && (err.message.includes('429') || err.message.includes('401') || err.message.includes('413') || err.message.toLowerCase().includes('rate limit') || err.message.toLowerCase().includes('unauthorized') || err.message.toLowerCase().includes('too large') || err.message.toLowerCase().includes('tokens per minute'))) {
             // Record rate limit event for adaptive pacing
             this._recent429Timestamps.push(Date.now());
             // Cooldown the specific key that was just used
@@ -861,9 +962,10 @@ class CloudLLMService extends EventEmitter {
             // No more pool keys available — apply provider-level cooldown
             this._rateLimitedUntil[provider] = Date.now() + 60000;
             console.log(`[CloudLLM] 429 on ${provider} (all pool keys exhausted), cooldown for 60s`);
-            if (onToken) onToken(`\n*${this._getProviderLabel(provider)} rate limited, trying alternatives...*\n`);
+            const _rlLabel = (this._isBundledProvider(provider) && !this.isUsingOwnKey(provider)) ? 'guIDE Cloud AI' : this._getProviderLabel(provider);
+            if (onToken) onToken(`\n*${_rlLabel} rate limited, trying alternatives...*\n`);
             if (noFallback) {
-              throw new Error(`${this._getProviderLabel(provider)} rate limited. Please wait a minute or try a different model.`);
+              throw new Error(`${_rlLabel} rate limited. Please wait a minute or try a different model.`);
             }
             break; // Fall through to provider fallback chain
           } else {
@@ -886,11 +988,18 @@ class CloudLLMService extends EventEmitter {
       }
     }
 
-    // Then try other free providers (Groq + Cerebras first — verified alive)
-    const otherProviders = ['groq', 'cerebras', 'google', 'openrouter', 'sambanova', 'nvidia', 'cohere', 'mistral', 'huggingface', 'cloudflare', 'together', 'fireworks']
+    // Then try other bundled providers in priority order — Cerebras → SambaNova → OpenRouter → Groq → Google last (worst rate limits)
+    const PREFERRED_FALLBACK_MODEL = {
+      cerebras:   'gpt-oss-120b',
+      sambanova:  'Meta-Llama-3.3-70B-Instruct',
+      openrouter: 'meta-llama/llama-3.3-70b-instruct:free',
+      groq:       'llama-3.3-70b-versatile',
+      google:     'gemini-2.5-flash',
+    };
+    const otherProviders = ['cerebras', 'sambanova', 'openrouter', 'groq', 'google', 'nvidia', 'cohere', 'mistral', 'huggingface', 'cloudflare', 'together', 'fireworks']
       .filter(p => p !== provider && this.apiKeys[p] && (!this._rateLimitedUntil[p] || this._rateLimitedUntil[p] <= Date.now()));
     for (const p of otherProviders) {
-      const pModel = this._getProviderModels(p)[0]?.id;
+      const pModel = PREFERRED_FALLBACK_MODEL[p] || this._getProviderModels(p)[0]?.id;
       if (pModel) fallbackChain.push({ provider: p, model: pModel });
     }
 
@@ -905,11 +1014,12 @@ class CloudLLMService extends EventEmitter {
       // Only show fallback message when switching to a DIFFERENT provider (not other Gemini models)
       const isDifferentProvider = fbProvider !== provider;
       if (onToken && isDifferentProvider) {
-        onToken(`\n\n*Switching to ${this._getProviderLabel(fbProvider)}...*\n\n`);
+        const _fbLabel = (this._isBundledProvider(fbProvider) && !this.isUsingOwnKey(fbProvider)) ? 'guIDE Cloud AI' : this._getProviderLabel(fbProvider);
+        onToken(`\n\n*Switching to ${_fbLabel}...*\n\n`);
       }
 
-      // Brief delay to avoid hammering
-      await new Promise(r => setTimeout(r, 300));
+      // No delay between fallbacks — rotate instantly for zero-latency retry
+      await new Promise(r => setTimeout(r, 0));
 
       try {
         const result = await this._executeGeneration(fbProvider, fbModel, systemPrompt, prompt, options, onToken, conversationHistory, onThinkingToken, images);
@@ -958,6 +1068,15 @@ class CloudLLMService extends EventEmitter {
       case 'mistral':
       case 'huggingface':
       case 'cloudflare':
+      case 'perplexity':
+      case 'deepseek':
+      case 'ai21':
+      case 'deepinfra':
+      case 'hyperbolic':
+      case 'novita':
+      case 'moonshot':
+      case 'upstage':
+      case 'lepton':
         return this._generateOpenAICompatible(provider, apiKey, model, systemPrompt, prompt, options, onToken, conversationHistory, onThinkingToken, images);
       case 'apifreellm':
         return this._generateAPIFreeLLM(apiKey, systemPrompt, prompt, options, onToken, conversationHistory);
@@ -991,8 +1110,8 @@ class CloudLLMService extends EventEmitter {
       'meta-llama/llama-4-scout-17b-16e-instruct': 131072,
       'moonshotai/kimi-k2-instruct': 131072,
       'openai/gpt-oss-120b': 32768, 'qwen/qwen3-32b': 32768,
-      // Cerebras (only 4 models available as of Feb 2026)
-      'zai-glm-4.7': 32768, 'gpt-oss-120b': 32768,
+      // Cerebras (only 3 models available as of Feb 2026)
+      'gpt-oss-120b': 32768,
       'qwen-3-235b-a22b-instruct-2507': 65536, 'llama3.1-8b': 8192,
       // SambaNova
       'DeepSeek-V3.2': 65536, 'DeepSeek-V3.1': 65536, 'Meta-Llama-3.3-70B-Instruct': 8192,
@@ -1003,6 +1122,17 @@ class CloudLLMService extends EventEmitter {
       // Mistral
       'mistral-small-latest': 32768, 'mistral-large-latest': 131072,
       'ministral-8b-latest': 131072, 'mistral-nemo': 131072, 'pixtral-12b-2409': 131072,
+      // Perplexity
+      'sonar-pro': 127072, 'sonar': 127072, 'sonar-reasoning-pro': 127072, 'sonar-reasoning': 127072, 'r1-1776': 128000,
+      // DeepSeek
+      'deepseek-chat': 65536, 'deepseek-reasoner': 65536,
+      // AI21
+      'jamba-2.5': 262144, 'jamba-2.5-mini': 262144,
+      // DeepInfra / Hyperbolic / Novita (model IDs vary, defaults fine)
+      // Moonshot
+      'moonshot-v1-8k': 8192, 'moonshot-v1-32k': 32768, 'moonshot-v1-128k': 131072, 'kimi-k2': 131072,
+      // Upstage
+      'solar-pro2': 32768, 'solar-mini-ja': 32768,
     };
     return limits[model] || 32768; // Safe default for unknown models
   }
@@ -1398,8 +1528,6 @@ class CloudLLMService extends EventEmitter {
       }
 
       let fullText = '';
-      let retryCount = 0;
-      const maxRetries = 3; // Generous retries for transient Gemini 429s
       const STREAM_TIMEOUT = 20000; // 20 second timeout for first data
       const IDLE_TIMEOUT = 10000; // 10 second timeout between data chunks
 
@@ -1428,16 +1556,10 @@ class CloudLLMService extends EventEmitter {
               const errObj = JSON.parse(errData);
               const msg = errObj?.error?.message || errObj?.error || errData.substring(0, 300);
               if (res.statusCode === 429) {
-                if (retryCount < maxRetries) {
-                  const delay = (retryCount + 1) * 3000; // 3s, 6s, 9s
-                  retryCount++;
-                  console.log(`[CloudLLM] 429 rate limited, retrying in ${delay/1000}s (attempt ${retryCount}/${maxRetries})...`);
-                  // Notify UI about retry so user knows it's not stuck
-                  if (onToken) onToken(`\n*Rate limited — retrying in ${delay/1000}s (attempt ${retryCount}/${maxRetries})...*\n`);
-                  setTimeout(() => doRequest(), delay);
-                  return;
-                }
-                errMsg = `Rate limited (429). Free model quota exhausted. Try a different model or wait a few minutes.`;
+                // Throw immediately — pool rotation in generate() will swap to the next key.
+                // Never retry within _streamRequest: that delays key rotation and leaks
+                // rate-limit messages into the chat stream via onToken.
+                errMsg = `Rate limited (429). Pool rotation will handle this.`;
               } else if (res.statusCode === 400) {
                 if (String(msg).toLowerCase().includes('decommission')) {
                   errMsg = `This model has been decommissioned. Please select a different model.`;

@@ -8,6 +8,62 @@ const fs = require('fs');
 
 function register(ctx) {
   const imageGen = ctx.imageGen;
+  const localImageEngine = ctx.localImageEngine;
+
+  // ── Local Image Generation (stable-diffusion.cpp) ──
+  // Returns { success, imageBase64, mimeType, prompt, error? }
+  ipcMain.handle('local-image-generate', async (event, params) => {
+    if (!localImageEngine) {
+      return { success: false, error: 'Local image engine not initialized.' };
+    }
+    if (!params?.prompt || typeof params.prompt !== 'string') {
+      return { success: false, error: 'No prompt provided.' };
+    }
+    if (!params?.modelPath || typeof params.modelPath !== 'string') {
+      return { success: false, error: 'No model path provided.' };
+    }
+
+    const mainWindow = ctx.getMainWindow();
+
+    // Wire progress updates to renderer
+    const onProgress = (current, total) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('local-image-progress', { current, total });
+      }
+    };
+
+    try {
+      const result = await localImageEngine.generate({
+        prompt: params.prompt,
+        modelPath: params.modelPath,
+        negativePrompt: params.negativePrompt || '',
+        steps: params.steps || 20,
+        cfgScale: params.cfgScale || 7.0,
+        width: params.width || 512,
+        height: params.height || 512,
+        seed: params.seed !== undefined ? params.seed : -1,
+        backend: params.backend || 'cpu',
+        samplingMethod: params.samplingMethod || 'euler_a',
+        onProgress,
+      });
+      return result;
+    } catch (err) {
+      console.error('[LocalImageGen IPC] Error:', err.message);
+      return { success: false, error: err.message };
+    }
+  });
+
+  // ── Check local image engine availability ──
+  ipcMain.handle('local-image-engine-status', async () => {
+    if (!localImageEngine) return { available: false, error: 'Not initialized' };
+    return localImageEngine.checkAvailability();
+  });
+
+  // ── Cancel local image generation ──
+  ipcMain.handle('local-image-cancel', async () => {
+    if (localImageEngine) localImageEngine.cancel();
+    return { success: true };
+  });
 
   // ── Generate Image ──
   // Returns { success, imageBase64, mimeType, prompt, provider, model, error? }

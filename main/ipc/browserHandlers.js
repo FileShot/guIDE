@@ -6,6 +6,14 @@ const { ipcMain } = require('electron');
 function register(ctx) {
   ipcMain.handle('browser-navigate', async (_, url) => ctx.browserManager.navigate(url));
   ipcMain.handle('browser-show', (_, bounds) => { ctx.browserManager.show(bounds); return { success: true }; });
+  // Focus the BrowserView's webContents so keyboard events (including Enter) go to the browser
+  ipcMain.handle('browser-focus', () => {
+    try {
+      const wc = ctx.browserManager?.browserView?.webContents;
+      if (wc && !wc.isDestroyed()) wc.focus();
+      return { success: true };
+    } catch { return { success: false }; }
+  });
   ipcMain.handle('browser-hide', () => { ctx.browserManager.hide(); return { success: true }; });
   ipcMain.handle('browser-set-bounds', (_, bounds) => { ctx.browserManager.setBounds(bounds); return { success: true }; });
   ipcMain.handle('browser-go-back', () => ctx.browserManager.goBack());

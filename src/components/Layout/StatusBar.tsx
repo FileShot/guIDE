@@ -12,8 +12,11 @@ interface StatusBarProps {
   ragStatus: { isIndexing: boolean; progress: number; totalFiles: number };
   currentFile: string;
   onToggleTerminal: () => void;
+  onShowProblems?: () => void;
   onAction?: (action: string) => void;
   onChatMessage?: (message: string) => void;
+  errorCount?: number;
+  warningCount?: number;
 }
 
 // Circular progress ring SVG (reusable)
@@ -48,8 +51,11 @@ export const StatusBar: React.FC<StatusBarProps> = ({
   ragStatus,
   currentFile: _currentFile,
   onToggleTerminal,
+  onShowProblems,
   onAction,
   onChatMessage,
+  errorCount = 0,
+  warningCount = 0,
 }) => {
   const [contextUsage, setContextUsage] = useState({ used: 0, total: 0 });
   const [tokensPerSec, setTokensPerSec] = useState(0);
@@ -189,11 +195,15 @@ export const StatusBar: React.FC<StatusBarProps> = ({
         </div>
 
         {/* Errors/Warnings */}
-        <div className="flex items-center gap-1 cursor-pointer hover:bg-[#ffffff10] px-1 rounded">
-          <AlertCircle size={12} />
-          <span>0</span>
-          <span className="mx-0.5">W</span>
-          <span>0</span>
+        <div
+          className="flex items-center gap-1 cursor-pointer hover:bg-[#ffffff10] px-1 rounded"
+          onClick={() => onShowProblems?.()}
+          title="Show Problems panel"
+        >
+          <AlertCircle size={12} className={errorCount > 0 ? 'text-[#f48771]' : ''} />
+          <span className={errorCount > 0 ? 'text-[#f48771]' : ''}>{errorCount}</span>
+          <span className="mx-0.5" style={{ color: warningCount > 0 ? '#dcdcaa' : undefined }}>W</span>
+          <span style={{ color: warningCount > 0 ? '#dcdcaa' : undefined }}>{warningCount}</span>
         </div>
       </div>
 

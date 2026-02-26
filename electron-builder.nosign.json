@@ -13,6 +13,8 @@
     "scripts/**/*",
     "node_modules/**/*",
     "!node_modules/.cache",
+    "!node_modules/@node-llama-cpp/win-x64-cuda/**",
+    "!node_modules/@node-llama-cpp/win-x64-cuda-ext/**",
     "LICENSE"
   ],
   "mac": {
@@ -72,7 +74,11 @@
     "url": "https://graysoft.dev/updates"
   },
   "asarUnpack": [
-    "node_modules/**",
+    "node_modules/@node-llama-cpp/**",
+    "node_modules/@reflink/**",
+    "node_modules/node-pty/**",
+    "node_modules/playwright-core/**",
+    "node_modules/**/*.node",
     "main/**"
   ]
 }

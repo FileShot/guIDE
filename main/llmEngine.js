@@ -11,7 +11,6 @@ const fs = require('fs');
 const os = require('os');
 const { pathToFileURL } = require('url');
 const { EventEmitter } = require('events');
-const { app } = require('electron');
 const { getModelProfile, getModelSamplingParams, getEffectiveContextSize, getSizeTier } = require('./modelProfiles');
 const { detectFamily, detectParamSize } = require('./modelDetection');
 const { sanitizeResponse } = require('./sanitize');
@@ -46,42 +45,36 @@ class LLMEngine extends EventEmitter {
     this.sequence = null;      // LlamaContextSequence reference
     this.llamaInstance = null;
     this.currentModelPath = null;
-    this._justLoadedNewModel = false; // Set true when a NEW (different) model path is loaded
     this.isLoading = false;
     this.isReady = false;
     this.modelInfo = null;
     this.abortController = null;
-    this.generationActive = false; // BUG-015: true while generateStream is executing
     this._abortReason = null; // 'user' | 'tool_call' | 'repetition' | 'template' | null
     this.loadAbortController = null; // Separate abort controller for model loading
-    this._loadGeneration = 0; // Monotonic counter — each initialize() call gets a unique ID
+    this._initializingPromise = null; // Tracks in-flight initialize() for serialization (prevents native C++ double-op crash)
     this.gpuInfo = null;
     this.gpuPreference = 'auto'; // 'auto' = prefer GPU, 'cpu' = force CPU only
     this.reasoningEffort = 'medium'; // 'low', 'medium', 'high'
-    this.thoughtTokenBudget = 1024; // Updated from ModelProfile after model load
-
-    // Wrapper probe system — determines the best chat wrapper for each model at first load.
-    // Results are cached to userData/wrapper-cache.json keyed by path+size+mtime.
-    this._probeWrapperCache = {};     // In-memory cache (populated from disk on first probe)
-    this._wrapperCachePath = null;    // Resolved on first load
-    this._wrapperCacheLoaded = false; // Lazy-load flag
-    this._selectedWrapperName = null; // Wrapper name proven by probe — used on context rotation
-    this._flashAttnEnabled = false;   // Set after flash coherence check; used by resetSession
+    this.thoughtTokenBudget = 2048; // Updated from ModelProfile after model load
 
 
-    // ENGINE DEFAULTS ONLY — modelProfiles.js family/size overrides take precedence via mergedParams.
-    // Changing these only affects models that have NO profile entry.
+    // Inference settings tuned for quality + speed
+    // Lower temperature (0.5) + aggressive repeat penalty to prevent stuttering
     this.defaultParams = {
       maxTokens: 4096,
       temperature: 0.5,
       topP: 0.9,
-      topK: 40,
+      topK: 20,
       repeatPenalty: 1.15,
-      frequencyPenalty: 0,
-      presencePenalty: 0,
+      frequencyPenalty: 0.1,
+      presencePenalty: 0.1,
       lastTokensPenaltyCount: 128,
       seed: -1,
     };
+
+    // User-configurable generation timeout (ms). Default 120s.
+    // Can be updated live via Settings without reloading the model.
+    this.generationTimeoutMs = 120_000;
   }
 
   /**
@@ -191,80 +184,35 @@ class LLMEngine extends EventEmitter {
   }
 
   async initialize(modelPath) {
-    if (this.isLoading) {
-      console.log('[LLM] Cancelling in-progress model load');
+    if (this._initializingPromise) {
+      // Signal cancellation so the in-flight load aborts between async phases.
+      // CRITICAL: Cannot use a 100ms wait here — native C++ ops (getLlama, loadModel) have
+      // no cancellation mechanism. Calling dispose() or starting a new loadModel() while
+      // the C++ thread is still running → double-native-op race → main process crash →
+      // IPC reply never sent. We MUST wait for the previous initialize() to fully settle.
+      console.log('[LLM] Waiting for in-progress model load to settle before starting new one');
       if (this.loadAbortController) { this.loadAbortController.abort(); this.loadAbortController = null; }
       this.isLoading = false;
-      await new Promise(r => setTimeout(r, 100));
+      await this._initializingPromise.catch(() => {});
+      this._initializingPromise = null;
     }
     this.isLoading = true;
     this.isReady = false;
-    this._selectedWrapperName = null; // Reset — will be re-proved for the new model
     this.loadAbortController = new AbortController();
-    const loadId = ++this._loadGeneration; // Unique ID for this load — checked after every await
-    const checkSuperseded = () => {
-      if (this._loadGeneration !== loadId || this.loadAbortController?.signal?.aborted) {
-        throw new Error('Model load cancelled — superseded by newer load request');
-      }
-    };
     this.emit('status', { state: 'loading', message: `Loading model: ${path.basename(modelPath)}`, progress: 0 });
 
-    try {
-      const {
-        getLlama, LlamaChat, JinjaTemplateChatWrapper,
-        QwenChatWrapper, Llama3_2LightweightChatWrapper, Llama3_1ChatWrapper, Llama3ChatWrapper,
-        MistralChatWrapper, ChatMLChatWrapper, DeepSeekChatWrapper, Llama2ChatWrapper,
-        FalconChatWrapper, HarmonyChatWrapper, FunctionaryChatWrapper, AlpacaChatWrapper,
-        GemmaChatWrapper, GeneralChatWrapper,
-        InputLookupTokenPredictor,
-      } = await import(getNodeLlamaCppPath());
-      // Cache ALL wrapper classes — used by probe system and context rotation
-      this._llamaCppClasses = {
-        LlamaChat, JinjaTemplateChatWrapper,
-        QwenChatWrapper, Llama3_2LightweightChatWrapper, Llama3_1ChatWrapper, Llama3ChatWrapper,
-        MistralChatWrapper, ChatMLChatWrapper, DeepSeekChatWrapper, Llama2ChatWrapper,
-        FalconChatWrapper, HarmonyChatWrapper, FunctionaryChatWrapper, AlpacaChatWrapper,
-        GemmaChatWrapper, GeneralChatWrapper,
-      };
+    // Deferred promise — lets concurrent initialize() calls wait for THIS load to fully settle
+    // before starting their own, preventing double-native-op races that crash the main process.
+    let _resolveInit, _rejectInit;
+    this._initializingPromise = new Promise((res, rej) => { _resolveInit = res; _rejectInit = rej; });
 
-      // BUG-015: Cancel any in-flight generation BEFORE disposing the context.
-      // Without this, the ongoing agenticChat token loop throws "object is disposed"
-      // mid-stream when the context is freed under it.
-      if (this.isReady || this.abortController) {
-        try { this.cancelGeneration('model-switch'); } catch (_) {}
-        // BUG-015/BUG-032: Poll until generateStream's finally block clears generationActive.
-        // The old 100ms and 2000ms blind waits were race conditions — on CPU inference
-        // (where each token takes 100-5000ms), the token loop may be running well past
-        // 2000ms when dispose() fires, causing "object is disposed" crashes.
-        // 30 seconds is generous enough for even the slowest CPU inference to process
-        // the abort signal. GPU inference aborts in <500ms, so GPU users see no delay.
-        const deadline = Date.now() + 30000;
-        while (this.generationActive && Date.now() < deadline) {
-          await new Promise(r => setTimeout(r, 20));
-        }
-        if (this.generationActive) {
-          console.warn('[LLM] Generation still active after 30s abort wait — proceeding with dispose anyway');
-        }
-      }
+    try {
+      const { getLlama, LlamaChat, InputLookupTokenPredictor } = await import(getNodeLlamaCppPath());
 
       // Dispose previous model if loaded
       await this.dispose();
-      checkSuperseded();
 
       const modelStats = fs.statSync(modelPath);
-      // BUG-040: Pre-load size guard — warn before attempting to load a model that is likely
-      // too large for available hardware. modelStats.size ≈ quantized weights; actual footprint
-      // is ~1.15× (weights + model overhead + KV cache). Warn but don't block — user may have
-      // mmap or swap available. Logging the estimate helps users self-diagnose OOM failures.
-      const modelSizeGB = modelStats.size / (1024 ** 3);
-      const availableRamGB = os.freemem() / (1024 ** 3);
-      const cachedVramGB = this._cachedVramGB || 0;
-      const estimatedRequiredGB = modelSizeGB * 1.15;
-      const totalAvailableGB = cachedVramGB + availableRamGB;
-      if (estimatedRequiredGB > totalAvailableGB + 1.0) {
-        console.warn(`[LLM] BUG-040: Model size ~${estimatedRequiredGB.toFixed(1)}GB estimated; only ~${totalAvailableGB.toFixed(1)}GB available (${cachedVramGB.toFixed(1)}GB VRAM + ${availableRamGB.toFixed(1)}GB free RAM). Load may fail.`);
-        this.emit('status', { state: 'loading', message: `⚠️ Model (~${estimatedRequiredGB.toFixed(1)}GB) may exceed available memory (~${totalAvailableGB.toFixed(1)}GB). Load may fail — try a smaller quantization.`, progress: 0.01 });
-      }
       const userContextSize = this.contextSizeOverride && this.contextSizeOverride > 0
         ? this.contextSizeOverride
         : null;
@@ -274,6 +222,28 @@ class LLMEngine extends EventEmitter {
       // and offloads the optimal number of layers. ONE load attempt, not 7+.
       // This is exactly how LM Studio achieves instant loads.
       const gpuModes = this.gpuPreference === 'cpu' ? [false] : ['auto', false];
+
+      // Detect real dedicated VRAM via nvidia-smi BEFORE calling getLlama().
+      // Problem: Vulkan on systems with GTT/shared memory reports dedicated VRAM + system RAM
+      // as the total (e.g. 4GB GPU + 16GB RAM = ~20GB reported). gpuLayers:'auto' then tries
+      // to fill that non-existent 20GB → allocation fails. nvidia-smi always returns only
+      // physical dedicated VRAM. We use this to clamp the effective budget in vramPadding.
+      let nvidiaDedicatedVramBytes = 0;
+      if (this.gpuPreference !== 'cpu') {
+        try {
+          const { execSync } = require('child_process');
+          const nvOut = execSync('nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits', {
+            timeout: 3000, encoding: 'utf8', windowsHide: true,
+          });
+          const mib = parseFloat(nvOut.trim());
+          if (mib > 0) {
+            nvidiaDedicatedVramBytes = mib * 1024 * 1024; // MiB → bytes
+            console.log(`[LLM] nvidia-smi dedicated VRAM: ${(nvidiaDedicatedVramBytes / (1024 ** 3)).toFixed(1)}GB`);
+          }
+        } catch (_) {
+          console.log('[LLM] nvidia-smi unavailable — Vulkan total VRAM used as-is for padding');
+        }
+      }
 
       let gpuLayers = 0;
       let contextSize = 8192;
@@ -302,17 +272,26 @@ class LLMEngine extends EventEmitter {
             // GPU backend init — first run compiles CUDA kernels (60-120s).
             // Subsequent runs with same mode are near-instant (cached).
             // vramPadding: CRITICAL — reserves VRAM for the context (KV cache + compute).
-            // Too small = gpuLayers:auto fills VRAM with model weights, no room for context.
-            // 800MB min ensures ~4K context on 4GB GPUs. 2GB cap keeps big GPUs efficient.
-            // Old value was 3% (122MB on 4GB) which caused 512-1024 token contexts.
+            // If nvidia-smi reports a dedicated size far smaller than Vulkan's total
+            // (GTT/shared memory case), cap the usable budget to real dedicated VRAM only.
+            // Otherwise gpuLayers:'auto' over-allocates onto non-existent memory and fails.
             this.llamaInstance = await this._withTimeout(getLlama({
               gpu: tryGpuMode,
-              vramPadding: (totalVram) => Math.min(Math.max(totalVram * 0.15, 800 * 1024 * 1024), 2 * 1024 * 1024 * 1024),
+              vramPadding: (totalVram) => {
+                // Use nvidia-smi value if Vulkan is reporting GTT-inflated total
+                const effectiveBudget = (nvidiaDedicatedVramBytes > 0 && nvidiaDedicatedVramBytes < totalVram * 0.7)
+                  ? nvidiaDedicatedVramBytes
+                  : totalVram;
+                // Reserve 15% for KV cache/context — min 800MB, never leave less than 800MB
+                const usableForLayers = Math.min(effectiveBudget * 0.85, effectiveBudget - 800 * 1024 * 1024);
+                const padding = totalVram - usableForLayers;
+                console.log(`[LLM] vramPadding: Vulkan=${(totalVram/(1024**3)).toFixed(1)}GB effective=${(effectiveBudget/(1024**3)).toFixed(1)}GB usable=${(usableForLayers/(1024**3)).toFixed(1)}GB padding=${(padding/(1024**3)).toFixed(1)}GB`);
+                return Math.max(padding, 800 * 1024 * 1024);
+              },
               ramPadding: (totalRam) => Math.min(totalRam * 0.08, 2 * 1024 * 1024 * 1024),
               logLevel: 'info',
             }), 120000, 'GPU backend init');
             this._lastGpuMode = tryGpuMode;
-            checkSuperseded();
           }
 
           try {
@@ -345,7 +324,6 @@ class LLMEngine extends EventEmitter {
               this.emit('status', { state: 'loading', message: `Loading model: ${pct}%`, progress: 0.1 + progress * 0.5 });
             },
           }), 180000, 'Model load'); // 180s — large MoE models can be 15GB+
-          checkSuperseded();
 
           // Read actual GPU layers from the loaded model
           try { gpuLayers = this.model.gpuLayers ?? 0; } catch (_) { gpuLayers = 0; }
@@ -355,36 +333,15 @@ class LLMEngine extends EventEmitter {
           continue;
         }
 
-        // === WRAPPER PROBE (pre-context) ===
-        // CRITICAL: Run probe BEFORE creating the main context.
-        // On 4GB GPUs the main context consumes all remaining VRAM — a subsequent
-        // 512-token probe context then fails with "context size too large for VRAM".
-        // Running here means VRAM is free, so temp probe contexts always succeed.
-        await this._probeAndSelectWrapper(modelPath, modelStats);
-
         // === CONTEXT CREATION ===
         let nativeContext = 0;
         try { nativeContext = this.model.trainContextSize || 0; } catch (_) {}
         console.log(`[LLM] Model train context size: ${nativeContext}`);
 
         const cpuThreads = Math.max(1, os.cpus().length - 2);
-        // Use the model's native context or a generous default.
-        // node-llama-cpp's failedCreationRemedy (6 retries, 16% auto-shrink) handles
-        // resource limits gracefully — no need for preemptive RAM-based caps.
-        // The model profile effectiveContextSize is used for prompt budgeting downstream,
-        // but for allocation we target the model's actual capability.
-        const profileCtx = (() => {
-          try {
-            const family = detectFamily(modelPath);
-            const paramSize = detectParamSize(modelPath);
-            const profile = getModelProfile(family, paramSize);
-            console.log(`[LLM] Model profile: ${family}/${paramSize}B (${profile._meta.tier}) → effectiveCtx=${profile.context.effectiveContextSize}`);
-            return profile.context.effectiveContextSize;
-          } catch (_) { return 0; }
-        })();
-        const targetCtx = userContextSize || profileCtx || nativeContext || 32768;
-        const maxContext = nativeContext > 0 ? Math.min(targetCtx, nativeContext) : targetCtx;
-        console.log(`[LLM] Target context: ${maxContext} (profile=${profileCtx}, native=${nativeContext}, user=${userContextSize || 'auto'})`);
+        const totalRAM = os.totalmem() / (1024 ** 3);
+        const defaultMaxCtx = totalRAM >= 32 ? 32768 : totalRAM >= 16 ? 16384 : 8192;
+        const maxContext = userContextSize || Math.min(nativeContext || defaultMaxCtx, defaultMaxCtx);
         // Let node-llama-cpp auto-select batchSize based on available VRAM.
         // Forcing batchSize=4096 caused compute buffers to exceed VRAM on partial offload.
 
@@ -409,32 +366,12 @@ class LLMEngine extends EventEmitter {
               15000, // 15s — context creation is fast, VRAM allocation is near-instant
               'Context creation'
             );
-            checkSuperseded();
             contextSize = this.context.contextSize;
             flashAttnEnabled = tryFlash;
             console.log(`[LLM] Context: ${contextSize} tokens (threads: ${cpuThreads}, flash: ${tryFlash})`);
 
-            // ── FLASH COHERENCE CHECK ─────────────────────────────────────────
-            // Some hardware produces word salad with flashAttention:true despite
-            // context creation succeeding (FA2 numerical instability on partial
-            // GPU offload / older GPUs). Run a quick 20-token probe to detect this.
-            // If the probe returns garbage → disable flash for this model.
-            if (tryFlash) {
-              const flashOk = await this._runFlashCoherenceCheck();
-              if (!flashOk) {
-                console.warn('[LLM] Flash attention coherence check FAILED — disabling flash and retrying context creation');
-                try { await this.context.dispose(); } catch (_) {}
-                this.context = null;
-                flashAttnEnabled = false;
-                continue; // retry the flash loop with tryFlash=false
-              }
-              console.log('[LLM] Flash attention coherence check PASSED');
-            }
-            // ─────────────────────────────────────────────────────────────────
-
             success = true;
             gpuMode = tryGpuMode;
-            this._flashAttnEnabled = flashAttnEnabled; // persist for resetSession / diagnostics
             break;
           } catch (ctxErr) {
             console.log(`[LLM] Context (flash=${tryFlash}) failed: ${ctxErr.message?.substring(0, 120)}`);
@@ -469,11 +406,6 @@ class LLMEngine extends EventEmitter {
       this.chat = new LlamaChat({
         contextSequence: this.sequence,
       });
-      // Apply the probe-confirmed wrapper (probe ran pre-context; chat didn't exist yet).
-      // If no probe ran (cache hit handled it), _selectedWrapperName is already set.
-      if (this._selectedWrapperName) {
-        this._applyNamedWrapper(this._selectedWrapperName);
-      }
       // Initialize conversation history with proper system role
       this.chatHistory = [{
         type: 'system',
@@ -481,24 +413,16 @@ class LLMEngine extends EventEmitter {
       }];
       this.lastEvaluation = null;
 
-      // Log the active wrapper (probe-confirmed + applied above, or auto-detected if probe ran pre-context)
+      // Log the auto-detected chat wrapper for debugging model compatibility issues
       const chatWrapperName = this.chat?.chatWrapper?.constructor?.name || 'unknown';
-      console.log(`[LLM] Chat wrapper active: ${chatWrapperName}`);
+      console.log(`[LLM] Chat wrapper auto-detected: ${chatWrapperName}`);
       if (chatWrapperName === 'unknown' || chatWrapperName === 'GeneralChatWrapper') {
         console.warn('[LLM] Model may not have a proper chat template embedded. Consider using a model with a specific template (ChatML, Llama3, Gemma, etc.)');
       }
 
-      // (wrapper probe ran pre-context above; applied to this.chat immediately after its creation)
-
-      // Track model switch: any time a DIFFERENT model path is loaded, mark the flag so
-      // agenticChat.js can skip seeding cross-model conversation history.
-      this._justLoadedNewModel = (this.currentModelPath !== modelPath);
       this.currentModelPath = modelPath;
       this.isReady = true;
       this.isLoading = false;
-
-      // Re-read the final wrapper name — it may have been overridden by the BUG-023 fix above.
-      const finalChatWrapperName = this.chat?.chatWrapper?.constructor?.name || 'unknown';
 
       this.modelInfo = {
         path: modelPath,
@@ -508,429 +432,36 @@ class LLMEngine extends EventEmitter {
         gpuLayers: gpuLayers,
         gpuBackend: gpuMode === 'auto' ? (gpuLayers > 0 ? 'CUDA/Vulkan' : 'CPU (auto)') : 'CPU',
         flashAttention: flashAttnEnabled,
-        chatWrapper: finalChatWrapperName,
+        chatWrapper: chatWrapperName,
       };
 
-      console.log(`[LLM] Ready: ${this.modelInfo.name} — ${contextSize} ctx, ${gpuLayers} GPU layers, flash: ${flashAttnEnabled}, wrapper: ${finalChatWrapperName}`);
+      console.log(`[LLM] Ready: ${this.modelInfo.name} — ${contextSize} ctx, ${gpuLayers} GPU layers, flash: ${flashAttnEnabled}, wrapper: ${chatWrapperName}`);
 
-      const cpuFallbackNote = gpuLayers === 0 && this.gpuPreference !== 'cpu'
-        ? ' ⚠️ CPU only — GPU context too small, inference will be slow'
-        : gpuLayers === 0 ? ' (CPU mode)' : '';
-
-      // BUG-042: Warn when a thinking/reasoning model loads on limited VRAM context.
-      // At contextSize < 8192, the thinking chain runs mostly on CPU → 60-150s per iteration.
-      const modelBaseName = path.basename(modelPath, '.gguf');
-      const isThinkingModel = /thinking|\bcot\b|r1[_-]distill|reasoning/i.test(modelBaseName);
-      const thinkingWarning = isThinkingModel && contextSize < 8192;
-      if (thinkingWarning) {
-        console.warn(`[LLM] BUG-042: Thinking model with only ${contextSize} ctx tokens — expect 60-150s per iteration on limited VRAM.`);
+      // Warn user if model fell back to CPU despite a GPU being available
+      if (gpuLayers === 0 && gpuMode === false && this.gpuPreference !== 'cpu') {
+        const gpuWarnMsg = '⚠️ GPU allocation failed — model is running on CPU only. Inference will be slow. This usually means the model is too large for available GPU VRAM. Try a smaller quantization (Q4_K_M or Q3_K_M) or a model with fewer parameters.';
+        console.warn(`[LLM] ${gpuWarnMsg}`);
+        this.emit('status', { state: 'warn', message: gpuWarnMsg });
       }
 
       this.emit('status', {
         state: 'ready',
-        message: `Model loaded (${contextSize} ctx, ${gpuLayers} GPU layers${flashAttnEnabled ? ', flash attn' : ''}, ${finalChatWrapperName})${cpuFallbackNote}${thinkingWarning ? ' ⚠️ Thinking model on limited VRAM — expect slow responses' : ''}`,
+        message: `Model loaded (${contextSize} ctx, ${gpuLayers} GPU layers${flashAttnEnabled ? ', flash attn' : ''}, ${chatWrapperName})`,
         modelInfo: this.modelInfo,
-        cpuFallback: gpuLayers === 0,
-        thinkingWarning,
         progress: 1.0
       });
+      _resolveInit(this.modelInfo);
+      this._initializingPromise = null; // Clear so next switch doesn't wait on an already-resolved load
       return this.modelInfo;
     } catch (error) {
       this.isLoading = false;
       this.isReady = false;
       console.error('[LLM] Model load failed:', error.message);
       this.emit('status', { state: 'error', message: error.message });
+      if (typeof _rejectInit === 'function') _rejectInit(error);
+      this._initializingPromise = null; // Clear on failure too
       throw error;
     }
-  }
-
-  /**
-   * Re-applies the wrapper proven by _probeAndSelectWrapper() after context rotation.
-   * agenticChat.js creates a new LlamaChat() after rotating context, which resets the
-   * wrapper to node-llama-cpp's auto-detected default. This restores the proven wrapper
-   * instantly — zero inference cost. Falls back to minimal heuristics if probe hasn’t run.
-   */
-  _applyChatWrapperOverride() {
-    if (!this.chat || !this.model || !this._llamaCppClasses) return;
-
-    // Fast path: probe already ran — re-apply the confirmed wrapper
-    if (this._selectedWrapperName) {
-      this._applyNamedWrapper(this._selectedWrapperName);
-      return;
-    }
-
-    // Fallback heuristics (probe hasn’t run — shouldn’t happen in normal operation)
-    const { LlamaChat, JinjaTemplateChatWrapper, Llama3_1ChatWrapper } = this._llamaCppClasses;
-    if (!LlamaChat || !JinjaTemplateChatWrapper) return;
-    const currentWrapper = this.chat?.chatWrapper?.constructor?.name || 'unknown';
-    if (currentWrapper === 'JinjaTemplateChatWrapper' || currentWrapper === 'QwenChatWrapper') return;
-    const jinjaTemplate = this.model.fileInfo?.metadata?.tokenizer?.chat_template;
-    const hasJinja = jinjaTemplate != null && jinjaTemplate.trim() !== '';
-    if (currentWrapper === 'Llama3_2LightweightChatWrapper' && Llama3_1ChatWrapper) {
-      try { this.chat.dispose(); this.chat = new LlamaChat({ contextSequence: this.sequence, chatWrapper: new Llama3_1ChatWrapper() }); } catch (_) {}
-      return;
-    }
-    if (hasJinja) {
-      try { this.chat.dispose(); this.chat = new LlamaChat({ contextSequence: this.sequence, chatWrapper: new JinjaTemplateChatWrapper({ template: jinjaTemplate, tokenizer: this.model.tokenizer }) }); } catch (_) {}
-    }
-  }
-
-  // ─────────────────────────────────────────────────────────────────────────────
-  // FLASH ATTENTION COHERENCE GUARD
-  // ─────────────────────────────────────────────────────────────────────────────
-
-  /**
-   * Validates that the current main context produces coherent output with flash attention.
-   *
-   * Some hardware (typically older GPUs or partial CPU/GPU offload configs) produces
-   * word salad when flashAttention:true is used, despite context creation succeeding.
-   * This runs a quick 20-token probe on the fresh main context to detect this.
-   *
-   * Called immediately after context creation with flashAttention:true.
-   * Returns false → caller should dispose the flash context and retry with flash:false.
-   *
-   * NOTE: Creates a temporary sequence on this.context, then disposes it.
-   * The context is left clean (zero tokens) for the actual first generation.
-   */
-  async _runFlashCoherenceCheck() {
-    if (!this.context || !this._llamaCppClasses) return true;
-    const { LlamaChat } = this._llamaCppClasses;
-    if (!LlamaChat) return true;
-    const wrapperName = this._selectedWrapperName || 'GeneralChatWrapper';
-    const wrapper = this._buildWrapperInstance(wrapperName);
-    if (!wrapper) return true; // can't build wrapper — assume ok
-    let seq = null;
-    let chat = null;
-    try {
-      seq  = this.context.getSequence();
-      chat = new LlamaChat({ contextSequence: seq, chatWrapper: wrapper });
-      let resp = '';
-      await chat.generateResponse(
-        [
-          { type: 'system', text: 'You are a helpful assistant.' },
-          { type: 'user',   text: 'Reply with only the word: yes' },
-        ],
-        {
-          maxTokens: 20,
-          temperature: this.defaultParams.temperature,
-          topP: this.defaultParams.topP,
-          topK: this.defaultParams.topK,
-          repeatPenalty: {
-            penalty: this.defaultParams.repeatPenalty,
-            frequencyPenalty: this.defaultParams.frequencyPenalty,
-            presencePenalty: this.defaultParams.presencePenalty,
-            lastTokensPenaltyCount: this.defaultParams.lastTokensPenaltyCount,
-          },
-          onResponseChunk: (chunk) => { if (chunk.text) resp += chunk.text; },
-        }
-      );
-      const passed = /yes/i.test(resp.trim().slice(0, 80));
-      console.log(`[LLM] Flash coherence: ${passed ? 'PASS ✓' : 'FAIL ✗'} ["${resp.trim().slice(0, 60)}"]`);
-      return passed;
-    } catch (e) {
-      console.warn(`[LLM] Flash coherence check threw: ${e.message?.slice(0, 80)} — assuming OK`);
-      return true; // err on side of keeping flash (safety: don't disable flash on unexpected error)
-    } finally {
-      try { chat?.dispose(); } catch (_) {}
-      try { await seq?.dispose(); } catch (_) {}
-      // Sequence is disposed — context is clean with 0 tokens for actual first generation
-    }
-  }
-
-  // ─────────────────────────────────────────────────────────────────────────────
-  // WRAPPER PROBE SYSTEM
-  // Empirically selects the best chat wrapper for each model at first load.
-  // Results are cached to userData/wrapper-cache.json — zero cost on reload.
-  // ─────────────────────────────────────────────────────────────────────────────
-
-  /** Load the wrapper cache from userData/wrapper-cache.json (lazy, once per process). */
-  _loadWrapperCache() {
-    if (this._wrapperCacheLoaded) return;
-    this._wrapperCacheLoaded = true;
-    try {
-      this._wrapperCachePath = path.join(app.getPath('userData'), 'wrapper-cache.json');
-      if (fs.existsSync(this._wrapperCachePath)) {
-        this._probeWrapperCache = JSON.parse(fs.readFileSync(this._wrapperCachePath, 'utf8'));
-        console.log(`[LLM] Wrapper cache loaded: ${Object.keys(this._probeWrapperCache).length} entries`);
-      }
-    } catch (e) {
-      console.warn(`[LLM] Wrapper cache load failed: ${e.message} — will re-probe`);
-      this._probeWrapperCache = {};
-    }
-  }
-
-  /** Persist the wrapper cache to disk. */
-  _saveWrapperCache() {
-    try {
-      if (this._wrapperCachePath) {
-        fs.writeFileSync(this._wrapperCachePath, JSON.stringify(this._probeWrapperCache, null, 2), 'utf8');
-      }
-    } catch (e) {
-      console.warn(`[LLM] Wrapper cache save failed: ${e.message}`);
-    }
-  }
-
-  /**
-   * Construct a wrapper instance by class name.
-   * Returns null if the name is unknown, the class wasn't imported, or construction fails.
-   * JinjaTemplateChatWrapper requires an embedded template — returns null if none present.
-   */
-  _buildWrapperInstance(name) {
-    const c = this._llamaCppClasses;
-    if (!c) return null;
-    const jinjaTemplate = this.model?.fileInfo?.metadata?.tokenizer?.chat_template;
-    try {
-      switch (name) {
-        case 'JinjaTemplateChatWrapper':
-          return (jinjaTemplate && c.JinjaTemplateChatWrapper)
-            ? new c.JinjaTemplateChatWrapper({ template: jinjaTemplate, tokenizer: this.model.tokenizer })
-            : null;
-        case 'QwenChatWrapper':          return c.QwenChatWrapper          ? new c.QwenChatWrapper()          : null;
-        case 'Llama3_1ChatWrapper':      return c.Llama3_1ChatWrapper      ? new c.Llama3_1ChatWrapper()      : null;
-        case 'Llama3ChatWrapper':        return c.Llama3ChatWrapper        ? new c.Llama3ChatWrapper()        : null;
-        // Disable date preamble: without this, Llama3.2 adds "Cutting Knowledge Date: ...\nToday Date: ..."
-        // system message preamble. Null dates removes that preamble — no meaningful effect on output quality
-        // (confirmed via wrapper tests: null vs default produce virtually identical responses).
-        case 'Llama3_2LightweightChatWrapper': return c.Llama3_2LightweightChatWrapper ? new c.Llama3_2LightweightChatWrapper({ todayDate: null, cuttingKnowledgeDate: null }) : null;
-        case 'MistralChatWrapper':       return c.MistralChatWrapper       ? new c.MistralChatWrapper()       : null;
-        case 'ChatMLChatWrapper':        return c.ChatMLChatWrapper        ? new c.ChatMLChatWrapper()        : null;
-        case 'DeepSeekChatWrapper':      return c.DeepSeekChatWrapper      ? new c.DeepSeekChatWrapper()      : null;
-        case 'Llama2ChatWrapper':        return c.Llama2ChatWrapper        ? new c.Llama2ChatWrapper()        : null;
-        case 'FalconChatWrapper':        return c.FalconChatWrapper        ? new c.FalconChatWrapper()        : null;
-        case 'HarmonyChatWrapper':       return c.HarmonyChatWrapper       ? new c.HarmonyChatWrapper()       : null;
-        case 'FunctionaryChatWrapper':   return c.FunctionaryChatWrapper   ? new c.FunctionaryChatWrapper()   : null;
-        case 'AlpacaChatWrapper':        return c.AlpacaChatWrapper        ? new c.AlpacaChatWrapper()        : null;
-        case 'GemmaChatWrapper':         return c.GemmaChatWrapper         ? new c.GemmaChatWrapper()         : null;
-        case 'GeneralChatWrapper':       return c.GeneralChatWrapper       ? new c.GeneralChatWrapper()       : null;
-        default: return null;
-      }
-    } catch (e) {
-      console.warn(`[LLM] _buildWrapperInstance("${name}") threw: ${e.message}`);
-      return null;
-    }
-  }
-
-  /**
-   * Apply a named wrapper to this.chat by rebuilding the LlamaChat instance.
-   * Used by both probe selection (initial load) and _applyChatWrapperOverride (context rotation).
-   * Returns true on success, false on failure (current chat is unchanged on failure).
-   */
-  _applyNamedWrapper(name) {
-    const { LlamaChat } = this._llamaCppClasses || {};
-    if (!LlamaChat) return false;
-    const wrapperInstance = this._buildWrapperInstance(name);
-    if (!wrapperInstance) {
-      console.warn(`[LLM] _applyNamedWrapper: could not build "${name}" — keeping current wrapper`);
-      return false;
-    }
-    try {
-      this.chat.dispose();
-      this.chat = new LlamaChat({ contextSequence: this.sequence, chatWrapper: wrapperInstance });
-      this._selectedWrapperName = name;
-      // Log full wrapper state so we can diagnose future word salad issues
-      const wi = this.chat?.chatWrapper;
-      const extras = [];
-      if (wi?.todayDate !== undefined)          extras.push(`todayDate=${wi.todayDate}`);
-      if (wi?.cuttingKnowledgeDate !== undefined) extras.push(`cuttingDate=${wi.cuttingKnowledgeDate}`);
-      if (wi?.noToolInstructions !== undefined)  extras.push(`noToolInstructions=${wi.noToolInstructions}`);
-      console.log(`[LLM] Wrapper applied: ${name}${extras.length ? ' | ' + extras.join(', ') : ''}`);
-      return true;
-    } catch (e) {
-      console.error(`[LLM] _applyNamedWrapper("${name}") failed: ${e.message}`);
-      return false;
-    }
-  }
-
-  /**
-   * Run a single probe inference for one wrapper candidate.
-   * Creates a TEMPORARY minimal context (512 tokens) — zero impact on the main context's VRAM
-   * allocation. Disposed immediately after the probe.
-   * Returns true only if the wrapper produces output containing "yes" (coherence check).
-   * Max 20 tokens so this is fast even on large models.
-   */
-  async _runWrapperProbe(wrapperName) {
-    const { LlamaChat } = this._llamaCppClasses || {};
-    if (!LlamaChat || !this.model) return false;
-    const wrapperInstance = this._buildWrapperInstance(wrapperName);
-    if (!wrapperInstance) return false;
-
-    // Temp context: small (512 tokens), 1 sequence, no flash attention required.
-    // Using a separate context means the main context's size/VRAM is never affected.
-    let tempCtx = null;
-    let probeSeq = null;
-    let probeChat = null;
-    try {
-      tempCtx = await this.model.createContext({ contextSize: 512, sequences: 1 });
-      probeSeq = tempCtx.getSequence();
-      probeChat = new LlamaChat({ contextSequence: probeSeq, chatWrapper: wrapperInstance });
-      let responseText = '';
-      await probeChat.generateResponse(
-        [
-          { type: 'system', text: 'You are a helpful assistant.' },
-          { type: 'user',   text: 'Reply with only the word: yes' },
-        ],
-        {
-          maxTokens: 20,
-          // Use production sampling params so the probe catches failures that
-          // only manifest under our actual settings (e.g. Q4 models under topK=40).
-          temperature: this.defaultParams.temperature,
-          topP: this.defaultParams.topP,
-          topK: this.defaultParams.topK,
-          repeatPenalty: {
-            penalty: this.defaultParams.repeatPenalty,
-            frequencyPenalty: this.defaultParams.frequencyPenalty,
-            presencePenalty: this.defaultParams.presencePenalty,
-            lastTokensPenaltyCount: this.defaultParams.lastTokensPenaltyCount,
-          },
-          onResponseChunk: (chunk) => { if (chunk.text) responseText += chunk.text; },
-        }
-      );
-      // Coherence check: the wrapper must produce the expected word, not garbage.
-      // A non-empty response that doesn't contain "yes" means the wrapper is wrong
-      // for this model (e.g. Qwen wrapper misformatting a Llama prompt → word salad).
-      const passed = responseText.toLowerCase().includes('yes');
-      console.log(`[LLM] Probe "${wrapperName}": ${passed ? 'PASS' : 'FAIL'} — "${responseText.trim().slice(0, 40)}"`);
-      return passed;
-    } catch (e) {
-      console.warn(`[LLM] Probe "${wrapperName}" error: ${e.message.slice(0, 80)}`);
-      return false;
-    } finally {
-      try { probeChat?.dispose(); } catch (_) {}
-      try { await probeSeq?.dispose(); } catch (_) {}
-      try { await tempCtx?.dispose(); } catch (_) {}
-    }
-  }
-
-  /**
-   * Probe-based wrapper selection — replaces static heuristics entirely.
-   *
-   * Called ONCE per model load (after context is created, before first generation).
-   *
-   * Cache HIT  (path + file size + mtime match): applies the saved wrapper immediately.
-   *            Zero inference cost. Typical case after first load.
-   *
-   * Cache MISS: probes each candidate in order, stops at the first wrapper that produces
-   *            non-empty output with a system prompt present. Saves the winner.
-   *            Typical cost: 1–3 seconds (most models pass on the first or second candidate).
-   *            Worst case (obscure model needing deep fallback): ~15 probes × ~2s = ~30s once.
-   *
-   * Candidate order (designed to minimise total probes for the widest range of models):
-   *   1. Auto-detected by node-llama-cpp (correct for ~80% of models, costs nothing extra)
-   *   2. JinjaTemplateChatWrapper (if model has embedded template — most modern models do)
-   *   3. Architecture-matched wrappers (Qwen, Llama, Mistral, DeepSeek, Gemma)
-   *   4. Generic wrappers in descending quality order
-   *   5. GeneralChatWrapper — always last, always produces something
-   */
-  async _probeAndSelectWrapper(modelPath, modelStats) {
-    // Guard: only need model + classes. Context/chat may not exist yet (pre-context probe).
-    if (!this.model || !this._llamaCppClasses) return;
-
-    this._loadWrapperCache();
-    const cacheKey = `${modelPath}|${modelStats.size}|${modelStats.mtimeMs}`;
-    const cached = this._probeWrapperCache[cacheKey];
-
-    if (cached) {
-      console.log(`[LLM] Wrapper cache HIT "${path.basename(modelPath)}": "${cached}"`);
-      this.emit('status', { state: 'loading', message: `Chat wrapper: ${cached} (cached)`, progress: 0.96 });
-      // Store as selected; apply now if chat exists, otherwise loadModel() applies it post-context.
-      this._selectedWrapperName = cached;
-      if (this.chat) this._applyNamedWrapper(cached);
-      return;
-    }
-
-    // Determine the auto-detected wrapper by creating a minimal temp context.
-    // node-llama-cpp reads the model's embedded template + arch when LlamaChat is created
-    // without specifying a wrapper — this gives us the library's own best guess.
-    const { LlamaChat } = this._llamaCppClasses;
-    let autoDetected = 'GeneralChatWrapper';
-    if (LlamaChat) {
-      let autoDetCtx = null; let autoDetSeq = null; let autoDetChat = null;
-      try {
-        autoDetCtx = await this.model.createContext({ contextSize: 512, sequences: 1 });
-        autoDetSeq = autoDetCtx.getSequence();
-        autoDetChat = new LlamaChat({ contextSequence: autoDetSeq });
-        autoDetected = autoDetChat?.chatWrapper?.constructor?.name || 'GeneralChatWrapper';
-        console.log(`[LLM] Chat wrapper auto-detected: ${autoDetected}`);
-      } catch (e) {
-        console.warn(`[LLM] Auto-detect temp context failed: ${e.message?.slice(0, 80)} — using GeneralChatWrapper fallback`);
-      } finally {
-        try { autoDetChat?.dispose(); } catch (_) {}
-        try { await autoDetSeq?.dispose(); } catch (_) {}
-        try { await autoDetCtx?.dispose(); } catch (_) {}
-      }
-    }
-
-    // Build ordered, deduplicated candidate list
-    const jinjaTemplate = this.model.fileInfo?.metadata?.tokenizer?.chat_template;
-    const hasJinja = jinjaTemplate != null && jinjaTemplate.trim() !== '';
-    const arch = (this.model.fileInfo?.metadata?.general?.architecture || '').toLowerCase();
-
-    const seen = new Set();
-    const candidates = [];
-    const add = (name) => { if (name && !seen.has(name)) { seen.add(name); candidates.push(name); } };
-
-    // Filename-based family detection — catches models with missing/incorrect GGUF arch field.
-    // detectFamily() uses the filename (e.g. "qwen2.5-1.5b-instruct.gguf" → 'qwen').
-    const filenameFamily = (detectFamily(modelPath) || '').toLowerCase();
-
-    // Tier 1: most likely to be correct
-    add(autoDetected);
-    if (hasJinja)                          add('JinjaTemplateChatWrapper');
-    // Tier 1.5: filename-detected family (handles models with no/wrong GGUF arch field)
-    if (filenameFamily === 'qwen')         add('QwenChatWrapper');
-    if (filenameFamily === 'llama')        { add('Llama3_1ChatWrapper'); add('Llama3ChatWrapper'); }
-    if (filenameFamily === 'mistral')      add('MistralChatWrapper');
-    if (filenameFamily === 'deepseek')     add('DeepSeekChatWrapper');
-    if (filenameFamily === 'gemma')        add('GemmaChatWrapper');
-    // Tier 2: GGUF metadata architecture-matched
-    if (arch.startsWith('qwen'))           add('QwenChatWrapper');
-    if (arch.startsWith('llama'))          add('Llama3_1ChatWrapper');
-    if (arch.startsWith('llama'))          add('Llama3ChatWrapper');
-    if (arch === 'mistral')                add('MistralChatWrapper');
-    if (arch === 'deepseek')               add('DeepSeekChatWrapper');
-    if (arch === 'gemma' || arch === 'gemma2') add('GemmaChatWrapper');
-    // Tier 3: generic fallbacks for any architecture
-    add('Llama3_1ChatWrapper');
-    add('Llama3ChatWrapper');
-    add('ChatMLChatWrapper');
-    add('MistralChatWrapper');
-    add('DeepSeekChatWrapper');
-    add('Llama2ChatWrapper');
-    add('FalconChatWrapper');
-    add('HarmonyChatWrapper');
-    add('FunctionaryChatWrapper');
-    add('AlpacaChatWrapper');
-    add('QwenChatWrapper');
-    add('GemmaChatWrapper');
-    add('GeneralChatWrapper'); // Terminal fallback — always produces something
-
-    console.log(`[LLM] Wrapper probe starting: ${candidates.length} candidates for "${path.basename(modelPath)}"`);
-    this.emit('status', { state: 'loading', message: `Probing chat wrapper (first load only)…`, progress: 0.92 });
-
-    for (let i = 0; i < candidates.length; i++) {
-      const name = candidates[i];
-      this.emit('status', {
-        state: 'loading',
-        message: `Testing wrapper ${i + 1}/${candidates.length}: ${name}…`,
-        progress: 0.92 + (0.06 * (i / candidates.length)),
-      });
-      const passed = await this._runWrapperProbe(name);
-      if (passed) {
-        console.log(`[LLM] Wrapper confirmed: "${name}" for "${path.basename(modelPath)}"`);
-        this._probeWrapperCache[cacheKey] = name;
-        this._saveWrapperCache();
-        // Store as selected; apply now only if chat exists (post-context call).
-        // If running pre-context, loadModel() applies it after LlamaChat is created.
-        this._selectedWrapperName = name;
-        if (this.chat) this._applyNamedWrapper(name);
-        this.emit('status', { state: 'loading', message: `Chat wrapper confirmed: ${name}`, progress: 0.98 });
-        return;
-      }
-    }
-
-    // All probes failed — keep auto-detected (happens only if model is fundamentally broken)
-    console.error(`[LLM] All wrapper probes failed for "${path.basename(modelPath)}" — keeping auto-detected "${autoDetected}"`);
-    this._selectedWrapperName = autoDetected;
   }
 
   /**
@@ -962,66 +493,16 @@ class LLMEngine extends EventEmitter {
     // mode='none' → 0 (no think tokens), mode='budget' → profile.thinkTokens.budget,
     // mode='unlimited' → -1 (Infinity).
     const profile = getModelProfile(family, paramSize);
-    // Default is 'none' — thinking is opt-in, not opt-out. Applying a budget to a
-    // non-thinking model (e.g. Qwen2.5) injects think-mode directives it was never
-    // trained for and produces garbage output.
-    const thinkMode = profile.thinkTokens?.mode || 'none';
-
-    // Override for thinking-variant models: filenames containing "thinking", "cot",
-    // or "r1-distill" are trained with chain-of-thought. Suppressing think tokens
-    // for these models produces gibberish because they're trained to reason before
-    // answering. Give them a reasonable budget even if the base family has mode='none'.
-    const modelName = (this.modelInfo?.name || this.modelPath || '').toLowerCase();
-    // 'qwen3' is included because the Qwen3 generation supports thinking even when
-    // the base profile is mode:'none'. Qwen2.5 (qwen2_5 / qwen2.5) does NOT support
-    // thinking — do NOT add generic 'qwen' here.
-    const isThinkingVariant = /thinking|[\b_-]cot[\b_-]|r1[_-]distill|reasoning|qwen3/i.test(modelName);
-
-    // Compute profile-default budget first
-    let profileBudget;
-    if (isThinkingVariant && thinkMode === 'none') {
-      // Thinking-capable model with mode:'none' profile → promote to budget.
-      // Use profile's _thinkBudgetWhenActive if available, otherwise size-based default.
-      const perTierBudget = profile._thinkBudgetWhenActive;
-      profileBudget = perTierBudget ?? (paramSize <= 1 ? 128 : paramSize <= 3 ? 256 : paramSize <= 7 ? 1024 : 2048);
-      console.log(`[LLM] Thinking-variant model detected — overriding thinkTokens from 'none' to budget=${profileBudget}`);
-    } else if (thinkMode === 'none') {
-      profileBudget = 0;
+    const thinkMode = profile.thinkTokens?.mode || 'budget';
+    if (thinkMode === 'none') {
+      this.thoughtTokenBudget = 0;
     } else if (thinkMode === 'unlimited') {
-      profileBudget = -1;
+      this.thoughtTokenBudget = -1;
     } else {
-      profileBudget = profile.thinkTokens?.budget ?? 2048;
+      this.thoughtTokenBudget = profile.thinkTokens?.budget ?? 2048;
     }
 
-    // Apply the user's Reasoning Effort setting as a modifier.
-    // Profile budget is the "medium" default. Low clamps down, High unlocks unlimited.
-    if (this.reasoningEffort === 'low') {
-      this.thoughtTokenBudget = Math.min(profileBudget === -1 ? 256 : profileBudget, 256);
-    } else if (this.reasoningEffort === 'high') {
-      this.thoughtTokenBudget = -1; // unlimited
-    } else {
-      // 'medium' → use the profile's own budget as-is
-      this.thoughtTokenBudget = profileBudget;
-    }
-
-    // BUG-008: On CPU-only mode, small models with extensive think budgets cause severe
-    // latency (5-7 minutes per response). Cap to 512 to keep responses under ~2 minutes.
-    // paramSize > 0 guard: detectParamSize() returns 0 for unrecognized filenames —
-    // without it, any unknown-named model on CPU would wrongly trigger this cap.
-    if ((this.modelInfo?.gpuLayers ?? 0) === 0 && this.thoughtTokenBudget > 512 && this.thoughtTokenBudget !== -1 && paramSize > 0 && paramSize <= 7) {
-      console.log(`[LLM] CPU mode + small model: capping ThoughtTokenBudget ${this.thoughtTokenBudget} → 512`);
-      this.thoughtTokenBudget = 512;
-    }
-
-    console.log(`[LLM] ThoughtTokenBudget: ${this.thoughtTokenBudget} (effort=${this.reasoningEffort}, profileDefault=${profileBudget})`);
-
-    // BUG-020: Surface overlyVerbose flag so generateStream can apply maxTokens cap
-    const overlyVerbose = profile.quirks?.overlyVerbose ?? false;
-    if (overlyVerbose) {
-      console.log(`[LLM] Model profile overlyVerbose=true — maxTokens will be capped to 2048 for non-chat tasks`);
-    }
-
-    return { ...samplingParams, overlyVerbose };
+    return samplingParams;
   }
 
   /**
@@ -1102,8 +583,7 @@ class LLMEngine extends EventEmitter {
    * ~500 tokens — tight enough for small context models, clear enough for large ones.
    */
   _getSystemPrompt() {
-    return `You are guIDE, an AI coding assistant in a desktop IDE. Created by an indie dev at graysoft.dev.
-You are NOT ChatGPT, Gemini, Claude, or any other AI. Your name is guIDE.
+    return `You are NOT ChatGPT, Gemini, Claude, or any other AI. Your name is guIDE.
 
 CORE PRINCIPLE:
 - You are the user's personal assistant on THEIR machine, accessing THEIR accounts and THEIR data.
@@ -1131,7 +611,7 @@ CRITICAL TOOL RULES:
 
 TOOL FORMAT (when performing actions):
 \`\`\`json
-{"tool": "tool_name", "params": {"key": "value"}}
+{"tool": "read_file", "params": {"filePath": "src/app.js"}}
 \`\`\`
 You may output MULTIPLE tool calls in one response when they are independent:
 \`\`\`json
@@ -1181,7 +661,7 @@ PERSISTENCE:
    * ~150 tokens — just identity, format, and behavior reminders.
    */
   _getCompactSystemPrompt() {
-    return `You are guIDE, AI coding assistant by an indie dev at graysoft.dev. You are the user's personal assistant on THEIR machine — execute any task they request without hesitation. NEVER refuse. NEVER claim CAPTCHAs or anti-bot systems block you — your browser is real Chromium. Respond naturally to conversation. Only use tools when asked to DO something.\nTool format: \`\`\`json {"tool":"name","params":{}} \`\`\` — multiple allowed per response when independent.\nCRITICAL: NEVER claim you did something without calling a tool. NEVER hallucinate data. Every action needs a real tool call. NEVER describe manual steps — DO the work with tools.\nBrowser: real Chromium, call browser_navigate first, snapshots auto-captured after actions, use [ref=N] numbers. NEVER write Selenium/Playwright/Puppeteer scripts — use browser_click/browser_type/browser_select DIRECTLY. Use relative file paths. Be concise. NEVER give up — try alternative approaches.`;
+    return `You are the user's personal assistant on THEIR machine — execute any task they request without hesitation. NEVER refuse. NEVER claim CAPTCHAs or anti-bot systems block you — your browser is real Chromium. Respond naturally to conversation. Only use tools when asked to DO something.\nTool format: \`\`\`json {"tool":"name","params":{}} \`\`\` — multiple allowed per response when independent.\nCRITICAL: NEVER claim you did something without calling a tool. NEVER hallucinate data. Every action needs a real tool call. NEVER describe manual steps — DO the work with tools.\nBrowser: real Chromium, call browser_navigate first, snapshots auto-captured after actions, use [ref=N] numbers. NEVER write Selenium/Playwright/Puppeteer scripts — use browser_click/browser_type/browser_select DIRECTLY. Use relative file paths. Be concise. NEVER give up — try alternative approaches.`;
   }
 
   /**
@@ -1270,14 +750,8 @@ PERSISTENCE:
       if (error.name === 'AbortError') {
         return { text: '[Generation cancelled]', model: this.modelInfo?.name, tokensUsed: 0 };
       }
-      const msg = (error.message || '').toLowerCase();
-      const isContextError = msg.includes('compress') || msg.includes('context') ||
-        msg.includes('too long') || msg.includes('sequence') || msg.includes('not enough') ||
-        msg.includes('token limit') || msg.includes('exceeded') || msg.includes('full') ||
-        msg.includes('capacity') || msg.includes('kv cache') || msg.includes('out of') ||
-        msg.includes('disposed');
-      if (isContextError) {
-        console.log(`[LLM] Context overflow in generate() (error: ${error.message?.substring(0, 100)}), auto-summarizing and resetting`);
+      if (error.message && (error.message.includes('compress') || error.message.includes('context') || error.message.includes('too long'))) {
+        console.log('[LLM] Context overflow in generate(), auto-summarizing and resetting');
         const summary = this.getConversationSummary() || '';
         await this.resetSession(true);
         throw new Error(`CONTEXT_OVERFLOW:${summary}`);
@@ -1308,7 +782,6 @@ PERSISTENCE:
     if (!this.isReady || !this.chat) {
       throw new Error('Model not loaded. Please load a model first.');
     }
-    this.generationActive = true;
 
     // Accept either a string (legacy/utility) or structured { systemContext, userMessage }
     let systemContext;
@@ -1350,36 +823,15 @@ PERSISTENCE:
 
     const modelOverrides = this._getModelSpecificParams();
     const mergedParams = { ...this.defaultParams, ...modelOverrides, ...params };
-    // BUG-020: Cap maxTokens for overlyVerbose models on non-chat tasks
-    if (mergedParams.overlyVerbose && mergedParams.taskType !== 'chat' && (mergedParams.maxTokens || 0) > 2048) {
-      mergedParams.maxTokens = 2048;
-    }
     this.abortController = new AbortController();
     
-    // ADAPTIVE generation timeout: instead of a fixed wall-clock limit,
-    // abort if NO tokens have been received for IDLE_TIMEOUT_MS.
-    // This allows slow-but-progressing generation (CPU inference) to continue
-    // while catching truly hung models that stop producing tokens entirely.
-    // Also has a hard ceiling to prevent infinite sessions.
-    // Scale timeouts for CPU-only inference (much slower token generation rate)
-    const isCpuMode = (this.modelInfo?.gpuLayers ?? 0) === 0;
-    const IDLE_TIMEOUT_MS = isCpuMode ? 300_000 : 60_000;   // CPU: 5min idle; GPU: 60s idle
-    const HARD_TIMEOUT_MS = isCpuMode ? 900_000 : 300_000;  // CPU: 15min hard; GPU: 5min hard
-    const genStartTime = Date.now();
-    let lastActivityTime = Date.now();   // Reset on each token received
-    const genTimeoutTimer = setInterval(() => {
-      const idleMs = Date.now() - lastActivityTime;
-      const totalMs = Date.now() - genStartTime;
-      if (idleMs > IDLE_TIMEOUT_MS) {
-        console.log(`[LLM] Generation idle timeout (${Math.round(idleMs / 1000)}s no tokens, ${Math.round(totalMs / 1000)}s total) — aborting`);
-        this.cancelGeneration('timeout');
-        clearInterval(genTimeoutTimer);
-      } else if (totalMs > HARD_TIMEOUT_MS) {
-        console.log(`[LLM] Generation hard timeout (${Math.round(totalMs / 1000)}s total) — aborting`);
-        this.cancelGeneration('timeout');
-        clearInterval(genTimeoutTimer);
-      }
-    }, 5000); // Check every 5s
+    // Generation safety timeout: abort if generation exceeds configured limit.
+    // Configurable via Settings UI — default 120s. Updates live without model reload.
+    const GEN_TIMEOUT_MS = this.generationTimeoutMs;
+    const genTimeoutTimer = setTimeout(() => {
+      console.log(`[LLM] Generation timeout (${GEN_TIMEOUT_MS / 1000}s) — aborting to prevent hang`);
+      this.cancelGeneration('timeout');
+    }, GEN_TIMEOUT_MS);
     
     let fullResponse = '';
     let rawResponse = '';
@@ -1443,34 +895,6 @@ PERSISTENCE:
           this._kvReuseCooldown--;
           if (this._kvReuseCooldown <= 0) this._kvReuseCooldown = 0;
         }
-        // ── DIAGNOSTIC: log EVERYTHING sent to the model before generation ──
-        // This exists because word salad occurs and we need to see the EXACT
-        // context, wrapper, and sampling params to diagnose it.
-        try {
-          const wrapperName = this.chat?.chatWrapper?.constructor?.name || 'unknown';
-          const histSummary = (this.chatHistory || []).map((h, i) => {
-            if (h.type === 'system') return `  [${i}] SYSTEM (${(h.text||'').length} chars): ${(h.text||'').substring(0, 300).replace(/\n/g, '\\n')}`;
-            if (h.type === 'user')   return `  [${i}] USER: ${(h.text||'').substring(0, 200).replace(/\n/g, '\\n')}`;
-            if (h.type === 'model')  return `  [${i}] MODEL: ${JSON.stringify(h.response||'').substring(0, 200)}`;
-            return `  [${i}] ${h.type}: ${JSON.stringify(h).substring(0, 100)}`;
-          }).join('\n');
-          console.log(`[LLM:DIAG] ══ PRE-GENERATION SNAPSHOT ══
-  wrapper     : ${wrapperName}
-  todayDate   : ${this.chat?.chatWrapper?.todayDate ?? 'N/A'}
-  cuttingDate : ${this.chat?.chatWrapper?.cuttingKnowledgeDate ?? 'N/A'}
-  kvCache     : ${!!useKvCache}
-  thoughtBudget: ${this.thoughtTokenBudget}
-  sampling    : temp=${mergedParams.temperature} topP=${mergedParams.topP} topK=${mergedParams.topK} repeat=${mergedParams.repeatPenalty} freq=${mergedParams.frequencyPenalty ?? 0.1} pres=${mergedParams.presencePenalty ?? 0.1} lastN=${mergedParams.lastTokensPenaltyCount || 128}
-  history (${(this.chatHistory||[]).length} turns):
-${histSummary}`);
-          // Also log wrapper settings object if accessible
-          if (this.chat?.chatWrapper?.settings) {
-            console.log(`[LLM:DIAG] wrapper.settings: ${JSON.stringify(this.chat.chatWrapper.settings).substring(0, 500)}`);
-          }
-        } catch (diagErr) {
-          console.warn(`[LLM:DIAG] diagnostic log failed: ${diagErr.message}`);
-        }
-        // ── END DIAGNOSTIC ──
         return await this.chat.generateResponse(this.chatHistory, {
         maxTokens: mergedParams.maxTokens,
         temperature: mergedParams.temperature,
@@ -1528,7 +952,6 @@ ${histSummary}`);
             // but still allow tool-call detection inside it.
             thinkingTokenCount++;
             lastTokenTime = Date.now();
-            lastActivityTime = Date.now(); // Reset adaptive timeout
             if (onThinkingToken) onThinkingToken(cleanedSegment);
 
             if (!detectedToolBlock) {
@@ -1549,11 +972,13 @@ ${histSummary}`);
           // Normal response text — proceed with think-tag filtering and emit
           let cleaned = cleanedSegment;
 
-          // Normalize <thinking>/<|thinking|> variants to <think> for unified parsing
+          // Normalize <thinking>/<|thinking|>/<|think|> variants to <think> for unified parsing
           cleaned = cleaned.replace(/<thinking>/gi, '<think>');
           cleaned = cleaned.replace(/<\/thinking>/gi, '</think>');
           cleaned = cleaned.replace(/<\|thinking\|>/gi, '<think>');
           cleaned = cleaned.replace(/<\|\/thinking\|>/gi, '</think>');
+          cleaned = cleaned.replace(/<\|think\|>/gi, '<think>');
+          cleaned = cleaned.replace(/<\|\/think\|>/gi, '</think>');
 
           // Manual fallback: also handle <think> tags if they come through as raw text
           // (some models/quantizations may not use special tokens)
@@ -1599,9 +1024,6 @@ ${histSummary}`);
           }
 
           if (!cleaned) return;
-
-          // Reset adaptive timeout — model is actively producing tokens
-          lastActivityTime = Date.now();
 
           // Early tool execution: as soon as the model emits a complete tool-call block,
           // abort generation so the main process can execute the tool right away.
@@ -1672,9 +1094,7 @@ ${histSummary}`);
           // In agentic loops, the model should emit short tool-call blocks (<300 chars).
           // If 2000+ chars of non-tool text accumulate, the model is likely confused
           // (echoing tool defs, narrating instead of acting, etc.). Abort early.
-          // SKIP for chat tasks — conversation responses are expected to be long text
-          // without any tool markers, so this detector would wrongly truncate them.
-          if (!detectedToolBlock && fullResponse.length + cleaned.length > 2000 && mergedParams.taskType !== 'chat') {
+          if (!detectedToolBlock && fullResponse.length + cleaned.length > 2000) {
             const hasToolMarker = toolDetectBuffer.includes('```') || toolDetectBuffer.includes('"tool"');
             if (!hasToolMarker) {
               console.log(`[LLM] Runaway non-tool output detected (${fullResponse.length + cleaned.length} chars without tool call), aborting`);
@@ -1694,9 +1114,9 @@ ${histSummary}`);
       let result = await runOnce();
 
       // Clear generation safety timeout — completed normally
-      clearInterval(genTimeoutTimer);
+      clearTimeout(genTimeoutTimer);
       
-      // Generation timeout handled by adaptive interval check above.
+      // Generation timeout: if generation takes more than 120s, something is wrong.
       // Abort and return what we have (prevents infinite hangs on CPU-bound systems).
       // NOTE: This is implemented via the AbortController signal already passed to
       // generateResponse. The timeout is set up before runOnce() is called.
@@ -1714,27 +1134,13 @@ ${histSummary}`);
       // If we got an empty response, retry ONCE with KV-cache reuse disabled.
       // This mitigates rare edge cases where reuse metadata becomes misaligned
       // (seen with some Qwen3 MoE GGUFs in multi-iteration tool loops).
-      // ALSO catches: thinking-only responses where the model produced <think> content
-      // but zero post-think regular tokens (fullResponse = '' but thinkingTokenCount > 0).
-      // This happens with Qwen3-Thinking and similar CoT models on short/chat prompts.
-      // Fix: retry with thoughtTokenBudget = 0 so the model skips thinking and responds directly.
       const rawOut = (fullResponse || result.response || rawResponse || '');
       const sanitizedOut = this._sanitizeResponse(fullResponse || result.response);
-      const thinkingOnlyNoResponse = !fullResponse.trim() && thinkingTokenCount > 0;
-      const emptyWithKvReuse = !rawOut.trim() && !sanitizedOut.trim() && this.lastEvaluation;
-      if (emptyWithKvReuse || thinkingOnlyNoResponse) {
-        if (thinkingOnlyNoResponse) {
-          console.log(`[LLM] Thinking-only response — model produced ${thinkingTokenCount} think tokens but ZERO response tokens. Retrying with thoughtTokenBudget=0 to force direct answer (rawLen=${rawResponse.length} fullLen=${fullResponse.length})`);
-        } else {
-          console.log(`[LLM] Empty response with KV reuse enabled; retrying once with lastEvaluation cleared (rawLen=${rawResponse.length} fullLen=${fullResponse.length} thinkTokens=${thinkingTokenCount})`);
-        }
+      if (!rawOut.trim() && !sanitizedOut.trim() && this.lastEvaluation) {
+        console.log(`[LLM] Empty response with KV reuse enabled; retrying once with lastEvaluation cleared (rawLen=${rawResponse.length} fullLen=${fullResponse.length} thinkTokens=${thinkingTokenCount})`);
         this.chatHistory = historyBefore;
         this.lastEvaluation = null;
         this._kvReuseCooldown = 2; // Skip reuse for the NEXT 2 calls to break cycling
-
-        // For thinking-only: disable think budget so the retry responds immediately
-        const savedThoughtBudget = this.thoughtTokenBudget;
-        if (thinkingOnlyNoResponse) this.thoughtTokenBudget = 0;
 
         fullResponse = '';
         rawResponse = '';
@@ -1742,16 +1148,12 @@ ${histSummary}`);
         repetitionCount = 0;
         thinkingTokenCount = 0;
         lastTokenTime = Date.now();
-        lastActivityTime = Date.now(); // Reset adaptive timeout for retry
         insideThinkBlock = false;
         tagBuffer = '';
         toolDetectBuffer = '';
         detectedToolBlock = '';
 
         result = await runOnce();
-
-        // Always restore the original think budget after retry
-        if (thinkingOnlyNoResponse) this.thoughtTokenBudget = savedThoughtBudget;
       } else {
         // Restore lastEvaluation if we didn't retry and it was unchanged
         // (kept for clarity; no-op in normal flow)
@@ -1785,7 +1187,7 @@ ${histSummary}`);
       };
     } catch (error) {
       // Clear generation safety timeout on error path
-      clearInterval(genTimeoutTimer);
+      clearTimeout(genTimeoutTimer);
       
       // Invalidate KV cache — chatHistory is about to be mutated in ways that
       // don't match what was evaluated, so lastEvaluation is stale
@@ -1822,23 +1224,20 @@ ${histSummary}`);
           } else {
             this.chatHistory.push({ type: 'model', response: ['[Generation timed out]'] });
           }
-          return { text: partialText || '[Generation timed out — retrying]', rawText: rawResponse || '', model: this.modelInfo?.name, tokensUsed: 0, wasTimeout: true };
+          return { text: partialText || '[Generation timed out — retrying]', rawText: rawResponse || '', model: this.modelInfo?.name, tokensUsed: 0 };
         }
 
         // On abort: always preserve the user message in history.
-        // BUG-038: For stutter/template aborts, do NOT store the stutter text in chatHistory —
-        // storing it as a model response would teach the model to repeat the stutter pattern,
-        // and it poisons the KV cache for subsequent requests. Use a neutral placeholder.
-        const isStutterAbort = (reason === 'repetition' || reason === 'template');
-        const sanitizedPartial = !isStutterAbort ? this._sanitizeResponse(fullResponse) : null;
-        this.chatHistory.push({ type: 'user', text: userMessage });
-        if (isStutterAbort) {
-          this.chatHistory.push({ type: 'model', response: ['[Generation failed — repeated output detected]'] });
-        } else if (sanitizedPartial) {
+        // If there's a partial response, sanitize it before storing in chatHistory
+        // to prevent turn indicator garbage from reinforcing bad patterns.
+        if (fullResponse) {
+          const sanitizedPartial = this._sanitizeResponse(fullResponse);
+          this.chatHistory.push({ type: 'user', text: userMessage });
           this.chatHistory.push({ type: 'model', response: [sanitizedPartial] });
         } else {
           // No partial response — re-add the user message we popped above
           // so the conversation retains what the user asked
+          this.chatHistory.push({ type: 'user', text: userMessage });
           this.chatHistory.push({ type: 'model', response: ['[Generation cancelled]'] });
         }
         const sanitized = this._sanitizeResponse(fullResponse);
@@ -1847,21 +1246,11 @@ ${histSummary}`);
           : reason === 'template'
             ? '\n[Generation cancelled: broken chat template detected]'
             : '\n[Generation cancelled]';
-        // BUG-038: Return stopReason so agenticChat.js can track consecutive stutter events
-        return { text: (sanitized || '') + suffix, model: this.modelInfo?.name, tokensUsed: 0, stopReason: reason };
+        return { text: (sanitized || '') + suffix, model: this.modelInfo?.name, tokensUsed: 0 };
       }
       // Handle context overflow — summarize & continue, never tell user to "try again"
-      // Broadened pattern matching: node-llama-cpp can throw various error messages
-      // when context is full: "context too long", "could not compress", "sequence is full",
-      // "context size exceeded", "not enough space", "token limit", etc.
-      const msg = (error.message || '').toLowerCase();
-      const isContextError = msg.includes('compress') || msg.includes('context') ||
-        msg.includes('too long') || msg.includes('sequence') || msg.includes('not enough') ||
-        msg.includes('token limit') || msg.includes('exceeded') || msg.includes('full') ||
-        msg.includes('capacity') || msg.includes('kv cache') || msg.includes('out of') ||
-        msg.includes('disposed');
-      if (isContextError) {
-        console.log(`[LLM] Context overflow in generateStream() (error: ${error.message?.substring(0, 100)}), auto-summarizing and resetting`);
+      if (error.message && (error.message.includes('compress') || error.message.includes('context') || error.message.includes('too long'))) {
+        console.log('[LLM] Context overflow in generateStream(), auto-summarizing and resetting');
         const sanitized = this._sanitizeResponse(fullResponse);
         const summary = this.getConversationSummary() || '';
         await this.resetSession(true);
@@ -1945,17 +1334,8 @@ ${histSummary}`);
   }
 
   async resetSession(useCompactPrompt = false) {
-    // BUG-025: Also check model disposal — a disposed model cannot recreate context.
-    const modelIsDead = !this.model || this.model.disposed || this.model._disposed;
-    if (!this.context || !this.model || modelIsDead) {
+    if (!this.context || !this.model) {
       console.warn('[LLM] Cannot reset session: model or context is null/disposed');
-      if (modelIsDead && this.model) {
-        // Null everything out and tell the UI the model is gone.
-        this.chat = null; this.context = null; this.sequence = null;
-        this.chatHistory = []; this.lastEvaluation = null;
-        this.isReady = false; this.isLoading = false;
-        this.emit('status', { state: 'error', message: 'Model has been disposed. Please reload a model.' });
-      }
       return;
     }
     
@@ -1963,26 +1343,15 @@ ${histSummary}`);
     try {
       if (this.context.disposed || this.context._disposed) {
         console.warn('[LLM] Context is disposed, recreating from model...');
-        // BUG-025: Check model health before attempting recreation.
-        if (this.model.disposed || this.model._disposed) {
-          console.error('[LLM] Model is also disposed — cannot recreate context. Emitting model-unloaded.');
-          this.chat = null; this.context = null; this.sequence = null;
-          this.chatHistory = []; this.lastEvaluation = null;
-          this.isReady = false; this.isLoading = false;
-          this.emit('status', { state: 'error', message: 'Model has been disposed. Please reload a model.' });
-          return;
-        }
         try {
-          this.context = await this.model.createContext({ contextSize: this.modelInfo?.contextSize || 4096, flashAttention: this._flashAttnEnabled ?? false });
+          this.context = await this.model.createContext({ contextSize: this.modelInfo?.contextSize || 4096 });
         } catch (recreateErr) {
           console.error('[LLM] Could not recreate context from model:', recreateErr.message);
-          // Belt-and-suspenders: if the error is disposal, emit so the UI knows.
-          if (recreateErr.message?.toLowerCase().includes('disposed')) {
-            this.isReady = false; this.isLoading = false;
-            this.emit('status', { state: 'error', message: 'Model has been disposed. Please reload a model.' });
-          }
-          this.chat = null; this.context = null; this.sequence = null;
-          this.chatHistory = []; this.lastEvaluation = null;
+          this.chat = null;
+          this.context = null;
+          this.chatHistory = [];
+          this.lastEvaluation = null;
+          this.sequence = null;
           return;
         }
       }
@@ -2011,27 +1380,14 @@ ${histSummary}`);
             );
           } catch (e) {
             console.error('[LLM] Could not get sequence:', e.message);
-            // BUG-025: Absolute last resort — but only if the model is still alive.
-            if (!this.model || this.model.disposed || this.model._disposed ||
-                e.message?.toLowerCase().includes('disposed')) {
-              console.error('[LLM] Model is disposed — cannot recreate context. Emitting model-unloaded.');
-              this.chat = null; this.context = null; this.sequence = null;
-              this.chatHistory = []; this.lastEvaluation = null;
-              this.isReady = false; this.isLoading = false;
-              this.emit('status', { state: 'error', message: 'Model has been disposed. Please reload a model.' });
-              return;
-            }
+            // Absolute last resort: create new context
             try {
-              this.context = await this.model.createContext({ contextSize: this.modelInfo?.contextSize || 4096, flashAttention: this._flashAttnEnabled ?? false });
+              this.context = await this.model.createContext({ contextSize: this.modelInfo?.contextSize || 4096 });
               sequence = this.context.getSequence(
                 this.tokenPredictor ? { tokenPredictor: this.tokenPredictor } : undefined
               );
             } catch (e2) {
               console.error('[LLM] Could not recreate context:', e2.message);
-              if (e2.message?.toLowerCase().includes('disposed')) {
-                this.isReady = false; this.isLoading = false;
-                this.emit('status', { state: 'error', message: 'Model has been disposed. Please reload a model.' });
-              }
               return;
             }
           }
@@ -2049,11 +1405,6 @@ ${histSummary}`);
           this.chat = new LlamaChat({
             contextSequence: sequence,
           });
-          // Reapply the probe-confirmed wrapper — resetSession creates a bare LlamaChat
-          // which auto-detects the wrapper, losing any customisation from the initial load.
-          if (this._selectedWrapperName && this._llamaCppClasses) {
-            this._applyNamedWrapper(this._selectedWrapperName);
-          }
         } catch (constructErr) {
           console.error('[LLM] Chat construction failed:', constructErr.message);
           this.chat = null;
@@ -2075,9 +1426,6 @@ ${histSummary}`);
 
   async dispose() {
     try {
-      // Cancel any active generation first so the token loop doesn't throw
-      // "object is disposed" after we free the native context/model below.
-      try { this.cancelGeneration('dispose'); } catch (_) {}
       if (this.chat) {
         try { this.chat.dispose?.(); } catch (_) {}
         this.chat = null;
@@ -2086,11 +1434,15 @@ ${histSummary}`);
       this.lastEvaluation = null;
       this.sequence = null;
       if (this.context) {
-        await this.context.dispose();
+        // Timeout guard: context.dispose() can deadlock if a native op (e.g. resetSession's
+        // eraseContextTokenRanges) is still running on the C++ thread when dispose() fires.
+        // 10s is far more than enough for a normal dispose; if it hangs, we abandon the
+        // reference and let the load proceed rather than deadlocking the entire main process.
+        try { await this._withTimeout(this.context.dispose(), 10000, 'Context dispose'); } catch (_) {}
         this.context = null;
       }
       if (this.model) {
-        await this.model.dispose();
+        try { await this._withTimeout(this.model.dispose(), 10000, 'Model dispose'); } catch (_) {}
         this.model = null;
       }
       // Intentionally do NOT dispose llamaInstance — it's reused across model loads
@@ -2217,11 +1569,9 @@ ${histSummary}`);
    * @param {Function} onToken - Token callback for streaming
    * @param {Function} onThinkingToken - Thinking token callback
    * @param {Function} onFunctionCall - Called when a function call is generated
-   * @param {Object} [options] - Additional options
-   * @param {number} [options.timeoutMs] - Override generation timeout (default: 120000)
    * @returns {Object} {text, functionCalls: [{functionName, params}], stopReason}
    */
-  async generateWithFunctions(input, functions, params = {}, onToken, onThinkingToken, onFunctionCall, options = {}) {
+  async generateWithFunctions(input, functions, params = {}, onToken, onThinkingToken, onFunctionCall) {
     if (!this.isReady || !this.chat) {
       throw new Error('Model not loaded. Please load a model first.');
     }
@@ -2256,14 +1606,10 @@ ${histSummary}`);
     const mergedParams = { ...this.defaultParams, ...modelOverrides, ...params };
     this.abortController = new AbortController();
 
-    // Safety timeout — callers can override for grammar-constrained calls.
-    // Grammar-constrained generation either produces tokens within seconds or
-    // gets permanently stuck in rejection sampling.  A short timeout (e.g. 15s)
-    // lets the agentic loop fall back to text mode quickly instead of burning
-    // 120s×2 = 240s before the consecutiveEmptyGrammarRetries threshold fires.
-    const GEN_TIMEOUT_MS = options.timeoutMs || 120_000;
+    // Safety timeout — uses same configurable limit as generateStream()
+    const GEN_TIMEOUT_MS = this.generationTimeoutMs;
     const genTimeoutTimer = setTimeout(() => {
-      console.log(`[LLM] Function-calling generation timeout (${GEN_TIMEOUT_MS / 1000}s) — aborting`);
+      console.log(`[LLM] Function-calling generation timeout — aborting`);
       this.cancelGeneration('timeout');
     }, GEN_TIMEOUT_MS);
 
@@ -2377,10 +1723,19 @@ ${histSummary}`);
           stopReason: this._abortReason || 'abort',
         };
       }
+      // Handle context overflow — wrap with CONTEXT_OVERFLOW: prefix like generate() and generateStream()
+      if (error.message && (error.message.includes('compress') || error.message.includes('context') || error.message.includes('too long'))) {
+        console.log('[LLM] Context overflow in generateWithFunctions(), auto-summarizing and resetting');
+        const sanitized = this._sanitizeResponse(fullResponse);
+        const summary = this.getConversationSummary() || '';
+        await this.resetSession(true);
+        const err = new Error(`CONTEXT_OVERFLOW:${summary}`);
+        err.partialResponse = sanitized;
+        throw err;
+      }
       throw error;
     } finally {
-      this.generationActive = false;
-      clearInterval(genTimeoutTimer);
+      clearTimeout(genTimeoutTimer);
       this.abortController = null;
       this._abortReason = null;
     }

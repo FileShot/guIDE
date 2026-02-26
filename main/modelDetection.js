@@ -21,14 +21,16 @@ function detectFamily(modelPath) {
   const name = path.basename(modelPath).toLowerCase();
   // Order matters: more specific patterns first to avoid false matches
   // (e.g. 'devstral' before 'mistral', 'codellama' before 'llama')
+  // IMPORTANT: 'deepseek' must come before 'qwen' — DeepSeek-R1-Distill-Qwen models
+  // contain both words; we want the deepseek profile, not the qwen profile.
   if (name.includes('devstral')) return 'devstral';
+  if (name.includes('deepseek') || name.includes('r1-distill')) return 'deepseek';
   if (name.includes('qwen')) return 'qwen';
   if (name.includes('codellama') || name.includes('code-llama')) return 'codellama';
   if (name.includes('llama')) return 'llama';
   if (name.includes('phi')) return 'phi';
   if (name.includes('gemma')) return 'gemma';
   if (name.includes('mistral') || name.includes('mixtral')) return 'mistral';
-  if (name.includes('deepseek')) return 'deepseek';
   if (name.includes('granite')) return 'granite';
   if (name.includes('internlm')) return 'internlm';
   if (name.includes('yi')) return 'yi';
@@ -64,4 +66,32 @@ function detectParamSize(modelPath) {
   return 0;
 }
 
-module.exports = { detectFamily, detectParamSize };
+/**
+ * Detect whether a model file is a diffusion (image generation) model
+ * vs a standard language model.
+ *
+ * Diffusion models (Stable Diffusion, SDXL, FLUX, ControlNet, VAE) use completely
+ * different architecture from LLMs and must route to localImageEngine, not llmEngine.
+ *
+ * @param {string} modelPath - Path to the model file
+ * @returns {'diffusion' | 'llm'}
+ */
+function detectModelType(modelPath) {
+  if (!modelPath) return 'llm';
+  const name = path.basename(modelPath).toLowerCase();
+  if (
+    /stable[_-]?diffusion/i.test(name) ||
+    /\bsd[_-]?v?[123][_-]/i.test(name) ||
+    /\bsdxl\b/i.test(name) ||
+    /\bflux[_\-. ](dev|schnell|pro|1|lite)/i.test(name) ||
+    /\bflux1\b/i.test(name) ||
+    /controlnet/i.test(name) ||
+    /\bt2i[_-]adapter/i.test(name) ||
+    /[_-]vae[_-]/i.test(name)
+  ) {
+    return 'diffusion';
+  }
+  return 'llm';
+}
+
+module.exports = { detectFamily, detectParamSize, detectModelType };

@@ -76,31 +76,6 @@ const VALID_TOOLS = new Set([
 ]);
 
 /**
- * Fix missing colons between JSON keys and object/array values.
- * Small models often output: {"tool":"fetch_webpage","params{"url":"..."}}
- * or {"tool":"x","params={"url":"..."}} instead of "params":{"url":"..."}
- * This repairs: "key"{ → "key":{  and  "key"={ → "key":{
- *               "key"[ → "key":[  and  "key"=[ → "key":[
- */
-function fixMissingColons(raw) {
-  // "params"{ → "params":{  (missing colon before object value)
-  // "params"=={ → "params":{  (equals instead of colon)
-  return raw
-    .replace(/"(\s*)[={]\s*\{/g, '"$1:{ ')  // "key"={ or "key"{ → "key":{
-    .replace(/"(\s*)[={]\s*\[/g, '"$1:[ ')  // "key"=[ or "key"[ → "key":[
-    .replace(/"(\s*)\{/g, (match, ws, offset) => {
-      // Only fix if preceded by a key pattern (not inside a string value)
-      // Check if this looks like a key-value boundary: ,"key"{ or {"key"{
-      const before = raw.substring(Math.max(0, offset - 30), offset);
-      // Match: word chars or quotes followed by end → this is key"{value}
-      if (/["\w]\s*$/.test(before) && !/:\s*$/.test(before)) {
-        return `"${ws}:{`;
-      }
-      return match;
-    });
-}
-
-/**
  * Sanitize malformed JSON from LLM output.
  * Context-aware: tracks whether we're inside a JSON string value to correctly
  * handle escape sequences and raw control characters.
@@ -161,24 +136,6 @@ function fixQuoting(raw) {
   // Quote unquoted keys: { tool: → { "tool":
   s = s.replace(/([{,]\s*)([a-zA-Z_]\w*)(\s*:)/g, '$1"$2"$3');
   return s;
-}
-
-/**
- * Fix Python-style triple-quoted strings in JSON output.
- * Small models (≤3B) often emit `"""..."""` for multi-line content values.
- * This is invalid JSON. Replace with properly escaped double-quoted strings.
- * BUG-027 fix.
- */
-function fixTripleQuotes(raw) {
-  return raw.replace(/"""([\s\S]*?)"""/g, (_, inner) => {
-    const escaped = inner
-      .replace(/\\/g, '\\\\')
-      .replace(/"/g, '\\"')
-      .replace(/\n/g, '\\n')
-      .replace(/\r/g, '\\r')
-      .replace(/\t/g, '\\t');
-    return '"' + escaped + '"';
-  });
 }
 
 /**
@@ -331,22 +288,16 @@ function parseToolCalls(text) {
         }
         if (end === -1) break;
         try {
-          // BUG-027: pre-repair triple-quoted strings before any JSON parsing attempt
-          const rawStr = fixTripleQuotes(blockContent.substring(start, end + 1));
+          const rawStr = blockContent.substring(start, end + 1);
           const jsonStr = sanitizeJson(rawStr);
           let parsed;
           try { parsed = JSON.parse(jsonStr); } catch {
             try {
-              // Retry with fixMissingColons for "params"{ → "params":{
-              parsed = JSON.parse(sanitizeJson(fixMissingColons(rawStr)));
+              // Retry with fixQuoting for single-quoted/unquoted keys
+              parsed = JSON.parse(sanitizeJson(fixQuoting(rawStr)));
             } catch {
-              try {
-                // Retry with fixQuoting for single-quoted/unquoted keys
-                parsed = JSON.parse(sanitizeJson(fixQuoting(fixMissingColons(rawStr))));
-              } catch {
-                // Retry with backtick-delimited strings: {"content": `code`} → {"content": "code"}
-                parsed = JSON.parse(sanitizeJson(fixBackticks(fixQuoting(fixMissingColons(rawStr)))));
-              }
+              // Retry with backtick-delimited strings: {"content": `code`} → {"content": "code"}
+              parsed = JSON.parse(sanitizeJson(fixBackticks(fixQuoting(rawStr))));
             }
           }
           const normalized = normalizeToolCall(parsed);
@@ -410,19 +361,15 @@ function parseToolCalls(text) {
         }
       }
       try {
-        // BUG-027: pre-repair triple-quoted strings before any JSON parsing attempt
-        const jsonStr = fixTripleQuotes(cleanedText.substring(startIdx, endIdx));
+        const jsonStr = cleanedText.substring(startIdx, endIdx);
         const sanitized = sanitizeJson(jsonStr);
         let parsed;
         try { parsed = JSON.parse(sanitized); } catch {
           try {
-            parsed = JSON.parse(sanitizeJson(fixMissingColons(jsonStr)));
+            parsed = JSON.parse(sanitizeJson(fixQuoting(jsonStr)));
           } catch {
-            try {
-              parsed = JSON.parse(sanitizeJson(fixQuoting(fixMissingColons(jsonStr))));
-            } catch {
-              parsed = JSON.parse(sanitizeJson(fixBackticks(fixQuoting(fixMissingColons(jsonStr)))));
-            }
+            // Retry with backtick-delimited strings
+            parsed = JSON.parse(sanitizeJson(fixBackticks(fixQuoting(jsonStr))));
           }
         }
         const normalized = normalizeToolCall(parsed);
@@ -464,9 +411,7 @@ function parseToolCalls(text) {
         let parsed;
         try { parsed = JSON.parse(funcMatch[2]); } catch {
           try { parsed = JSON.parse(sanitizeJson(funcMatch[2])); } catch {
-            try { parsed = JSON.parse(sanitizeJson(fixMissingColons(funcMatch[2]))); } catch {
-              parsed = JSON.parse(sanitizeJson(fixQuoting(fixMissingColons(funcMatch[2]))));
-            }
+            parsed = JSON.parse(sanitizeJson(fixQuoting(funcMatch[2])));
           }
         }
         const toolName = TOOL_NAME_ALIASES[funcMatch[1].toLowerCase()] || funcMatch[1];
@@ -498,100 +443,17 @@ function parseToolCalls(text) {
         } catch (_) {}
       }
     }
-
-    // 3c: Qwen3 native <tool_call> format
-    // Qwen3 models produce: <tool_call>{"name":"tool","arguments":{...}}</tool_call>
-    // Also handles multi-line and whitespace variations
-    if (toolCalls.length === 0) {
-      const toolCallTagRegex = /<tool_call>\s*(\{[\s\S]*?\})\s*<\/tool_call>/g;
-      let tcMatch;
-      while ((tcMatch = toolCallTagRegex.exec(cleanedText)) !== null) {
-        try {
-          let parsed;
-          try { parsed = JSON.parse(tcMatch[1]); } catch {
-            try { parsed = JSON.parse(sanitizeJson(tcMatch[1])); } catch {
-              parsed = JSON.parse(sanitizeJson(fixQuoting(tcMatch[1])));
-            }
-          }
-          const normalized = normalizeToolCall(parsed);
-          if (normalized) {
-            console.log('[MCP] Method 3c: Found Qwen <tool_call> format:', normalized.tool);
-            toolCalls.push(normalized);
-          }
-        } catch (_) {}
-      }
-    }
-
-    // 3d: OpenAI function-calling format
-    // Many models trained on OpenAI data produce: {"name":"tool","arguments":{...}}
-    // or {"type":"function","function":{"name":"tool","arguments":{...}}}
-    // normalizeToolCall already handles "name" as alias for "tool", so we just need to
-    // catch the nested {"type":"function","function":{...}} wrapper format
-    if (toolCalls.length === 0) {
-      // Nested function wrapper format: {"type":"function","function":{"name":"...","arguments":{...}}}
-      const funcWrapperRegex = /\{\s*"type"\s*:\s*"function"\s*,\s*"function"\s*:\s*(\{[\s\S]*?\})\s*\}/g;
-      let fwMatch;
-      while ((fwMatch = funcWrapperRegex.exec(cleanedText)) !== null) {
-        try {
-          let parsed;
-          try { parsed = JSON.parse(fwMatch[1]); } catch {
-            try { parsed = JSON.parse(sanitizeJson(fwMatch[1])); } catch {
-              parsed = JSON.parse(sanitizeJson(fixQuoting(fwMatch[1])));
-            }
-          }
-          const normalized = normalizeToolCall(parsed);
-          if (normalized) {
-            console.log('[MCP] Method 3d: Found OpenAI function wrapper format:', normalized.tool);
-            toolCalls.push(normalized);
-          }
-        } catch (_) {}
-      }
-    }
-
-    // 3e: OpenAI-style top-level array format: [{"name":"tool","arguments":{...}}, ...]
-    // Models using JinjaTemplateChatWrapper (e.g. Qwen3 function-calling) output
-    // a raw JSON array rather than a single object. The brace-counters above may
-    // fail on large content fields. Try parsing the whole response as a JSON array.
-    if (toolCalls.length === 0) {
-      const trimmed = cleanedText.trim();
-      if (trimmed.startsWith('[') && trimmed.includes('"name"')) {
-        try {
-          let arr = null;
-          try { arr = JSON.parse(trimmed); } catch {
-            // Response may be truncated — try to find the end of the first complete element
-            const firstClose = trimmed.indexOf('}]');
-            if (firstClose !== -1) {
-              try { arr = JSON.parse(trimmed.substring(0, firstClose + 2)); } catch (_) {}
-            }
-          }
-          if (Array.isArray(arr)) {
-            for (const item of arr) {
-              const normalized = normalizeToolCall(item);
-              if (normalized) {
-                console.log('[MCP] Method 3e: Found OpenAI array-format tool call:', normalized.tool);
-                toolCalls.push(normalized);
-              }
-            }
-          }
-        } catch (_) {}
-      }
-    }
   }
 
   // ── Fix: web_search → run_command remap ──
   // Small models sometimes call web_search("npm -v") when they mean run_command("npm -v").
   // Detect when a web_search query looks like a shell command and remap it.
   const SHELL_CMD_RE = /^\s*(npm|node|npx|git|python|python3|pip|pip3|cargo|make|cmake|docker|yarn|pnpm|deno|bun|which|where|env|echo|cat|ls|dir|pwd|cd|mv|cp|rm|mkdir|rmdir|chmod|chown|curl|wget|ssh|scp|tar|zip|unzip|grep|find|awk|sed|tsc|eslint|prettier|jest|vitest|mocha)\b/i;
-  // BUG-021: SHELL_CMD_RE alone was too broad — words like "find", "cat", "which", "echo"
-  // are also common English words. "find a house in Austin Texas" was remapped to run_command.
-  // Require at least one shell-specific signal: a flag (-v, --oneline, -name), a shell operator
-  // (pipe, redirect, semicolon), a shell variable ($PATH but NOT $100k), or a path reference (./).
-  const SHELL_SIGNAL_RE = /\s--?\w|[|><;&]|\$[A-Za-z_]|\.\//;
   const URL_RE = /^https?:\/\/[^\s]+$/i;
   for (const call of toolCalls) {
     if (call.tool === 'web_search') {
       const q = (call.params?.query || call.params?.q || call.params?.search || '').trim();
-      if (SHELL_CMD_RE.test(q) && q.length < 60 && SHELL_SIGNAL_RE.test(q)) {
+      if (SHELL_CMD_RE.test(q) && q.length < 60) {
         console.log(`[MCP] Remap: web_search("${q}") → run_command (looks like a shell command)`);
         call.tool = 'run_command';
         call.params = { command: q };
@@ -835,11 +697,7 @@ async function processResponse(responseText, options = {}) {
   // Small models often hallucinate paths like "$project_dir/package.json",
   // "/project/project-name/src", "/home/user/project/...", etc.
   // Strip these to relative paths so file operations work.
-  // NOTE: Real absolute Windows paths like "C:\Users\brend\my-project" are intentionally
-  // NOT stripped here — they are passed through to the path validator which correctly
-  // allows or denies them based on ALLOWED_PATH_ROOTS. Stripping "C:\Users\" but leaving
-  // the username segment produces garbage paths (BUG-004 fix).
-  const TEMPLATE_PATH_RE = /^(?:\$\w+\/|\/project\/[^/]*\/|\/home\/[^/]*\/[^/]*\/|\/workspace\/|~\/[^/]*\/)/;
+  const TEMPLATE_PATH_RE = /^(?:\$\w+\/|\/project\/[^/]*\/|\/home\/[^/]*\/[^/]*\/|\/workspace\/|~\/[^/]*\/|[A-Z]:\\[^\\]*\\)/;
   for (const call of toolCalls) {
     if (!call?.params) continue;
     for (const key of ['filePath', 'path', 'file_path', 'dirPath', 'directory']) {
@@ -1107,12 +965,25 @@ function _detectFallbackFileOperations(responseText, userMessage) {
   if (results.length > 0) return results;
 
   // ── Phase 2: Code blocks → write_file (file creation fallback) ──
-  const hasFileIntent = /creat(e|ing)|writ(e|ing)|save|generat(e|ing)|mak(e|ing)\s+(a|the|this)?\s*(file|folder|directory|document)/i.test(responseText);
+  // Require file/folder nouns near action verbs — prevents false positives when models
+  // use "write" or "create" in prose explanations (e.g. "write cleaner code",
+  // "create more readable functions") without any file-creation intent.
+  const hasFileIntent = (
+    /creat(e|ing)\s+(?:\w+\s+){0,3}(?:file|folder|directory|document|project)/i.test(responseText) ||
+    /writ(e|ing)\s+(a|the|this)?\s*(file|code\s+file|script|html|css)/i.test(responseText) ||
+    /save\s+(this|the|it|them)\s*(as|to|in)/i.test(responseText) ||
+    /generat(e|ing)\s+(?:\w+\s+){0,3}(?:file|folder|script)/i.test(responseText) ||
+    /mak(e|ing)\s+(a|the|this)?\s*(file|folder|directory|document)/i.test(responseText)
+  );
   // Also detect implied file intent: code blocks with recognized language tags
   // If model dumped code blocks without tool calls, it likely intended to create files.
   const hasCodeBlocksWithLang = /```(?:html?|css|javascript|js|typescript|ts|tsx|jsx|python|py|json|yaml|yml|xml|markdown|md|toml|ini|cfg|conf|sql|graphql|svelte|vue|ruby|rb|go|rust|rs|java|c|cpp|cs|php|swift|kotlin)\s*\n/i.test(responseText);
 
-  if (!hasFileIntent && !hasCodeBlocksWithLang) return results;
+  // Only check hasFileIntent — hasCodeBlocksWithLang was removed because it triggered
+  // on ANY code block with a language tag (```js, ```python), causing phantom write_file/
+  // create_directory calls when the model was explaining concepts or showing code examples.
+  // Explicit file-creation intent language is the only reliable signal.
+  if (!hasFileIntent) return results;
 
   const codeBlockRegex = /```(\w+)?\s*\n([\s\S]*?)```/g;
   let match;

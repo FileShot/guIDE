@@ -26,6 +26,7 @@ interface MonacoEditorProps {
   onCursorChange?: (line: number, column: number) => void;
   onSelectionChange?: (text: string) => void;
   onEditorMount?: (editor: monaco.editor.IStandaloneCodeEditor) => void;
+  onMarkersChange?: (errors: number, warnings: number) => void;
   nextEditEnabled?: boolean;
 }
 
@@ -79,6 +80,7 @@ export const MonacoEditor: React.FC<MonacoEditorProps> = ({
   onCursorChange,
   onSelectionChange,
   onEditorMount,
+  onMarkersChange,
   nextEditEnabled = true,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -92,6 +94,7 @@ export const MonacoEditor: React.FC<MonacoEditorProps> = ({
   const inlineProviderRef = useRef<monaco.IDisposable | null>(null);
   const blameDecorationsRef = useRef<monaco.editor.IEditorDecorationsCollection | null>(null);
   const blameDataRef = useRef<{ line: number; hash: string; author: string; date: string; summary: string }[]>([]);
+  const prevLineRef = useRef<Map<number, string>>(new Map());
 
   // Keep current content ref up to date
   currentContentRef.current = content;
@@ -259,11 +262,69 @@ export const MonacoEditor: React.FC<MonacoEditorProps> = ({
           }
         }
       }
+
+      // ── Auto Rename Tag ──────────────────────────────────────────────
+      const AUTO_RENAME_LANGS = new Set(['html', 'handlebars', 'xml', 'typescriptreact', 'javascriptreact']);
+      if (!suppressChangeRef.current && e.changes.length === 1 && AUTO_RENAME_LANGS.has((language || '').toLowerCase())) {
+        const arModel = editor.getModel();
+        const change = e.changes[0];
+        const lineNum = change.range.startLineNumber;
+        if (arModel) {
+          const prevLine = prevLineRef.current.get(lineNum);
+          const currentLine = arModel.getLineContent(lineNum);
+          if (prevLine !== undefined && prevLine !== currentLine) {
+            const col0 = change.range.startColumn - 1;
+            const getTagName = (line: string, col: number): { name: string; isClosing: boolean } | null => {
+              let i = col - 1;
+              while (i >= 0 && line[i] !== '<') {
+                if (line[i] === '>' || line[i] === ' ' || line[i] === '\t') return null;
+                i--;
+              }
+              if (i < 0) return null;
+              const isClosing = line[i + 1] === '/';
+              const nameStart = i + (isClosing ? 2 : 1);
+              let j = nameStart;
+              while (j < line.length && /[a-zA-Z0-9:.-]/.test(line[j])) j++;
+              const name = line.substring(nameStart, j);
+              return name.length > 0 ? { name, isClosing } : null;
+            };
+            const oldCtx = getTagName(prevLine, col0);
+            const newCtx = getTagName(currentLine, col0);
+            if (oldCtx && newCtx && oldCtx.isClosing === newCtx.isClosing && oldCtx.name !== newCtx.name && newCtx.name.length > 0) {
+              const fullText = arModel.getValue();
+              const cursorOff = arModel.getOffsetAt({ lineNumber: lineNum, column: change.range.startColumn });
+              let pairedRange: monaco.Range | null = null;
+              if (oldCtx.isClosing) {
+                const idx = fullText.lastIndexOf('<' + oldCtx.name, cursorOff);
+                if (idx >= 0 && /[\s>\/]/.test(fullText[idx + oldCtx.name.length + 1] || '>')) {
+                  const pos = arModel.getPositionAt(idx + 1);
+                  pairedRange = new monaco.Range(pos.lineNumber, pos.column, pos.lineNumber, pos.column + oldCtx.name.length);
+                }
+              } else {
+                const idx = fullText.indexOf('</' + oldCtx.name, cursorOff);
+                if (idx >= 0 && /[>\s\/]/.test(fullText[idx + 2 + oldCtx.name.length] || '>')) {
+                  const pos = arModel.getPositionAt(idx + 2);
+                  pairedRange = new monaco.Range(pos.lineNumber, pos.column, pos.lineNumber, pos.column + oldCtx.name.length);
+                }
+              }
+              if (pairedRange) {
+                suppressChangeRef.current = true;
+                editor.executeEdits('auto-rename-tag', [{ range: pairedRange, text: newCtx.name }]);
+                suppressChangeRef.current = false;
+              }
+            }
+          }
+          prevLineRef.current.set(lineNum, arModel.getLineContent(lineNum));
+        }
+      }
     });
 
     // Cursor change listener
     const cursorDisposable = editor.onDidChangeCursorPosition((e) => {
       onCursorChange?.(e.position.lineNumber, e.position.column);
+      // Track line content before edits for Auto Rename Tag
+      const curModel = editor.getModel();
+      if (curModel) prevLineRef.current.set(e.position.lineNumber, curModel.getLineContent(e.position.lineNumber));
 
       // Git blame decoration — show blame for current line
       const line = e.position.lineNumber;
@@ -292,6 +353,56 @@ export const MonacoEditor: React.FC<MonacoEditorProps> = ({
 
     // Notify parent
     onEditorMount?.(editor);
+
+    // ── Error Lens ──
+    const errorLensDecorations = editor.createDecorationsCollection([]);
+    const updateErrorLens = () => {
+      const model = editor.getModel();
+      if (!model) return;
+      const markers = monaco.editor.getModelMarkers({ resource: model.uri });
+      let errors = 0;
+      let warnings = 0;
+      const decorations: monaco.editor.IModelDeltaDecoration[] = [];
+      for (const marker of markers) {
+        const line = marker.startLineNumber;
+        if (marker.severity === monaco.MarkerSeverity.Error) {
+          errors++;
+          decorations.push({
+            range: new monaco.Range(line, 1, line, 1),
+            options: {
+              isWholeLine: true,
+              after: {
+                content: `  \u2715 ${marker.message.split('\n')[0].substring(0, 90)}`,
+                inlineClassName: 'error-lens-error',
+              },
+            },
+          });
+        } else if (marker.severity === monaco.MarkerSeverity.Warning) {
+          warnings++;
+          decorations.push({
+            range: new monaco.Range(line, 1, line, 1),
+            options: {
+              isWholeLine: true,
+              after: {
+                content: `  \u26a0 ${marker.message.split('\n')[0].substring(0, 90)}`,
+                inlineClassName: 'error-lens-warning',
+              },
+            },
+          });
+        }
+      }
+      errorLensDecorations.set(decorations);
+      onMarkersChange?.(errors, warnings);
+    };
+    const markersDisposable = monaco.editor.onDidChangeMarkers((uris) => {
+      const model = editor.getModel();
+      if (!model) return;
+      if (uris.some(uri => uri.toString() === model.uri.toString())) {
+        updateErrorLens();
+      }
+    });
+    // Initial pass once language server has had time to settle
+    const initialMarkersTimer = setTimeout(updateErrorLens, 800);
 
     // ── Git Blame Decorations ──
     blameDecorationsRef.current = editor.createDecorationsCollection([]);
@@ -325,6 +436,19 @@ export const MonacoEditor: React.FC<MonacoEditorProps> = ({
         .monaco-editor .inline-completion-text-to-replace { color: #9b8fd4 !important; background: rgba(124, 58, 237, 0.08); border-radius: 2px; }
       `;
       document.head.appendChild(style);
+    }
+
+    // ── Error Lens Styles ──
+    if (!document.getElementById('error-lens-style')) {
+      const elsStyle = document.createElement('style');
+      elsStyle.id = 'error-lens-style';
+      elsStyle.textContent = [
+        '.error-lens-error { color: #f48771 !important; font-style: italic; font-size: 11px;',
+        '  margin-left: 12px; opacity: 0.85; pointer-events: none; }',
+        '.error-lens-warning { color: #dcdcaa !important; font-style: italic; font-size: 11px;',
+        '  margin-left: 12px; opacity: 0.85; pointer-events: none; }',
+      ].join(' ');
+      document.head.appendChild(elsStyle);
     }
 
     // ── Bracket Content Selection (Ctrl+Shift+[) ──
@@ -635,6 +759,8 @@ export const MonacoEditor: React.FC<MonacoEditorProps> = ({
       codeActionDisposables.forEach(d => d.dispose());
       if (nextEditTimerRef.current) clearTimeout(nextEditTimerRef.current);
       if (nextEditAbortRef.current) nextEditAbortRef.current.abort();
+      markersDisposable.dispose();
+      clearTimeout(initialMarkersTimer);
       resizeObserver.disconnect();
       editor.dispose();
       editorRef.current = null;

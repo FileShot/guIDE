@@ -6,10 +6,13 @@
 
 ---
 
-## STATUS SUMMARY (updated 2026-02-22 — diagnostic logging added; wrapper reapplication in resetSession fixed)
+## STATUS SUMMARY (updated 2026-02-25 — context overflow clean-break, web search date injection, thinking-bubble code fence strip)
 
 | Fix | Description | Status |
 |-----|-------------|--------|
+| BUG-IMG1 | `` ```json `` artifact visible in thinking bubble from context rotation summary | ✅ IN SOURCE — `agenticChat.js`: strip tool-call code blocks from `convSummary` before sending as `llm-thinking-token`; `useChatStreaming.ts`: regex upgraded to strip full code blocks not just opening fence |
+| BUG-IMG2 | Context overflow death spiral: all 10 rotations fail → raw CONTEXT_OVERFLOW error sent as visible `llm-token` | ✅ IN SOURCE — `agenticChat.js`: `isContextOverflow` now also matches `"default context shift strategy did not return"` (node-llama-cpp error not prefixed with CONTEXT_OVERFLOW:); after rotation exhaustion a clean user-facing message is sent and loop breaks instead of falling through to `nonContextRetries` |
+| BUG-DATE | `web_search` returns stale year (2023) — model has no ground truth to reject it | ✅ IN SOURCE — `agenticChat.js`: prefixed every `web_search` tool result block with actual `new Date()` in plain English so model can evaluate snippet freshness |
 | FIX 1 | Llama 3.2-3B word salad | ⚠️ UNKNOWN ROOT CAUSE — All prior hypotheses failed. Diagnostic logging now added. BUILD AND TEST. Read `[LLM:DIAG]` lines in log to see exact wrapper state + sampling params + full chat history being sent to model. |
 | REGRESSION | All probes failing on 4GB GPU | ✅ FIXED — probe moved pre-context |
 | SESSION RESET BUG | Wrapper not reapplied after resetSession() | ✅ FIXED — `resetSession` now calls `_applyNamedWrapper(_selectedWrapperName)` after creating new LlamaChat |

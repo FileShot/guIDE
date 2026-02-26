@@ -35,8 +35,8 @@ const tabs = [
     features: [
       {
         icon: <Terminal size={22} />,
-        title: '53 Native Tools',
-        description: 'File management, browser automation, git operations, memory, and web search — all built in.',
+        title: '82 Native Tools',
+        description: 'File management, browser automation, git operations, memory, and web search — all built in.',,
       },
       {
         icon: <Globe size={22} />,
@@ -77,8 +77,8 @@ const tabs = [
     features: [
       {
         icon: <Zap size={22} />,
-        title: '17 Cloud Providers',
-        description: 'OpenAI, Anthropic, Gemini, xAI, OpenRouter, Groq, Mistral, Cohere, NVIDIA, and more — use any or go fully offline.',
+        title: '26 Cloud Providers',
+        description: 'OpenAI, Anthropic, Gemini, xAI, Groq, Mistral, Cohere, DeepSeek, Perplexity, and more — use any or go fully offline.',,
       },
       {
         icon: <Monitor size={22} />,
@@ -160,9 +160,9 @@ export default function Features() {
         <FadeIn delay={0.3}>
           <div className="mt-12 grid grid-cols-2 sm:grid-cols-4 gap-4">
             {[
-              { value: '53', label: 'Built-in Tools' },
+              { value: '82', label: 'Built-in Tools' },
               { value: '50+', label: 'Languages' },
-              { value: '9', label: 'Cloud Providers' },
+              { value: '26', label: 'Cloud Providers' },
               { value: '100%', label: 'Offline Capable' },
             ].map((stat) => (
               <div key={stat.label} className="text-center p-4 rounded-xl border border-white/[0.04] bg-white/[0.015]">

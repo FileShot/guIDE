@@ -2,12 +2,20 @@ import { NextResponse, NextRequest } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
 import { getUserById, updateUserStripeCustomer } from '@/lib/db';
 import { stripe, PRICE_CURRENCY, API_PLANS, ApiPlan } from '@/lib/stripe';
+import { checkRateLimit, RATE_LIMITS, rateLimitResponse } from '@/lib/rateLimit';
 
 export async function POST(req: NextRequest) {
   try {
     const auth = await getCurrentUser();
     if (!auth) {
       return NextResponse.json({ success: false, error: 'Not authenticated' }, { status: 401 });
+    }
+
+    // Rate limit checkout creation: 10 per hour per IP
+    const rl = checkRateLimit(req, RATE_LIMITS.checkout);
+    if (!rl.allowed) {
+      const r = rateLimitResponse(rl);
+      return NextResponse.json({ success: false, ...r.body }, { status: r.status, headers: r.headers });
     }
 
     const user = getUserById(auth.userId);

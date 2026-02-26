@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect, Suspense, lazy } from 'react';
 import {
-  Files, Search, GitBranch, Bug, MessageSquare, Settings, Globe, Palette, Server, BarChart3, UserCircle, Database, Shield, Activity, Compass, FileText, Monitor, Puzzle, Users, BookOpen, MoreHorizontal,
+  Files, Search, GitBranch, Bug, MessageSquare, Settings, Globe, Palette, Server, BarChart3, UserCircle, Database, Shield, Activity, Compass, FileText, Monitor, Puzzle, Users, BookOpen, MoreHorizontal, ListTodo, Webhook, PanelLeft, PanelBottom, PanelRight,
 } from 'lucide-react';
 import { FileExplorer } from '../FileExplorer/FileExplorer';
 import { Editor, EditorHandle } from '../Editor/Editor';
@@ -16,7 +16,10 @@ import { NewProjectDialog } from '../Templates/NewProjectDialog';
 import { StatusBar } from './StatusBar';
 import { CommandPalette } from './CommandPalette';
 import { MenuBar } from './MenuBar';
+import { ToastContainer, toast } from './Toast';
 import { WelcomeGuide } from './WelcomeGuide';
+import { TodoTreePanel } from '../Sidebar/TodoTreePanel';
+import { RestClientPanel } from '../RestClient/RestClientPanel';
 import { useTheme, themes } from './ThemeProvider';
 import type { FileNode } from '@/types/file';
 import type { LLMStatusEvent, AvailableModel } from '@/types/electron';
@@ -40,7 +43,7 @@ const PanelLoader = () => (
   </div>
 );
 
-type SidebarView = 'explorer' | 'search' | 'git' | 'debug' | 'extensions' | 'benchmark' | 'settings' | 'account' | 'database' | 'codereview' | 'profiler' | 'smartsearch' | 'docs' | 'ssh' | 'plugins' | 'collab' | 'notebook';
+type SidebarView = 'explorer' | 'search' | 'git' | 'debug' | 'extensions' | 'benchmark' | 'settings' | 'account' | 'database' | 'codereview' | 'profiler' | 'smartsearch' | 'docs' | 'ssh' | 'plugins' | 'collab' | 'notebook' | 'todos' | 'restclient';
 // Note: 'benchmark' is the model benchmark view
 
 export const Layout: React.FC = () => {
@@ -60,6 +63,8 @@ export const Layout: React.FC = () => {
   const [currentFile, setCurrentFile] = useState<string>('');
   const [cursorPosition, setCursorPosition] = useState({ line: 1, column: 1 });
   const [editorLanguage, setEditorLanguage] = useState('plaintext');
+  const [errorCount, setErrorCount] = useState(0);
+  const [warningCount, setWarningCount] = useState(0);
   const [selectedText, setSelectedText] = useState('');
   const [showWelcomeGuide, setShowWelcomeGuide] = useState(() => {
     return localStorage.getItem('guIDE-hideWelcome') !== 'true';
@@ -107,7 +112,10 @@ export const Layout: React.FC = () => {
     cleanups.push(api.onModelsAvailable?.((models: AvailableModel[]) => setAvailableModels(models)));
     cleanups.push(api.onRagProgress?.((data: { progress: number; done: number; total: number }) => {
       setRagStatus({ isIndexing: true, progress: data.progress, totalFiles: data.total });
-      if (data.progress >= 100) setTimeout(() => setRagStatus(s => ({ ...s, isIndexing: false })), 1000);
+      if (data.progress >= 100) {
+        setTimeout(() => setRagStatus(s => ({ ...s, isIndexing: false })), 1000);
+        toast(`Codebase indexed — ${data.total} file${data.total !== 1 ? 's' : ''}`, 'success');
+      }
     }));
     // Listen for AI-triggered browser open — open as editor tab
     // Also force a delayed show to handle timing races where BrowserPanel hasn't mounted yet
@@ -167,6 +175,7 @@ export const Layout: React.FC = () => {
       else if (ctrl && e.shiftKey && e.key.toLowerCase() === 'e') { e.preventDefault(); setSidebarView('explorer'); setSidebarVisible(v => !v); }
       else if (ctrl && e.shiftKey && e.key.toLowerCase() === 'f') { e.preventDefault(); setSidebarView('search'); setSidebarVisible(true); }
       else if (ctrl && e.shiftKey && e.key.toLowerCase() === 'd') { e.preventDefault(); setSidebarView('debug'); setSidebarVisible(true); }
+      else if (ctrl && e.shiftKey && e.key.toLowerCase() === 'g') { e.preventDefault(); setSidebarView('git'); setSidebarVisible(true); }
       else if (ctrl && e.key === '`') { e.preventDefault(); setTerminalVisible(v => !v); }
       else if (ctrl && e.key === 'b') { e.preventDefault(); setSidebarVisible(v => !v); }
       else if (ctrl && e.key === 'l') { e.preventDefault(); setChatVisible(v => !v); }
@@ -175,6 +184,11 @@ export const Layout: React.FC = () => {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
+
+  // When WelcomeGuide is visible, hide the native BrowserView so it doesn't overlay the modal
+  useEffect(() => {
+    notifyBrowserOverlay(showWelcomeGuide);
+  }, [showWelcomeGuide, notifyBrowserOverlay]);
 
   const handleFileSelect = useCallback(async (file: FileNode) => {
     if (file.type === 'file' && editorRef.current) {
@@ -189,6 +203,9 @@ export const Layout: React.FC = () => {
   }, []);
 
   const startResize = useCallback((type: 'sidebar' | 'chat' | 'terminal') => {
+    // Minimum center panel width — enforced on both sidebar and chat drags.
+    // 360px = narrowest mobile viewport (iPhone SE). Browser becomes unusable below this.
+    const MIN_CENTER_WIDTH = 360;
     // Hide browser during resize to prevent distortion
     window.electronAPI?.browserHide?.();
     let rafId: number | null = null;
@@ -196,11 +213,15 @@ export const Layout: React.FC = () => {
       if (rafId) return; // Throttle to 1 update per animation frame (~60fps)
       rafId = requestAnimationFrame(() => {
         rafId = null;
-        if (type === 'sidebar') setSidebarWidth(Math.max(180, Math.min(500, e.clientX - 48)));
-        else if (type === 'chat') {
-          // Cap chat width so the editor area always retains at least 300px
-          // (48px activity bar + 4px handles + 300px min editor)
-          const maxChatBySpace = Math.max(280, window.innerWidth - 48 - 308);
+        if (type === 'sidebar') {
+          // Cap sidebar so center panel always keeps MIN_CENTER_WIDTH
+          // 48px activity bar + 4px handle + chatWidth + 4px handle = right-side overhead
+          const maxSidebar = window.innerWidth - 48 - 8 - chatWidth - MIN_CENTER_WIDTH;
+          setSidebarWidth(Math.max(180, Math.min(500, maxSidebar, e.clientX - 48)));
+        } else if (type === 'chat') {
+          // Cap chat so the center panel always keeps MIN_CENTER_WIDTH
+          // 48px activity bar + sidebarWidth + 8px handles
+          const maxChatBySpace = Math.max(280, window.innerWidth - 48 - sidebarWidth - 8 - MIN_CENTER_WIDTH);
           setChatWidth(Math.max(280, Math.min(600, maxChatBySpace, window.innerWidth - e.clientX)));
         }
         else if (type === 'terminal') setTerminalHeight(Math.max(100, Math.min(600, window.innerHeight - e.clientY - 24)));
@@ -221,7 +242,7 @@ export const Layout: React.FC = () => {
     document.addEventListener('mouseup', onMouseUp);
     document.body.style.cursor = type === 'terminal' ? 'row-resize' : 'col-resize';
     document.body.style.userSelect = 'none';
-  }, []);
+  }, [chatWidth, sidebarWidth]);
 
   const handleOpenFolderDialog = useCallback(async () => {
     const api = window.electronAPI;
@@ -304,6 +325,8 @@ export const Layout: React.FC = () => {
     { id: 'plugins' as SidebarView, icon: Puzzle, label: 'Extensions' },
     { id: 'collab' as SidebarView, icon: Users, label: 'Live Share' },
     { id: 'notebook' as SidebarView, icon: BookOpen, label: 'Notebook' },
+    { id: 'todos' as SidebarView, icon: ListTodo, label: 'TODO Tree' },
+    { id: 'restclient' as SidebarView, icon: Webhook, label: 'REST Client' },
   ];
 
   // Check if current sidebar view is from "more tools" (to highlight the more button)
@@ -321,8 +344,35 @@ export const Layout: React.FC = () => {
           <MenuBar onAction={handleMenuAction} />
         </div>
         <div className="flex-1" />
-        {currentFile && <span className="text-[12px] mr-2" style={{ color: 'var(--theme-foreground)', opacity: 0.4 }}>{currentFile.split(/[\/\\]/).pop()}</span>}
-        <span className="text-[10px] mr-[140px] select-none brand-font" style={{ color: 'var(--theme-foreground)', opacity: 0.2 }} title="guIDE by Brendan Gray">guIDE</span>
+        {/* VS Code–style layout toggle buttons */}
+        <div className="flex items-center gap-0.5 mr-2" style={{ WebkitAppRegion: 'no-drag' } as any}>
+          <button
+            className="w-[28px] h-[28px] flex items-center justify-center rounded hover:bg-[#ffffff15] transition-colors"
+            style={{ color: sidebarVisible ? 'var(--theme-foreground)' : 'var(--theme-foreground-muted)' }}
+            onClick={() => setSidebarVisible(v => !v)}
+            title="Toggle Primary Sidebar (Ctrl+B)"
+          >
+            <PanelLeft size={14} />
+          </button>
+          <button
+            className="w-[28px] h-[28px] flex items-center justify-center rounded hover:bg-[#ffffff15] transition-colors"
+            style={{ color: terminalVisible ? 'var(--theme-foreground)' : 'var(--theme-foreground-muted)' }}
+            onClick={() => setTerminalVisible(v => !v)}
+            title="Toggle Panel (Ctrl+J)"
+          >
+            <PanelBottom size={14} />
+          </button>
+          <button
+            className="w-[28px] h-[28px] flex items-center justify-center rounded hover:bg-[#ffffff15] transition-colors"
+            style={{ color: chatVisible ? 'var(--theme-foreground)' : 'var(--theme-foreground-muted)' }}
+            onClick={() => setChatVisible(v => !v)}
+            title="Toggle Secondary Sidebar (Ctrl+L)"
+          >
+            <PanelRight size={14} />
+          </button>
+        </div>
+        {currentFile && <span className="text-[12px] mr-2 truncate max-w-[150px] flex-shrink" style={{ color: 'var(--theme-foreground)', opacity: 0.4 }}>{currentFile.split(/[/\\]/).pop()}</span>}
+        <span className="text-[10px] mr-[140px] select-none brand-font flex-shrink-0" style={{ color: 'var(--theme-foreground)', opacity: 0.2 }} title="guIDE by Brendan Gray">guIDE</span>
       </div>
 
       {/* Main */}
@@ -500,6 +550,8 @@ export const Layout: React.FC = () => {
                 {sidebarView === 'plugins' && 'Extensions'}
                 {sidebarView === 'collab' && 'Live Share'}
                 {sidebarView === 'notebook' && 'Notebook'}
+                {sidebarView === 'todos' && 'TODO Tree'}
+                {sidebarView === 'restclient' && 'REST Client'}
               </div>
               <div className="flex-1 overflow-auto">
                 {sidebarView === 'explorer' && <FileExplorer rootPath={rootPath} onFileSelect={handleFileSelect} onOpenFolder={handleOpenFolderDialog} />}
@@ -568,6 +620,16 @@ export const Layout: React.FC = () => {
                     <NotebookPanel rootPath={rootPath} />
                   )}
                 </Suspense>
+                {sidebarView === 'todos' && (
+                  <TodoTreePanel
+                    rootPath={rootPath}
+                    onOpenFile={(filePath, line) => {
+                      editorRef.current?.openFile(filePath, line);
+                      setCurrentFile(filePath);
+                    }}
+                  />
+                )}
+                {sidebarView === 'restclient' && <RestClientPanel />}
               </div>
         </div>
         {sidebarVisible && (
@@ -585,6 +647,7 @@ export const Layout: React.FC = () => {
               onSelectionChange={setSelectedText}
               onFileChange={setCurrentFile}
               onTabsChange={(hasTabs: boolean) => setEditorHasOpenTabs(hasTabs)}
+              onMarkersChange={(e: number, w: number) => { setErrorCount(e); setWarningCount(w); }}
             />
           </div>
           {terminalVisible && (
@@ -626,12 +689,21 @@ export const Layout: React.FC = () => {
         ragStatus={ragStatus}
         currentFile={currentFile}
         onToggleTerminal={() => setTerminalVisible(v => !v)}
+        onShowProblems={() => {
+          setTerminalVisible(true);
+          setTimeout(() => window.dispatchEvent(new CustomEvent('guide-show-problems')), 50);
+        }}
         onAction={handleMenuAction}
         onChatMessage={(msg: string) => {
           setChatVisible(true);
           window.dispatchEvent(new CustomEvent('voice-chat-message', { detail: { message: msg } }));
         }}
+        errorCount={errorCount}
+        warningCount={warningCount}
       />
+
+      {/* Toast notifications */}
+      <ToastContainer />
 
       {/* Command Palette */}
       {commandPaletteOpen && (

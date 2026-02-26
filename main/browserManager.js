@@ -174,7 +174,24 @@ class BrowserManager {
       // Batch bounds update with autoResize for smoother rendering
       this.browserView.setBounds(validBounds);
       this.browserView.setAutoResize({ width: false, height: false });
+      this._lastBounds = validBounds;
       this.isVisible = true;
+
+      // Enforce minimum window size so the BrowserView cannot be clipped by
+      // shrinking the window below usable dimensions.
+      try { this.parentWindow.setMinimumSize(500, 400); } catch (_) {}
+
+      // Re-clamp BrowserView bounds on every OS window resize.
+      // Without this, dragging the window chrome smaller leaves the BrowserView
+      // overflowing at its last pixel position.
+      if (!this._resizeHandler) {
+        this._resizeHandler = () => {
+          if (this.isVisible && this._lastBounds) {
+            this.setBounds(this._lastBounds);
+          }
+        };
+        this.parentWindow.on('resize', this._resizeHandler);
+      }
       
       return true;
     } catch (error) {
@@ -193,6 +210,13 @@ class BrowserManager {
       this.browserView.setBounds({ x: -3000, y: -3000, width: 1, height: 1 });
     }
     this.isVisible = false;
+    // Remove OS resize listener — no need to re-clamp when browser is hidden
+    if (this._resizeHandler && this.parentWindow) {
+      try { this.parentWindow.removeListener('resize', this._resizeHandler); } catch (_) {}
+      this._resizeHandler = null;
+    }
+    // Remove minimum window size constraint — user can freely resize when browser is hidden
+    try { if (this.parentWindow) this.parentWindow.setMinimumSize(0, 0); } catch (_) {}
   }
 
   /**
@@ -204,6 +228,8 @@ class BrowserManager {
     
     try {
       const validBounds = this._validateBounds(bounds);
+      // Always keep _lastBounds current so the OS resize handler re-clamps correctly
+      this._lastBounds = validBounds;
       
       // Ensure the view is attached (safety check)
       if (this.parentWindow) {
@@ -233,8 +259,8 @@ class BrowserManager {
    * Ensures the view never covers the title bar or has invalid dimensions.
    */
   _validateBounds(bounds) {
-    const MIN_Y = 36; // Title bar height
-    const MIN_WIDTH = 50;
+    const MIN_Y = 36;  // Title bar height
+    const MIN_WIDTH = 200; // Minimum usable browser width (prevents invisible/clipped view)
     const MIN_HEIGHT = 50;
     
     let { x, y, width, height } = bounds;

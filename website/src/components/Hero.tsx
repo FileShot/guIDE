@@ -1,6 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
+import Image from 'next/image';
 import Link from 'next/link';
 
 export default function Hero() {
@@ -20,7 +21,7 @@ export default function Hero() {
           transition={{ duration: 0.5 }}
           className="mb-8"
         >
-          <img src="/logo.png" alt="guIDE" className="w-20 h-20 mx-auto" />
+          <Image src="/logo.png" alt="guIDE" width={80} height={80} className="mx-auto" priority />
         </motion.div>
 
         <motion.h1

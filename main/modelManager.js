@@ -7,6 +7,7 @@ const path = require('path');
 const fs = require('fs').promises;
 const fsSync = require('fs');
 const { EventEmitter } = require('events');
+const { detectModelType } = require('./modelDetection');
 
 class ModelManager extends EventEmitter {
   constructor(appPath) {
@@ -77,6 +78,7 @@ class ModelManager extends EventEmitter {
         directory: path.dirname(filePath),
         isCustom: true,  // Flag to indicate user-added model
         details: this._parseModelName(fileName),
+        modelType: detectModelType(filePath),
       };
 
       this.availableModels.push(modelInfo);
@@ -148,6 +150,7 @@ class ModelManager extends EventEmitter {
 
           // Try to detect model details from filename
           modelInfo.details = this._parseModelName(entry.name);
+          modelInfo.modelType = detectModelType(fullPath);
 
           // Don't add duplicates
           if (!this.availableModels.find(m => m.path === fullPath)) {

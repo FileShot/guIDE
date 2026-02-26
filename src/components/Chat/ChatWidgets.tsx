@@ -81,12 +81,12 @@ export const ThinkingBlock: React.FC<{ text: string; isLive?: boolean; segmentCo
         onClick={() => setExpanded(!expanded)}
       >
         <span className={`text-[8px] transition-transform duration-150 flex-shrink-0 ${expanded ? 'rotate-90' : ''}`}>▶</span>
-        <span className="text-[#d291e4] font-medium whitespace-nowrap flex-shrink-0">
+        <span className="text-white font-medium whitespace-nowrap flex-shrink-0">
           <em>{label}</em>
         </span>
         {count > 1 && <span className="text-[8px] bg-[#505050] text-[#d0d0d0] px-1 rounded-full flex-shrink-0">{count} steps</span>}
         {isLive
-          ? <Loader2 size={8} className="animate-spin text-[#d291e4] ml-auto flex-shrink-0" />
+          ? <Loader2 size={8} className="animate-spin text-white ml-auto flex-shrink-0" />
           : wasEverLiveRef.current && <Check size={9} className="text-[#4ec9b0] ml-auto flex-shrink-0" />
         }
       </button>
@@ -295,7 +295,7 @@ export const ToolCallGroup: React.FC<{ children: React.ReactNode; count: number 
 };
 
 // ── Code Block with Copy/Apply ──
-const COLLAPSE_LINE_THRESHOLD = 12; // Collapse code blocks taller than this many lines
+const COLLAPSE_LINE_THRESHOLD = 6; // Collapse code blocks taller than this many lines
 
 export const CodeBlock: React.FC<{ code: string; language: string; onApply: () => void; isToolCall?: boolean }> = ({ code, language, onApply, isToolCall }) => {
   const [copied, setCopied] = useState(false);
@@ -313,7 +313,7 @@ export const CodeBlock: React.FC<{ code: string; language: string; onApply: () =
   const displayCode = expanded ? code : code.split('\n').slice(0, COLLAPSE_LINE_THRESHOLD).join('\n');
 
   return (
-    <div className="my-2 rounded-lg overflow-hidden border border-[#3c3c3c]">
+    <div className="mt-2 mb-4 rounded-lg overflow-hidden border border-[#3c3c3c]">
       <div className="flex items-center justify-between px-3 py-1.5 bg-[#262626] border-b border-[#3c3c3c]">
         <div className="flex items-center gap-2">
           <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded" style={{ backgroundColor: 'color-mix(in srgb, var(--theme-accent) 15%, transparent)', color: 'var(--theme-accent)' }}>{language || 'code'}</span>
@@ -351,7 +351,7 @@ export const CodeBlock: React.FC<{ code: string; language: string; onApply: () =
         </div>
       </div>
       <div className="relative">
-        <pre className={`p-3 overflow-x-auto text-[12px] font-mono bg-[#1e1e1e] leading-relaxed ${!expanded ? 'max-h-[240px] overflow-hidden' : ''}`}>
+        <pre className={`p-3 overflow-x-auto text-[12px] font-mono bg-[#1e1e1e] leading-relaxed ${!expanded ? 'max-h-[120px] overflow-hidden' : ''}`}>
           <code>{displayCode}</code>
         </pre>
         {isLong && !expanded && (
@@ -426,7 +426,9 @@ export const RichTextSpan: React.FC<{ content: string }> = ({ content }) => {
 
 // ── Inline Markdown Text — renders *italic*, **bold**, and `code` in plain text ──
 export const InlineMarkdownText: React.FC<{ content: string; className?: string }> = ({ content, className = '' }) => {
-  const html = markdownInlineToHTML(content);
+  // Collapse 3+ consecutive newlines to 2 (max one blank line) to avoid excessive vertical gaps
+  const normalized = content.replace(/\n{3,}/g, '\n\n');
+  const html = markdownInlineToHTML(normalized);
   return (
     <span 
       className={`whitespace-pre-wrap ${className}`}

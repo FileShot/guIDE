@@ -66,12 +66,18 @@ export const HtmlPreview: React.FC<{ content: string; filePath: string; onToggle
 
   const resolvedContent = useMemo(() => {
     const dir = filePath.replace(/\\/g, '/').replace(/\/[^/]*$/, '');
+    // Minimal CSS reset injected after <base> tag. Reduces excessive browser-default
+    // margins on block elements (section, h1-h6, p, nav, etc.) without overriding
+    // any styles the HTML file defines itself (comes first, own styles cascade over it).
+    const cssReset = `<style>*{box-sizing:border-box}body{margin:0;padding:0}h1,h2,h3,h4,h5,h6,p,ul,ol,li,nav,section,article,header,footer,main,aside{margin:0;padding:0}ul,ol{list-style:none}</style>`;
+    const baseTag = `<base href="file:///${dir}/">`;
+    const inject = baseTag + cssReset;
     if (content.includes('<head>')) {
-      return content.replace('<head>', `<head><base href="file:///${dir}/">`);
+      return content.replace('<head>', `<head>${inject}`);
     } else if (content.includes('<html')) {
-      return content.replace(/(<html[^>]*>)/, `$1<head><base href="file:///${dir}/"></head>`);
+      return content.replace(/(<html[^>]*>)/, `$1<head>${inject}</head>`);
     }
-    return `<head><base href="file:///${dir}/"></head>${content}`;
+    return `<head>${inject}</head>${content}`;
   }, [content, filePath]);
 
   return (
@@ -575,11 +581,11 @@ export const WelcomeScreen: React.FC = () => {
               return (
                 <button
                   key={folder}
-                  className="w-full text-left px-3 py-2 rounded hover:bg-[#2d2d2d] transition-colors group"
+                  className="w-full text-center px-3 py-2 rounded hover:bg-[#2d2d2d] transition-colors group"
                   onClick={() => window.dispatchEvent(new CustomEvent('app-action', { detail: { action: 'open-recent', path: folder } }))}
                 >
-                  <div className="text-[12px] text-[#cccccc] truncate group-hover:text-white">{name}</div>
-                  {parent && <div className="text-[10px] text-[#585858] truncate">{parent}</div>}
+                  <div className="text-[12px] text-[#cccccc] truncate group-hover:text-white text-center">{name}</div>
+                  {parent && <div className="text-[10px] text-[#585858] truncate text-center">{parent}</div>}
                 </button>
               );
             })}

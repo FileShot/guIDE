@@ -1,16 +1,16 @@
 ﻿import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Virtuoso, VirtuosoHandle } from 'react-virtuoso';
-import { splitInlineToolCalls, parseToolCall, extractToolResults } from '@/utils/chatContentParser';
+import { splitInlineToolCalls, parseToolCall, extractToolResults, stripTrailingPartialToolCall } from '@/utils/chatContentParser';
 import {
-  X, Cpu, Globe, Code, Bug, FileCode, Terminal,
+  X, Cpu, Globe, Code, Bug, FileCode, Terminal, Plus,
   ChevronDown, Trash2, Settings as SettingsIcon, Loader2,
   Sparkles, Brain, Mic, MicOff, Volume2, VolumeX, Cloud,
   Paperclip, ArrowUp, Square, Shield, Zap, Clock, Check,
-  Image as ImageIcon, Download, XCircle, PlayCircle, AlertTriangle,
+  Image as ImageIcon, Download, XCircle, PlayCircle, AlertTriangle, Eye,
 } from 'lucide-react';
 import type { LLMStatusEvent, AvailableModel, AIChatContext } from '@/types/electron';
 import { ModelPicker } from './ModelPicker';
-import { AudioWaveAnimation, ThinkingBlock, CollapsibleToolBlock, ToolCallGroup, CodeBlock, MermaidDiagram, ApiKeyInput, RichTextSpan, InlineMarkdownText } from './ChatWidgets';
+import { AudioWaveAnimation, ThinkingBlock, CollapsibleToolBlock, ToolCallGroup, CodeBlock, MermaidDiagram, ApiKeyInput, InlineMarkdownText } from './ChatWidgets';
 import { useChatSettings } from './hooks/useChatSettings';
 import { useChatStreaming } from './hooks/useChatStreaming';
 import { useVoiceInput } from './hooks/useVoiceInput';
@@ -18,6 +18,7 @@ import { useTTS } from './hooks/useTTS';
 import { useChatSessions } from './hooks/useChatSessions';
 import { ChatSettingsPanel } from './ChatSettingsPanel';
 import { TodoPanel, TodoItem } from './TodoPanel';
+import { toast } from '@/components/Layout/Toast';
 
 interface ChatPanelProps {
   rootPath: string;
@@ -41,6 +42,8 @@ interface ChatMessage {
   ragUsed?: boolean;
   thinkingText?: string;
   images?: { name: string; data: string; mimeType: string }[];
+  isError?: boolean;
+  checkpointId?: string;
 }
 
 interface AttachedImage {
@@ -48,6 +51,36 @@ interface AttachedImage {
   data: string; // base64 data URL
   mimeType: string;
 }
+
+type CheckpointData = { turnId: string; timestamp: number; userMessage: string; files: { filePath: string; fileName: string; isNew: boolean }[] };
+
+const CheckpointDivider: React.FC<{
+  checkpoint: CheckpointData;
+  isRestoring: boolean;
+  onRestore: () => void;
+}> = ({ checkpoint, isRestoring, onRestore }) => {
+  const time = new Date(checkpoint.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const n = checkpoint.files.length;
+  return (
+    <div className="relative flex items-center gap-2 px-3 py-1 my-0.5 select-none">
+      <div className="flex-1 border-t border-dashed border-[#3c3c3c]" />
+      <div className="flex items-center gap-1.5 text-[10px] text-[#858585] whitespace-nowrap">
+        <span className="text-[#569cd6]">{n} file{n !== 1 ? 's' : ''} changed</span>
+        <span>·</span>
+        <span>{time}</span>
+      </div>
+      <button
+        className="text-[10px] px-1.5 py-0.5 rounded border border-[#3c3c3c] text-[#858585] hover:text-[#cccccc] hover:border-[#569cd6] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        onClick={onRestore}
+        disabled={isRestoring}
+        title={`Restore ${n} file${n !== 1 ? 's' : ''} to state before this turn`}
+      >
+        {isRestoring ? '…' : 'Restore'}
+      </button>
+      <div className="flex-1 border-t border-dashed border-[#3c3c3c]" />
+    </div>
+  );
+};
 
 export const ChatPanel: React.FC<ChatPanelProps> = ({
   rootPath, currentFile, selectedText, llmStatus, availableModels, onApplyCode, onOpenFile, onClearCurrentFile, onClose,
@@ -59,6 +92,9 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [executingTools, setExecutingTools] = useState<Array<{tool: string; params: any}>>([]);
+  const [completedStreamingTools, setCompletedStreamingTools] = useState<Array<{tool: string; params: any}>>([]);
+  // Ref so IPC callbacks (closed over at mount) can always read the latest executing list
+  const executingToolsRef = useRef<Array<{tool: string; params: any}>>([]);
   const [agenticProgress, setAgenticProgress] = useState<{ iteration: number; maxIterations: number } | null>(null);
   const [agenticPhases, setAgenticPhases] = useState<Array<{ phase: string; label: string; status: 'running' | 'done' }>>([]);
   const [_showThinking, _setShowThinking] = useState(false);
@@ -72,6 +108,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     } catch { return new Set<string>(); }
   });
   const [pendingFileChanges, setPendingFileChanges] = useState<{ filePath: string; fileName: string; timestamp: number; tool: string; isNew: boolean; linesAdded?: number; linesRemoved?: number }[]>([]);
+  const [checkpoints, setCheckpoints] = useState<Map<string, CheckpointData>>(new Map());
+  const [restoringCheckpoint, setRestoringCheckpoint] = useState<string | null>(null);
   const [fileChangesExpanded, setFileChangesExpanded] = useState(true);
   const [attachedImages, setAttachedImages] = useState<AttachedImage[]>([]);
   const [attachedFiles, setAttachedFiles] = useState<{ name: string; path: string; content: string }[]>([]);
@@ -93,6 +131,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   const [licensePassword, setLicensePassword] = useState('');
   const [messageQueue, setMessageQueue] = useState<string[]>([]);
   const [todos, setTodos] = useState<TodoItem[]>([]);
+  const [activeImageModel, setActiveImageModel] = useState<AvailableModel | null>(null);
+  const [imageGenProgress, setImageGenProgress] = useState<{ current: number; total: number } | null>(null);
   const [editingQueueIndex, setEditingQueueIndex] = useState<number | null>(null);
   const [editingQueueText, setEditingQueueText] = useState('');
   const messageQueueRef = useRef<string[]>([]);
@@ -103,7 +143,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   // ── Extracted hooks ──
   const settings = useChatSettings();
   const { temperature, maxTokens, contextSize, topP, topK, repeatPenalty, seed,
-    reasoningEffort, maxIterations, gpuPreference, useWebSearch, useRAG,
+    reasoningEffort, thinkingBudget, maxIterations, gpuPreference, useWebSearch, useRAG,
     ttsEnabled, autoMode, planMode, cloudProvider, cloudModel,
     setUseWebSearch, setUseRAG, setTtsEnabled, setAutoMode, setPlanMode,
     setCloudProvider, setCloudModel,
@@ -134,6 +174,17 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       localStorage.setItem('guide-favorite-models', JSON.stringify([...next]));
       return next;
     });
+  }, []);
+
+  // Select an image model — sets it as the active image generator for this session
+  const handleSwitchImageModel = useCallback((model: AvailableModel) => {
+    setActiveImageModel(model);
+    setMessages(prev => [...prev, {
+      id: `msg-imgmodel-${Date.now()}`,
+      role: 'system',
+      content: `Image model ready: **${model.name}** — type a description to generate an image locally.`,
+      timestamp: Date.now(),
+    }]);
   }, []);
 
   // Close all dropdowns/panels when clicking outside their trigger area
@@ -293,16 +344,26 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     let executingTimeout: ReturnType<typeof setTimeout> | null = null;
 
     const cleanupExecuting = api.onToolExecuting?.((data: { tool: string; params: any }) => {
-      setExecutingTools(prev => [...prev, { tool: data.tool, params: data.params }]);
+      const updated = [...executingToolsRef.current, { tool: data.tool, params: data.params }];
+      executingToolsRef.current = updated;
+      setExecutingTools(updated);
       // Safety timeout: clear executing status after 60s in case mcp-tool-results is missed
       if (executingTimeout) clearTimeout(executingTimeout);
       executingTimeout = setTimeout(() => {
+        executingToolsRef.current = [];
         setExecutingTools([]);
       }, 60000);
     });
 
     const cleanupResults = api.onMcpToolResults?.(() => {
       if (executingTimeout) clearTimeout(executingTimeout);
+      // BUG-NEW-A: Move currently-executing tools to completed so their pills stay visible
+      // as ✓ checkmarks instead of vanishing the instant the tool finishes.
+      const finished = executingToolsRef.current;
+      if (finished.length > 0) {
+        setCompletedStreamingTools(prev => [...prev, ...finished]);
+      }
+      executingToolsRef.current = [];
       setExecutingTools([]);
       // Refresh pending file changes after tools execute
       refreshPendingChanges();
@@ -352,6 +413,17 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       }
     });
 
+    const cleanupCheckpoint = api.onCheckpointReady?.((data: CheckpointData) => {
+      setCheckpoints(prev => new Map(prev).set(data.turnId, data));
+      setMessages(prev => {
+        const lastIdx = prev.map((m, i) => (m.role === 'assistant' ? i : -1)).filter(i => i >= 0).pop();
+        if (lastIdx === undefined) return prev;
+        const updated = [...prev];
+        updated[lastIdx] = { ...updated[lastIdx], checkpointId: data.turnId };
+        return updated;
+      });
+    });
+
     return () => {
       if (executingTimeout) clearTimeout(executingTimeout);
       cleanupExecuting?.();
@@ -360,6 +432,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       cleanupPhase?.();
       cleanupTodo?.();
       cleanupAgentStatus?.();
+      cleanupCheckpoint?.();
     };
   }, []);
 
@@ -532,6 +605,79 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   const sendMessageDirect = async (text: string, images?: typeof attachedImages) => {
     const currentImages = images || [];
 
+    // ── Local image generation path ──────────────────────────────────────────
+    // When an image model is active, route directly to local image generation
+    // instead of the LLM pipeline. No context or streaming needed.
+    if (activeImageModel) {
+      const userMsg: ChatMessage = {
+        id: `msg-${Date.now()}`,
+        role: 'user',
+        content: text || '(image prompt)',
+        timestamp: Date.now(),
+      };
+      setMessages(prev => [...prev, userMsg]);
+      isGeneratingRef.current = true;
+      setIsGenerating(true);
+      setImageGenProgress(null);
+
+      // Subscribe to per-step progress
+      const cleanupProgress = (window.electronAPI as any)?.onLocalImageProgress?.((data: { current: number; total: number }) => {
+        setImageGenProgress(data);
+      });
+
+      try {
+        const api = window.electronAPI as any;
+        const result = await api.localImageGenerate({
+          prompt: text,
+          modelPath: activeImageModel.path,
+        });
+
+        if (result?.success && result.imageBase64) {
+          const imageData = JSON.stringify({
+            type: 'generated-image',
+            imageBase64: result.imageBase64,
+            mimeType: result.mimeType || 'image/png',
+            prompt: result.prompt || text,
+            provider: 'local',
+            model: activeImageModel.name,
+          });
+          setMessages(prev => [...prev, {
+            id: `msg-${Date.now()}-img`,
+            role: 'assistant',
+            content: `<!--GENERATED_IMAGE:${imageData}-->`,
+            timestamp: Date.now(),
+            model: activeImageModel.name,
+          }]);
+          toast('Image generated', 'success');
+        } else {
+          setMessages(prev => [...prev, {
+            id: `msg-err-${Date.now()}`,
+            role: 'system',
+            isError: true,
+            content: `Image generation failed\n\n${result?.error || 'Unknown error'}`,
+            timestamp: Date.now(),
+          }]);
+          toast(`Image generation failed — ${result?.error || 'Unknown error'}`.slice(0, 80), 'error');
+        }
+      } catch (e: any) {
+        setMessages(prev => [...prev, {
+          id: `msg-err-${Date.now()}`,
+          role: 'system',
+          isError: true,
+          content: `Image generation error\n\n${e.message}`,
+          timestamp: Date.now(),
+        }]);
+        toast(`Image generation error — ${e.message}`.slice(0, 80), 'error');
+      } finally {
+        cleanupProgress?.();
+        setImageGenProgress(null);
+        isGeneratingRef.current = false;
+        setIsGenerating(false);
+      }
+      return;
+    }
+    // ── End local image generation path ──────────────────────────────────────
+
     // Plan Mode: prepend structured planning instruction
     const effectiveText = planMode
       ? `[PLAN MODE] Before making any changes, first create a detailed step-by-step plan. List each file to modify, what changes to make, and in what order. Present the plan as a numbered list with clear descriptions. Do NOT execute any changes yet — only output the plan. After I approve, I will ask you to execute it.\n\nUser request: ${text}`
@@ -546,6 +692,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     };
 
     setMessages(prev => [...prev, userMsg]);
+    // Set ref immediately — don't wait for useEffect (prevents React render race in queue guard)
+    isGeneratingRef.current = true;
     setIsGenerating(true);
     generationStartRef.current = Date.now();
     lastActivityRef.current = Date.now();
@@ -557,6 +705,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     wasRespondingRef.current = false;
     setStreamingText('');
     setThinkingSegments([]);
+    setCompletedStreamingTools([]);
+    executingToolsRef.current = [];
 
     try {
       const api = window.electronAPI;
@@ -654,6 +804,13 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
         return;
       }
 
+      // If the backend signals this request was superseded by a newer queued message,
+      // skip adding a response bubble entirely — including any partially rendered thinking.
+      // The superseding request will produce the real response.
+      if ((result as any).superseded === true) {
+        return;
+      }
+
       const assistantMsg: ChatMessage = {
         id: `msg-${Date.now()}-resp`,
         role: 'assistant',
@@ -665,7 +822,10 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
               const hasThinking = thinkingSegmentsRef.current.some(s => s.trim());
               // If backend and buffer are both empty but thinking exists, show empty bubble
               // (thinking block will render) rather than the misleading fallback string.
-              return backendText || bufferText || (hasThinking ? '' : 'No response generated.');
+              // BUG-IMG2: bufferText wins — the committed bubble must match what the
+              // typewriter showed. backendText can diverge when shouldAutoSummarize
+              // silently appends a summary that was never streamed to the renderer.
+              return bufferText || backendText || (hasThinking ? '' : 'No response generated.');
             })()
           : `Error: ${result.error}`,
         timestamp: Date.now(),
@@ -693,9 +853,13 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
         timestamp: Date.now(),
       }]);
     } finally {
+      // Clear ref immediately — don't wait for useEffect sync (prevents guard race)
+      isGeneratingRef.current = false;
       setIsGenerating(false);
       setStreamingText('');
       setThinkingSegments([]);
+      setCompletedStreamingTools([]);
+      executingToolsRef.current = [];
       setAgenticProgress(null);
       setAgenticPhases([]);
       setGenerationStuck(false);
@@ -713,6 +877,10 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
 
     // Keep processQueueRef pointing at latest sendMessageDirect
     processQueueRef.current = async () => {
+      // Guard: if a message is already being generated, bail out.
+      // The finally block of that sendMessageDirect will fire this again when done.
+      // Using isGeneratingRef (not state) to avoid React render race conditions.
+      if (isGeneratingRef.current) return;
       const queue = messageQueueRef.current;
       if (queue.length === 0) return;
       const nextMsg = queue[0];
@@ -727,7 +895,9 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     if (!text && attachedImages.length === 0 && attachedFiles.length === 0) return;
 
     // If currently generating, queue the message instead of blocking
-    if (isGenerating) {
+    // Use ref (not state) to avoid stale-closure race where setIsGenerating(true)
+    // hasn't propagated through React's render cycle yet.
+    if (isGeneratingRef.current) {
       const newQueue = [...messageQueueRef.current, text];
       messageQueueRef.current = newQueue;
       setMessageQueue(newQueue);
@@ -815,9 +985,12 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     setStreamingText('');
     setThinkingSegments([]);
     setExecutingTools([]);
+    setCompletedStreamingTools([]);
+    executingToolsRef.current = [];
     setAgenticProgress(null);
     setAgenticPhases([]);
     setPendingFileChanges([]);
+    setCheckpoints(new Map());
     setTodos([]);
     // Only call resetSession if we didn't already cancel (cancel does its own reset)
     if (!isGenerating) {
@@ -842,12 +1015,16 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     setStreamingText('');
     setThinkingSegments([]);
     setExecutingTools([]);
+    setCompletedStreamingTools([]);
+    executingToolsRef.current = [];
     setAgenticProgress(null);
     setAgenticPhases([]);
   }, [isGenerating]);
 
   const switchModel = async (model: AvailableModel) => {
     setShowModelPicker(false);
+    // Selecting an LLM exits image mode — the two are mutually exclusive
+    setActiveImageModel(null);
     // BUG-028: capture before cancelAndResetStream — llmCancel (inside) already calls resetSession.
     // Only call llmResetSession separately if we weren't generating (cancel wasn't called).
     const wasGenerating = isGenerating;
@@ -879,8 +1056,11 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       if (result && !result.success) {
         setMessages(prev => [...prev, {
           id: `msg-err-${Date.now()}`,
-          role: 'assistant',
-          content: `[Warning] Failed to load model "${model.name}": ${result.error || 'Unknown error'}`,
+          role: 'system',
+          isError: true,
+          content: `Failed to load "${model.name}"
+
+${result.error || 'Unknown error'}`,
           timestamp: Date.now(),
         }]);
       } else if (result?.success) {
@@ -897,8 +1077,11 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       console.error('Failed to switch model:', e);
       setMessages(prev => [...prev, {
         id: `msg-err-${Date.now()}`,
-        role: 'assistant',
-        content: `[Warning] Error loading model: ${e.message}`,
+        role: 'system',
+        isError: true,
+        content: `Failed to load "${model.name}"
+
+${e.message}`,
         timestamp: Date.now(),
       }]);
     }
@@ -1004,16 +1187,34 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
         {/* Image preview */}
         <div
           className="relative cursor-pointer group"
-          onClick={() => setExpanded(!expanded)}
+          onClick={async () => {
+            if (onOpenFile) {
+              setSaving(true);
+              try {
+                const api = window.electronAPI as any;
+                if (api?.imageSaveToProject) {
+                  const result = await api.imageSaveToProject(imageBase64, mimeType, `generated-${Date.now()}.png`);
+                  if (result?.success && result.filePath) {
+                    onOpenFile(result.filePath);
+                  }
+                }
+              } catch (_e) { /* ignore */ }
+              setSaving(false);
+            } else {
+              setExpanded(!expanded);
+            }
+          }}
         >
           <img
             src={dataUrl}
             alt={prompt}
-            className={`w-full object-contain ${expanded ? 'max-h-[600px]' : 'max-h-[300px]'}`}
+            className="w-full object-contain max-h-[300px]"
             style={{ imageRendering: 'auto' }}
           />
-          <div className="absolute top-2 right-2 bg-black/60 text-[10px] text-white px-1.5 py-0.5 rounded">
-            {expanded ? 'Click to shrink' : 'Click to expand'}
+          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+            <span className="opacity-0 group-hover:opacity-100 transition-opacity bg-black/70 text-[11px] text-white px-2 py-1 rounded">
+              {onOpenFile ? 'Open in editor' : 'Click to expand'}
+            </span>
           </div>
         </div>
 
@@ -1026,7 +1227,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
               <span>Saved to {saved.split(/[/\\]/).slice(-2).join('/')}</span>
             </div>
           ) : (
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               <button
                 onClick={handleQuickSave}
                 disabled={saving}
@@ -1043,6 +1244,30 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                 <Download size={12} />
                 Save As…
               </button>
+              {onOpenFile && (
+                <button
+                  onClick={async () => {
+                    setSaving(true);
+                    try {
+                      const api = window.electronAPI as any;
+                      if (api?.imageSaveToProject) {
+                        const result = await api.imageSaveToProject(imageBase64, mimeType, `generated-${Date.now()}.png`);
+                        if (result?.success && result.filePath) {
+                          onOpenFile(result.filePath);
+                        }
+                      }
+                    } catch (e) {
+                      console.error('Failed to open image in viewport:', e);
+                    }
+                    setSaving(false);
+                  }}
+                  disabled={saving}
+                  className="flex items-center gap-1.5 px-3 py-1 rounded text-[11px] bg-[#333] text-[#ccc] hover:bg-[#444] disabled:opacity-50 transition-colors"
+                >
+                  <Eye size={12} />
+                  Open
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -1220,6 +1445,9 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
 
     const parts = content.split(/(```[\s\S]*?```)/g);
     const elements: React.ReactNode[] = [];
+    // ALL tool blocks are collected here — appended as a single ToolCallGroup at the
+    // bottom of the message. They are NEVER rendered inline in the text flow.
+    const allToolElements: React.ReactElement[] = [];
 
     for (let i = 0; i < parts.length; i++) {
       const part = parts[i];
@@ -1229,15 +1457,14 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
         const lang = part.substring(3, firstLine > 0 ? firstLine : 3).trim();
         const code = firstLine > 0 ? part.substring(firstLine + 1, part.length - 3) : part.substring(3, part.length - 3);
 
-        // Tool call JSON block — merge with result if available
+        // Tool call JSON block — collect into allToolElements (never inline)
         const toolCall = (lang === 'json' || lang === 'tool') ? parseToolCall(code) : null;
         if (toolCall) {
           const queue = toolResultMap.get(toolCall.tool);
           const result = queue?.length ? queue.shift() : undefined;
-
           if (result) {
-            elements.push(
-              <CollapsibleToolBlock key={i} label={getToolLabel(toolCall, result.isOk ? 'ok' : 'fail')} icon={result.isOk ? '✓' : '✗'}>
+            allToolElements.push(
+              <CollapsibleToolBlock key={`t-${i}`} label={getToolLabel(toolCall, result.isOk ? 'ok' : 'fail')} icon={result.isOk ? '✓' : '✗'}>
                 <div>
                   <div className="text-[10px] text-[#858585] mb-1 font-medium tracking-wide">PARAMETERS</div>
                   <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2 mb-2">{truncateToolContent(code)}</pre>
@@ -1249,12 +1476,29 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
               </CollapsibleToolBlock>
             );
           } else {
-            elements.push(
-              <CollapsibleToolBlock key={i} label={getToolLabel(toolCall, 'running')} icon=">">
-                <pre className="whitespace-pre-wrap text-[13px] font-mono text-[#d4d4d4]">{truncateToolContent(code)}</pre>
+            allToolElements.push(
+              <CollapsibleToolBlock key={`t-${i}`} label={getToolLabel(toolCall, 'ok')} icon="✓">
+                <div className="text-[11px] text-[#858585]">Completed</div>
               </CollapsibleToolBlock>
             );
           }
+          continue;
+        }
+
+        // If this json/tool block failed parseToolCall (malformed, unknown tool, or tool result
+        // output code block from inside ## Tool Execution Results section) — suppress it.
+        // This prevents orphan CodeBlock renders for: (a) tool output wrapped in code fences,
+        // (b) malformed/non-tool JSON from small models. Only suppress if it looks like a
+        // tool-call attempt (has "tool": key) to preserve legitimate JSON explanation snippets.
+        if (
+          lang === 'tool' ||
+          (lang === 'json' && (/"tool"\s*:/.test(code) || (/"name"\s*:/.test(code) && /"arguments"\s*:/.test(code)))) ||
+          // Also catch plain (no-language) fences emitted by llama-style models: ``` {"tool":"..."} ```
+          (lang === '' && /^\s*\{\s*"tool"\s*:/.test(code))
+        ) {
+          // tool-call fence that failed parseToolCall — suppress. Never render as a raw code bubble.
+          // Legitimate code examples won't open with {"tool":; tool calls here are malformed/aliased
+          // and already shown via ToolCallGroup (tool-executing events).
           continue;
         }
 
@@ -1276,24 +1520,29 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
 
       // Plain text — strip tool execution results sections (already merged) and artifacts
       let text = part;
-      // Strip everything from "## Tool Execution Results" onwards — tool results always
-      // appear at the end of a text segment and are fully handled by extractToolResults.
-      text = text.replace(/\n*## Tool Execution Results[\s\S]*/g, '');
-      if (text.trim().startsWith('### Tool Execution Results')) {
+      // Strip "## Tool Execution Results" section but PRESERVE any trailing prose the
+      // model wrote AFTER the last tool entry (e.g. a final summary paragraph).
+      const toolResultsIdx = text.indexOf('## Tool Execution Results');
+      if (toolResultsIdx !== -1) {
+        const preTool = text.substring(0, toolResultsIdx).trimEnd();
+        const toolSection = text.substring(toolResultsIdx);
+        const trailingMatch = toolSection.match(/^([\s\S]*### \S+ \[(?:OK|FAIL)\][^\n]*\n[\s\S]*?)(\n\n(?!###)[\s\S]+)?$/);
+        const trailingProse = trailingMatch?.[2]?.trim() ?? '';
+        text = preTool + (preTool && trailingProse ? '\n\n' : '') + trailingProse;
+      } else if (text.trim().startsWith('### Tool Execution Results')) {
         text = '';
       }
       // Strip any remaining standalone ### toolname [OK|FAIL] sections
       text = text.replace(/\n*### \S+ \[(?:OK|FAIL)\][\s\S]*/g, '');
 
       if (text.trim()) {
-        // Check for generated image/video markers: <!--GENERATED_IMAGE:{json}--> and <!--GENERATED_VIDEO:{json}-->
+        // Check for generated image/video markers
         const mediaMarkerRegex = /<!--GENERATED_(?:IMAGE|VIDEO):([\s\S]*?)-->/g;
         const textParts = text.split(mediaMarkerRegex);
         
         for (let j = 0; j < textParts.length; j++) {
           const tp = textParts[j];
           
-          // Odd indices are captured groups (the JSON payloads)
           if (j % 2 === 1) {
             try {
               const mediaData = JSON.parse(tp);
@@ -1331,15 +1580,15 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
 
           if (!tp.trim()) continue;
 
-          // Check for raw inline JSON tool calls in plain text
+          // Inline JSON tool calls — route to allToolElements, never inline in text
           const segments = splitInlineToolCalls(tp);
           for (const seg of segments) {
             if (seg.type === 'tool' && seg.toolCall) {
               const queue = toolResultMap.get(seg.toolCall.tool);
               const result = queue?.length ? queue.shift() : undefined;
               if (result) {
-                elements.push(
-                  <CollapsibleToolBlock key={`inline-${i}-${j}-${elements.length}`} label={getToolLabel(seg.toolCall, result.isOk ? 'ok' : 'fail')} icon={result.isOk ? '✓' : '✗'}>
+                allToolElements.push(
+                  <CollapsibleToolBlock key={`inline-${i}-${j}-${allToolElements.length}`} label={getToolLabel(seg.toolCall, result.isOk ? 'ok' : 'fail')} icon={result.isOk ? '✓' : '✗'}>
                     <div>
                       <div className="text-[10px] text-[#858585] mb-1 font-medium tracking-wide">PARAMETERS</div>
                       <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2 mb-2">{truncateToolContent(seg.content)}</pre>
@@ -1351,44 +1600,30 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                   </CollapsibleToolBlock>
                 );
               } else {
-                elements.push(
-                  <CollapsibleToolBlock key={`inline-${i}-${j}-${elements.length}`} label={getToolLabel(seg.toolCall, 'running')} icon=">">
-                    <pre className="whitespace-pre-wrap text-[13px] font-mono text-[#d4d4d4]">{truncateToolContent(seg.content)}</pre>
+                allToolElements.push(
+                  <CollapsibleToolBlock key={`inline-${i}-${j}-${allToolElements.length}`} label={getToolLabel(seg.toolCall, 'ok')} icon="✓">
+                    <div className="text-[11px] text-[#858585]">Completed</div>
                   </CollapsibleToolBlock>
                 );
               }
             } else {
-              elements.push(<RichTextSpan key={`inline-${i}-${j}-${elements.length}`} content={seg.content} />);
+              elements.push(<InlineMarkdownText key={`inline-${i}-${j}-${elements.length}`} content={seg.content} />);
             }
           }
         }
       }
     }
 
-    // Group consecutive tool blocks into a single collapsible ToolCallGroup
-    // This prevents terminal commands and tool calls from stacking vertically
-    const grouped: React.ReactNode[] = [];
-    let toolRun: React.ReactElement[] = [];
-    const flushToolRun = () => {
-      if (toolRun.length === 0) return;
-      if (toolRun.length === 1) {
-        grouped.push(toolRun[0]);
-      } else {
-        grouped.push(<ToolCallGroup key={`tg-${grouped.length}`} count={toolRun.length}>{toolRun}</ToolCallGroup>);
-      }
-      toolRun = [];
-    };
-    for (const el of elements) {
-      if (React.isValidElement(el) && el.type === CollapsibleToolBlock) {
-        toolRun.push(el as React.ReactElement);
-      } else {
-        flushToolRun();
-        grouped.push(el);
-      }
+    // Single unified ToolCallGroup at the bottom — all tool calls in one place
+    if (allToolElements.length > 0) {
+      elements.push(
+        <ToolCallGroup key="tcg-all" count={allToolElements.length}>
+          {allToolElements}
+        </ToolCallGroup>
+      );
     }
-    flushToolRun();
 
-    return grouped;
+    return elements;
   };
 
   const renderMessage = (msg: ChatMessage) => renderContentParts(msg.content);
@@ -1461,31 +1696,12 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
             }
           } else {
           // Check for inline JSON tool calls in plain text
-          const segments = splitInlineToolCalls(before);
+          // Strip any trailing partial tool-call JSON mid-stream before the regex can identify it
+          const segments = splitInlineToolCalls(stripTrailingPartialToolCall(before));
           for (const seg of segments) {
-            if (seg.type === 'tool' && seg.toolCall) {
-              const queue = toolResultMap.get(seg.toolCall.tool);
-              const result = queue?.length ? queue.shift() : undefined;
-              if (result) {
-                parts.push(
-                  <CollapsibleToolBlock key={`si-${idx}`} label={getToolLabel(seg.toolCall, result.isOk ? 'ok' : 'fail')} icon={result.isOk ? '✓' : '✗'}>
-                    <div>
-                      <div className="text-[10px] text-[#858585] mb-1 font-medium tracking-wide">PARAMETERS</div>
-                      <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2 mb-2">{truncateToolContent(seg.content)}</pre>
-                      <div className="border-t border-[#333] pt-2">
-                        <div className={`text-[10px] mb-1 font-medium tracking-wide ${result.isOk ? 'text-[#89d185]' : 'text-[#f14c4c]'}`}>RESULT</div>
-                        <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2">{result.text}</pre>
-                      </div>
-                    </div>
-                  </CollapsibleToolBlock>
-                );
-              } else {
-                parts.push(
-                  <CollapsibleToolBlock key={`si-${idx}`} label={getToolLabel(seg.toolCall, 'running')} icon=">">
-                    <pre className="whitespace-pre-wrap text-[13px] font-mono text-[#d4d4d4]">{truncateToolContent(seg.content)}</pre>
-                  </CollapsibleToolBlock>
-                );
-              }
+            if (seg.type === 'tool') {
+              // Suppress — tool calls are tracked in the ToolCallGroup (executingTools/completedStreamingTools)
+              // Rendering them here too causes duplicate clutter in the stream.
             } else {
               parts.push(<InlineMarkdownText key={`s-${idx}`} content={seg.content} />);
             }
@@ -1509,27 +1725,24 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
         const result = queue?.length ? queue.shift() : undefined;
 
         if (result) {
-          parts.push(
-            <CollapsibleToolBlock key={`b-${idx}`} label={getToolLabel(toolCall, result.isOk ? 'ok' : 'fail')} icon={result.isOk ? '✓' : '✗'}>
-              <div>
-                <div className="text-[10px] text-[#858585] mb-1 font-medium tracking-wide">PARAMETERS</div>
-                <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2 mb-2">{truncateToolContent(code)}</pre>
-                <div className="border-t border-[#333] pt-2">
-                  <div className={`text-[10px] mb-1 font-medium tracking-wide ${result.isOk ? 'text-[#89d185]' : 'text-[#f14c4c]'}`}>RESULT</div>
-                  <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2">{result.text}</pre>
-                </div>
-              </div>
-            </CollapsibleToolBlock>
-          );
+          // Suppress — completed tool calls are shown in the ToolCallGroup (completedStreamingTools).
+          // Rendering them inline here too causes duplicate clutter in the stream.
+          // (intentionally nothing pushed)
         } else {
-          parts.push(
-            <CollapsibleToolBlock key={`b-${idx}`} label={getToolLabel(toolCall, 'running')} icon=">">
-              <pre className="whitespace-pre-wrap text-[13px] font-mono text-[#d4d4d4]">{truncateToolContent(code)}</pre>
-            </CollapsibleToolBlock>
-          );
+          // Tool block complete but no result yet — executingTools already shows it in the ToolCallGroup.
+          // (intentionally nothing pushed)
         }
       } else if (lang === '' && (code.trim().startsWith('Tool Execution Results') || code.trim().startsWith('## Tool Execution Results'))) {
         // Tool result code block — skip (merged into tool calls)
+      } else if (
+        lang === 'tool' ||
+        (lang === 'json' && (/"tool"\s*:/.test(code) || (/"name"\s*:/.test(code) && /"arguments"\s*:/.test(code)))) ||
+        // Also catch plain (no-language) fences from llama-style models: ``` {"tool":"..."} ```
+        (lang === '' && /^\s*\{\s*"tool"\s*:/.test(code))
+      ) {
+        // tool-call fence that failed parseToolCall in streaming — suppress, not a code bubble.
+        // Already shown via ToolCallGroup (tool-executing events). Malformed/aliased tool calls
+        // have no business rendering as raw JSON to the user.
       } else if (lang === 'mermaid') {
         parts.push(<MermaidDiagram key={`b-${idx}`} code={code} />);
       } else {
@@ -1551,6 +1764,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       // when a prior `completeBlockRegex` match consumed the opening ``` of the next block,
       // leaving the language tag as the start of `remaining` with no backticks.
       remaining = remaining.replace(/^[ \t]*(json|html|css|javascript|typescript|python|bash|sh|xml|yaml|markdown|md|ts|js|py|jsx|tsx|sql|go|rust|cpp|c|java|ruby|php)\s*\n/, '');
+      // Strip any trailing partial tool-call JSON mid-stream before the regex can identify it
+      remaining = stripTrailingPartialToolCall(remaining);
 
       if (remaining.trim().startsWith('### Tool Execution Results')) {
         // Already merged — skip
@@ -1561,23 +1776,13 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
         // "name" keys to avoid false-positives on non-tool JSON (e.g. {"name": "John"}).
         const incompleteToolMatch = remaining.match(/```(?:json|tool)?\s*\n?\s*\{[\s\S]*?"tool"/);
         if (incompleteToolMatch) {
+          // Suppress — incomplete tool block mid-stream is already tracked in executingTools/ToolCallGroup.
+          // Only render any text that appeared before the opening ```.
           const beforeBlock = remaining.substring(0, remaining.indexOf('```'));
-          const blockContent = remaining.substring(remaining.indexOf('```'));
-          // Extract the JSON-ish content after the opening ```
-          const jsonStart = blockContent.indexOf('{');
-          const jsonContent = jsonStart >= 0 ? blockContent.substring(jsonStart) : blockContent.replace(/^```\w*\s*\n?/, '');
-          // Try to extract tool name from partial JSON
-          const toolNameMatch = jsonContent.match(/"tool"\s*:\s*"([^"]*)/);
-          const toolName = toolNameMatch ? toolNameMatch[1] : 'unknown';
           if (beforeBlock.trim()) {
             parts.push(<InlineMarkdownText key={`s-${idx}`} content={beforeBlock} />);
             idx++;
           }
-          parts.push(
-            <CollapsibleToolBlock key={`s-${idx}`} label={`${toolName}`} icon=">">
-              <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2">{truncateToolContent(jsonContent)}</pre>
-            </CollapsibleToolBlock>
-          );
         } else if (remaining.trim()) {
           // Suppress incomplete non-tool fence artifact (e.g. ```html\n<div being typed)
           // — the raw backtick+language glyph shows as loose text until the block is complete.
@@ -1637,31 +1842,17 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
               }
             }
           } else {
-          // Also detect raw inline JSON tool calls in remaining text
+          // Inline tool calls in remaining text — suppress them (they're already in the
+          // executingTools/completedStreamingTools ToolCallGroup). Use the cleaned text
+          // segments from splitInlineToolCalls (which applies stripToolArtifacts).
           const segments = splitInlineToolCalls(remaining);
-          let hasInlineTools = segments.some(s => s.type === 'tool');
-          if (hasInlineTools) {
-            for (const seg of segments) {
-              if (seg.type === 'tool' && seg.toolCall) {
-                parts.push(
-                  <CollapsibleToolBlock key={`sr-${idx}`} label={getToolLabel(seg.toolCall, 'running')} icon=">">
-                    <pre className="whitespace-pre-wrap text-[13px] font-mono text-[#d4d4d4]">{truncateToolContent(seg.content)}</pre>
-                  </CollapsibleToolBlock>
-                );
-              } else {
-                parts.push(<InlineMarkdownText key={`sr-${idx}`} content={seg.content} />);
-              }
-              idx++;
+          for (const seg of segments) {
+            if (seg.type === 'tool') {
+              // Suppress — ToolCallGroup wrench already shows these
+            } else if (seg.content.trim()) {
+              parts.push(<InlineMarkdownText key={`sr-${idx}`} content={seg.content} />);
             }
-          } else {
-            // Suppress bare unfenced tool-JSON artifacts (hallucinated tool calls) from the
-            // streaming bubble. Valid tool names are already handled by splitInlineToolCalls
-            // above. This catches the remaining case where the model outputs raw JSON with an
-            // unknown/invalid tool name that slipped through coherence gating.
-            const isBareToolJson = /^\s*\{[\s\S]*?"tool"\s*:/.test(remaining);
-            if (!isBareToolJson) {
-              parts.push(<InlineMarkdownText key={`s-${idx}`} content={remaining} />);
-            }
+            idx++;
           }
           }
           } // end incompleteAnyFence else
@@ -1710,6 +1901,14 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
             <Terminal size={12} />
           </button>
           <button
+            className="p-1 text-[#858585] hover:text-white rounded hover:bg-[#3c3c3c]"
+            onClick={clearChat}
+            title="New Conversation"
+            aria-label="New conversation"
+          >
+            <Plus size={12} />
+          </button>
+          <button
             className={`p-1 rounded hover:bg-[#3c3c3c] ${showHistory ? 'text-[#007acc]' : 'text-[#858585] hover:text-white'}`}
             onClick={() => { setShowHistory(!showHistory); if (!showHistory) refreshSavedSessions(); }}
             title="Chat History"
@@ -1721,7 +1920,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
           <button
             className="p-1 text-[#858585] hover:text-white rounded hover:bg-[#3c3c3c]"
             onClick={clearChat}
-            title="Clear Chat"
+            title="Clear Chat History"
             aria-label="Clear chat"
           >
             <Trash2 size={12} />
@@ -1753,6 +1952,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
         isUsingCloud={isUsingCloud}
         llmStatus={llmStatus}
         switchModel={switchModel}
+        switchImageModel={handleSwitchImageModel}
+        activeImageModelPath={activeImageModel?.path ?? null}
         cancelAndResetStream={cancelAndResetStream}
         refreshAllProviders={refreshAllProviders}
         refreshCloudProviders={refreshCloudProviders}
@@ -1770,6 +1971,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
         <ChatSettingsPanel
           temperature={temperature} setTemperature={settings.setTemperature}
           reasoningEffort={reasoningEffort} setReasoningEffort={settings.setReasoningEffort}
+          thinkingBudget={thinkingBudget} setThinkingBudget={settings.setThinkingBudget}
           maxTokens={maxTokens} setMaxTokens={settings.setMaxTokens}
           contextSize={contextSize} setContextSize={settings.setContextSize}
           topP={topP} setTopP={settings.setTopP}
@@ -2188,9 +2390,9 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                         )}
                       </div>
                     )}
-                    {agenticPhases.length > 0 && (
+                    {agenticPhases.filter(p => p.phase !== 'generating-summary').length > 0 && (
                       <div className="mt-2 space-y-0.5">
-                        {agenticPhases.map((p) => (
+                        {agenticPhases.filter(p => p.phase !== 'generating-summary').map((p) => (
                           <div key={p.phase} className="flex items-center gap-1.5">
                             {p.status === 'done' ? (
                               <Check size={11} className="text-[#4ec9b0] shrink-0" />
@@ -2209,24 +2411,45 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                         Step {agenticProgress.iteration}
                       </div>
                     )}
-                    {executingTools.length > 0 && (
-                      <div className="space-y-2 mt-2">
-                        {executingTools.map((toolData, i) => (
-                          <CollapsibleToolBlock key={`exec-${i}`} label={getToolLabel(toolData, 'running')} icon="⟳">
-                            <div>
-                              <div className="flex items-center gap-2 mb-2">
-                                <Loader2 size={12} className="animate-spin text-[#007acc]" />
-                                <span className="text-[11px] text-[#858585]">Executing...</span>
+                    {imageGenProgress && (
+                      <div className="mt-2">
+                        <div className="text-[11px] text-[#858585] mb-1 flex items-center gap-2">
+                          <ImageIcon size={11} className="text-[#c586c0]" />
+                          Generating image… step {imageGenProgress.current}/{imageGenProgress.total}
+                        </div>
+                        <div className="h-1 bg-[#3c3c3c] rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-[#c586c0] rounded-full transition-all duration-300"
+                            style={{ width: `${Math.round((imageGenProgress.current / imageGenProgress.total) * 100)}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
+                    {(completedStreamingTools.length > 0 || executingTools.length > 0) && (
+                      <div className="mt-2">
+                        <ToolCallGroup count={completedStreamingTools.length + executingTools.length}>
+                          {completedStreamingTools.map((toolData, i) => (
+                            <CollapsibleToolBlock key={`done-${i}`} label={getToolLabel(toolData, 'ok')} icon="✓">
+                              <div className="text-[11px] text-[#858585]">Completed</div>
+                            </CollapsibleToolBlock>
+                          ))}
+                          {executingTools.map((toolData, i) => (
+                            <CollapsibleToolBlock key={`exec-${i}`} label={getToolLabel(toolData, 'running')} icon="⟳">
+                              <div>
+                                <div className="flex items-center gap-2 mb-2">
+                                  <Loader2 size={12} className="animate-spin text-[#007acc]" />
+                                  <span className="text-[11px] text-[#858585]">Executing...</span>
+                                </div>
+                                {toolData.params && Object.keys(toolData.params).length > 0 && (
+                                  <>
+                                    <div className="text-[10px] text-[#858585] mb-1 font-medium tracking-wide">PARAMETERS</div>
+                                    <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2">{JSON.stringify(toolData.params, null, 2)}</pre>
+                                  </>
+                                )}
                               </div>
-                              {toolData.params && Object.keys(toolData.params).length > 0 && (
-                                <>
-                                  <div className="text-[10px] text-[#858585] mb-1 font-medium tracking-wide">PARAMETERS</div>
-                                  <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2">{JSON.stringify(toolData.params, null, 2)}</pre>
-                                </>
-                              )}
-                            </div>
-                          </CollapsibleToolBlock>
-                        ))}
+                            </CollapsibleToolBlock>
+                          ))}
+                        </ToolCallGroup>
                       </div>
                     )}
                   </div>
@@ -2237,11 +2460,14 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
             const msg = messages[index];
             if (!msg) return null;
             return (
+              <React.Fragment>
               <div className={`px-3 py-1.5 ${msg.role === 'user' ? 'flex justify-end' : ''}`}>
                 <div
                   className={`text-[13px] leading-relaxed overflow-hidden break-words ${
                     msg.role === 'user'
                       ? 'max-w-[85%] text-white rounded-lg rounded-br-sm px-3 py-2'
+                      : msg.role === 'system' && msg.isError
+                      ? 'w-full bg-[#2d1f1f] text-[#e8a09a] border border-[#6b2e2e] rounded-lg px-3 py-2.5'
                       : msg.role === 'system'
                       ? 'w-full bg-[#1e1e1e] text-[#858585] border border-[#3c3c3c] text-center rounded-lg px-3 py-2'
                       : 'w-full text-[#cccccc] py-1'
@@ -2256,7 +2482,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                     return <ThinkingBlock text={combined} segmentCount={segments.length} />;
                   })()}
                   {msg.role === 'assistant' ? (
-                    <div className="space-y-2">{renderMessage(msg)}</div>
+                    <div className="space-y-1">{renderMessage(msg)}</div>
                   ) : (
                     <>
                       {msg.images && msg.images.length > 0 && (
@@ -2266,7 +2492,22 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                               key={i}
                               src={img.data}
                               alt={img.name}
-                              className="max-h-[120px] max-w-[200px] rounded border border-white/20 object-contain"
+                              className={`max-h-[120px] max-w-[200px] rounded border border-white/20 object-contain ${onOpenFile ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''}`}
+                              title={onOpenFile ? 'Click to open in viewport' : img.name}
+                              onClick={async () => {
+                                if (!onOpenFile) return;
+                                try {
+                                  const api = window.electronAPI as any;
+                                  if (api?.imageSaveToProject) {
+                                    // img.data is a data URL — strip the header to get base64
+                                    const base64 = img.data.includes(',') ? img.data.split(',')[1] : img.data;
+                                    const result = await api.imageSaveToProject(base64, img.mimeType, img.name);
+                                    if (result?.success && result.filePath) {
+                                      onOpenFile(result.filePath);
+                                    }
+                                  }
+                                } catch { /* ignore */ }
+                              }}
                             />
                           ))}
                         </div>
@@ -2283,6 +2524,32 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                   )}
                 </div>
               </div>
+              {msg.role === 'assistant' && msg.checkpointId && checkpoints.has(msg.checkpointId) && (
+                <CheckpointDivider
+                  checkpoint={checkpoints.get(msg.checkpointId)!}
+                  isRestoring={restoringCheckpoint === msg.checkpointId}
+                  onRestore={async () => {
+                    const cpId = msg.checkpointId!;
+                    setRestoringCheckpoint(cpId);
+                    const result = await window.electronAPI?.checkpointRestore?.(cpId);
+                    setRestoringCheckpoint(null);
+                    if (result?.success) {
+                      toast(`Restored ${result.restoredCount} file${result.restoredCount !== 1 ? 's' : ''}`, 'success');
+                      setCheckpoints(prev => {
+                        const next = new Map(prev);
+                        // Remove this checkpoint and all later ones
+                        let found = false;
+                        for (const [id] of next) { if (id === cpId) found = true; if (found) next.delete(id); }
+                        return next;
+                      });
+                      setMessages(prev => prev.map(m => m.checkpointId && m.checkpointId >= cpId ? { ...m, checkpointId: undefined } : m));
+                    } else {
+                      toast(`Restore failed: ${result?.error || 'unknown'}`, 'error');
+                    }
+                  }}
+                />
+              )}
+              </React.Fragment>
             );
           }}
         />
@@ -2518,6 +2785,26 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
               ))}
             </div>
           )}
+          {/* Image mode indicator — shown when an image model is active */}
+          {activeImageModel && (
+            <div className="flex items-center gap-2 px-3 py-1.5 border-t border-[#3c3c3c] bg-[#1e1e1e]">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" className="flex-shrink-0 text-[#c586c0]">
+                <rect x="1" y="3" width="14" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.5"/>
+                <circle cx="5.5" cy="6.5" r="1" fill="currentColor"/>
+                <path d="M1.5 12L5 8.5l2.5 2.5 2.5-2.5L14.5 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              <span className="text-[11px] text-[#c586c0] font-medium truncate min-w-0 flex-1">
+                Image mode &mdash; {activeImageModel.name}
+              </span>
+              <button
+                className="flex-shrink-0 text-[#555] hover:text-[#cccccc] transition-colors"
+                onClick={() => setActiveImageModel(null)}
+                title="Exit image mode"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          )}
           {/* Textarea */}
           <textarea
             ref={inputRef}
@@ -2629,7 +2916,9 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                 {!autoMode && (
                   <span className="truncate">
                     {isUsingCloud
-                      ? (cloudProviders.find(p => p.provider === cloudProvider)?.models.find(m => m.id === cloudModel)?.name || cloudModel || '').split(' ')[0]
+                      ? (['cerebras', 'groq', 'sambanova', 'google', 'openrouter'].includes(cloudProvider || '')
+                        ? 'guIDE Cloud AI'
+                        : (cloudProviders.find(p => p.provider === cloudProvider)?.models.find(m => m.id === cloudModel)?.name || cloudModel || '').split(' ')[0])
                       : llmStatus.state === 'ready'
                       ? (llmStatus.modelInfo?.name || 'Model').split('-').slice(0, 2).join('-')
                       : llmStatus.state === 'loading'

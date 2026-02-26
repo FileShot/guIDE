@@ -38,20 +38,13 @@ export const BrowserPanel: React.FC<BrowserPanelProps> = ({ onClose: _onClose, i
     rafId.current = requestAnimationFrame(() => {
       if (!contentRef.current) return;
       const rect = contentRef.current.getBoundingClientRect();
-      // If the panel has been squeezed too narrow, hide the native view rather than
-      // clamping to a larger size that would overhang adjacent panels.
-      if (rect.width < 200 || rect.height < 100) {
-        api.browserHide?.();
-        return;
-      }
-      const bounds = {
-        x: Math.round(Math.max(0, rect.left)),
-        y: Math.round(Math.max(36, rect.top)),
-        width: Math.round(rect.width),
-        height: Math.round(rect.height),
-      };
-      if (bounds.y >= 36 && bounds.x >= 0) {
-        api.browserShow(bounds);
+      if (rect.width > 0 && rect.height > 0) {
+        api.browserShow({
+          x: Math.round(Math.max(0, rect.left)),
+          y: Math.round(Math.max(36, rect.top)),
+          width: Math.round(rect.width),
+          height: Math.round(rect.height),
+        });
       }
     });
   }, [isActive, api]);
@@ -70,7 +63,7 @@ export const BrowserPanel: React.FC<BrowserPanelProps> = ({ onClose: _onClose, i
     const forceShow = () => {
       if (contentRef.current && api.browserShow) {
         const rect = contentRef.current.getBoundingClientRect();
-        if (rect.width >= 200 && rect.height >= 100) {
+        if (rect.width > 0 && rect.height > 0) {
           api.browserShow({
             x: Math.round(Math.max(0, rect.left)),
             y: Math.round(Math.max(36, rect.top)),
@@ -125,7 +118,7 @@ export const BrowserPanel: React.FC<BrowserPanelProps> = ({ onClose: _onClose, i
     const handleRestore = () => {
       if (isActive && contentRef.current && api?.browserShow) {
         const rect = contentRef.current.getBoundingClientRect();
-        if (rect.width >= 200 && rect.height >= 100) {
+        if (rect.width > 0 && rect.height > 0) {
           api.browserShow({
             x: Math.round(Math.max(0, rect.left)),
             y: Math.round(Math.max(36, rect.top)),
@@ -174,7 +167,7 @@ export const BrowserPanel: React.FC<BrowserPanelProps> = ({ onClose: _onClose, i
     const handleOverlayHide = () => {
       if (contentRef.current && api?.browserShow) {
         const rect = contentRef.current.getBoundingClientRect();
-        if (rect.width >= 200 && rect.height >= 100) {
+        if (rect.width > 0 && rect.height > 0) {
           api.browserShow({
             x: Math.round(Math.max(0, rect.left)),
             y: Math.round(Math.max(36, rect.top)),
@@ -224,6 +217,8 @@ export const BrowserPanel: React.FC<BrowserPanelProps> = ({ onClose: _onClose, i
     try {
       await api.browserNavigate(url);
       setIsActive(true);
+      // Give the BrowserView keyboard focus so Enter/typing works inside it
+      api.browserFocus?.();
 
       // Quick poll for valid bounds with RAF
       let attempts = 0;
@@ -231,7 +226,7 @@ export const BrowserPanel: React.FC<BrowserPanelProps> = ({ onClose: _onClose, i
         attempts++;
         if (contentRef.current && api.browserShow) {
           const rect = contentRef.current.getBoundingClientRect();
-          if (rect.width >= 200 && rect.height >= 100) {
+          if (rect.width > 0 && rect.height > 0) {
             api.browserShow({
               x: Math.round(Math.max(0, rect.left)),
               y: Math.round(Math.max(36, rect.top)),
@@ -274,6 +269,8 @@ export const BrowserPanel: React.FC<BrowserPanelProps> = ({ onClose: _onClose, i
       if (result.success) {
         refreshState();
         updateBrowserBounds();
+        // Keep keyboard focus in BrowserView after navigation
+        api.browserFocus?.();
       }
     } catch (e) {}
   }, [urlInput, api, refreshState, updateBrowserBounds]);

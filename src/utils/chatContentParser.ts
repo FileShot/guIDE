@@ -62,11 +62,12 @@ export function stripToolArtifacts(text: string): string {
   // Remove <think>/<thinking> blocks that weren't caught earlier
   cleaned = cleaned.replace(/<think(?:ing)?>\s*[\s\S]*?<\/think(?:ing)?>/gi, '');
   cleaned = cleaned.replace(/<\/?think(?:ing)?>/gi, '');
-  // Remove internal reasoning patterns that models sometimes emit
-  cleaned = cleaned.replace(/\*\*Summary\*\*[\s\S]*?(?=\n\n[A-Z]|$)/gi, '');
-  cleaned = cleaned.replace(/^\s*We need to[^.]+\.[^\n]*\n?/gim, '');
-  cleaned = cleaned.replace(/^\s*The user[^.]+\.[^\n]*\n?/gim, '');
-  cleaned = cleaned.replace(/^\s*Let me[^.]+\.[^\n]*\n?/gim, '');
+  // (model output filters removed — model text is shown verbatim)
+  // Strip orphaned JSON fragments — e.g. `params": {"filePath":...}}` left when a tool
+  // call's opening brace was consumed by the parser but the params field leaked as text.
+  cleaned = cleaned.replace(/^\s*"?params"?\s*"?\s*:\s*\{[\s\S]*?\}\}?\s*$/gm, '');
+  // Strip lines that are raw JSON key-value fragments starting with a quoted key
+  cleaned = cleaned.replace(/^\s*"[a-zA-Z_]+":\s*(\{|\[)[^]*?\}\}?\s*$/gm, '');
   // Remove ## Tool Execution Results sections and everything in them
   cleaned = cleaned.replace(/\n*## Tool Execution Results[\s\S]*?(?=\n## [^T]|\n\*(?:Detected|Reached|Continuing)|$)/g, '');
   // Remove standalone ### toolname [OK|FAIL] headers and the content following them
@@ -158,6 +159,44 @@ export function splitInlineToolCalls(text: string): ContentSegment[] {
   }
 
   return results.length > 0 ? results : [{ type: 'text', content: stripToolArtifacts(text) }];
+}
+
+/**
+ * Strip any trailing partial tool-call JSON that is still being streamed character-by-character.
+ * Handles the window between when the model starts emitting `{"tool":` and when the full key
+ * is typed — before the splitInlineToolCalls regex can match, the partial JSON would render
+ * as raw plain text. This suppresses it until it can be identified and routed to a tool card.
+ */
+export function stripTrailingPartialToolCall(text: string): string {
+  let depth = 0;
+  let lastTopLevelStart = -1;
+  let inStr = false;
+  let escape = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (escape) { escape = false; continue; }
+    if (ch === '\\' && inStr) { escape = true; continue; }
+    if (ch === '"') { inStr = !inStr; continue; }
+    if (inStr) continue;
+    if (ch === '{') {
+      if (depth === 0) lastTopLevelStart = i;
+      depth++;
+    } else if (ch === '}') {
+      depth--;
+      if (depth === 0) lastTopLevelStart = -1; // closed cleanly
+    }
+  }
+  // depth > 0 means there is an unclosed top-level JSON object at the end
+  if (depth > 0 && lastTopLevelStart !== -1) {
+    const tail = text.substring(lastTopLevelStart);
+    // Only suppress if it looks like a tool call: contains a partial "tool"/"name" key,
+    // is just an opening brace with a string key starting, or is a bare `{` with only
+    // whitespace/newlines (emitted 1-2 tokens before the first key arrives).
+    if (/"(?:tool|name)/.test(tail) || /^\{\s*$/.test(tail) || /^\{\s*"/.test(tail)) {
+      return text.substring(0, lastTopLevelStart).trimEnd();
+    }
+  }
+  return text;
 }
 
 /**

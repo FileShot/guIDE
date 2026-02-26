@@ -167,6 +167,16 @@ function register(ctx) {
   });
 
   ipcMain.handle('file-accept-changes', (_, filePaths) => ctx.mcpToolServer.acceptFileChanges(filePaths));
+
+  // ─── Checkpoints ────────────────────────────────────────────────────
+  ipcMain.handle('checkpoint-list', () => ctx.mcpToolServer.getCheckpointList());
+
+  ipcMain.handle('checkpoint-restore', async (_, turnId) => {
+    const result = await ctx.mcpToolServer.restoreCheckpoint(turnId);
+    const win = ctx.getMainWindow();
+    if (result.success && win) win.webContents.send('files-changed');
+    return result;
+  });
 }
 
 module.exports = { register };

@@ -64,6 +64,11 @@ export interface ElectronAPI {
   fileExists(filePath: string): Promise<{ success: boolean; exists: boolean }>;
   listDirectory(dirPath: string): Promise<{ success: boolean; items?: any[]; error?: string }>;
   searchInFiles(rootPath: string, query: string, options?: SearchInFilesOptions): Promise<SearchInFilesResult>;
+  scanTodos(rootPath: string): Promise<{ success: boolean; todos?: Array<{ file: string; relativePath: string; line: number; type: string; text: string }>; error?: string }>;
+  liveServerStart(filePath: string): Promise<{ success: boolean; port?: number; wsPort?: number; url?: string; error?: string }>;
+  liveServerStop(): Promise<{ success: boolean; error?: string }>;
+  liveServerStatus(): Promise<{ running: boolean; port: number | null }>;
+  restRequest(opts: RestRequestOptions): Promise<RestRequestResult>;
 
   // Dialogs
   showSaveDialog(options: any): Promise<any>;
@@ -375,6 +380,11 @@ export interface ElectronAPI {
   fileUndoAll(): Promise<{ success: boolean; action?: string; error?: string }[]>;
   fileAcceptChanges(filePaths?: string[]): Promise<{ success: boolean }>;
 
+  // Checkpoints
+  checkpointList(): Promise<{ turnId: string; timestamp: number; userMessage: string; files: { filePath: string; fileName: string; isNew: boolean }[] }[]>;
+  checkpointRestore(turnId: string): Promise<{ success: boolean; restoredCount?: number; results?: { filePath: string; action: string }[]; error?: string }>;
+  onCheckpointReady(callback: (data: { turnId: string; timestamp: number; userMessage: string; files: { filePath: string; fileName: string; isNew: boolean }[] }) => void): (() => void) | void;
+
   // Context Usage
   onContextUsage(callback: (data: { used: number; total: number }) => void): (() => void) | void;
 
@@ -384,6 +394,7 @@ export interface ElectronAPI {
   // Browser Automation
   browserNavigate(url: string): Promise<{ success: boolean; url?: string; title?: string; error?: string }>;
   browserShow(bounds?: { x: number; y: number; width: number; height: number }): Promise<{ success: boolean }>;
+  browserFocus(): Promise<{ success: boolean }>;
   browserHide(): Promise<{ success: boolean }>;
   browserSetBounds(bounds: { x: number; y: number; width: number; height: number }): Promise<{ success: boolean }>;
   browserGoBack(): Promise<{ success: boolean; error?: string }>;
@@ -432,11 +443,28 @@ export interface ElectronAPI {
   // Audio Transcription (Speech-to-Text)
   transcribeAudio?(audioBase64: string): Promise<{ success: boolean; text?: string; error?: string }>;
 
-  // Image Generation
+  // Image Generation (cloud)
   imageGenerate?(prompt: string, options?: { width?: number; height?: number; provider?: string }): Promise<{ success: boolean; imageBase64?: string; mimeType?: string; prompt?: string; provider?: string; model?: string; error?: string }>;
   imageSave?(imageBase64: string, mimeType: string, suggestedName?: string): Promise<{ success: boolean; filePath?: string; error?: string }>;
   imageSaveToProject?(imageBase64: string, mimeType: string, fileName?: string): Promise<{ success: boolean; filePath?: string; error?: string }>;
   imageGenStatus?(): Promise<{ providers: { id: string; label: string; model: string; available: boolean }[]; googleKeysCount: number }>;
+
+  // Local Image Generation (stable-diffusion.cpp)
+  localImageGenerate?(params: {
+    prompt: string;
+    modelPath: string;
+    negativePrompt?: string;
+    steps?: number;
+    cfgScale?: number;
+    width?: number;
+    height?: number;
+    seed?: number;
+    backend?: 'cpu' | 'cuda' | 'vulkan';
+    samplingMethod?: string;
+  }): Promise<{ success: boolean; imageBase64?: string; mimeType?: string; prompt?: string; error?: string }>;
+  localImageCancel?(): Promise<{ success: boolean }>;
+  localImageEngineStatus?(): Promise<{ available: boolean; binaryPath: string; error?: string }>;
+  onLocalImageProgress?(callback: (data: { current: number; total: number }) => void): (() => void) | void;
 
   // Settings & Chat Persistence
   saveSettings?(settings: Record<string, any>): Promise<{ success: boolean }>;
@@ -471,6 +499,26 @@ export interface DirectoryItem {
   modified: string;
   created?: string;
   type?: string;
+}
+
+export interface RestRequestOptions {
+  method: string;
+  url: string;
+  headers?: Record<string, string>;
+  body?: string;
+}
+
+export interface RestRequestResult {
+  success: boolean;
+  status?: number;
+  statusText?: string;
+  headers?: Record<string, string>;
+  body?: string;
+  rawBody?: string;
+  durationMs?: number;
+  size?: number;
+  truncated?: boolean;
+  error?: string;
 }
 
 export interface SearchInFilesOptions {
@@ -583,6 +631,7 @@ export interface AvailableModel {
   sizeFormatted: string;
   modified: string;
   directory: string;
+  modelType?: 'llm' | 'diffusion';
   details: {
     quantization: string;
     parameters: string;

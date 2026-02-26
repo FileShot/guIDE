@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Agentic AI Chat Handler — the core conversational loop with RAG, MCP tools, memory, and browser automation.
  * Also contains the find-bug analysis handler.
  */
@@ -41,7 +41,7 @@ function getNodeLlamaCppPath() {
 
 function register(ctx) {
   // Destructure services (they don't change after creation)
-  const { llmEngine, cloudLLM, mcpToolServer, playwrightBrowser, browserManager, ragEngine, memoryStore, webSearch, licenseManager, ConversationSummarizer, DEFAULT_SYSTEM_PREAMBLE, DEFAULT_COMPACT_PREAMBLE, DEFAULT_CHAT_PREAMBLE } = ctx;
+  const { llmEngine, cloudLLM, mcpToolServer, playwrightBrowser, browserManager, ragEngine, memoryStore, webSearch, licenseManager, ConversationSummarizer, DEFAULT_SYSTEM_PREAMBLE, DEFAULT_COMPACT_PREAMBLE } = ctx;
   const _truncateResult = ctx._truncateResult;
   const _readConfig = ctx._readConfig;
   
@@ -69,11 +69,6 @@ function register(ctx) {
 
   // Active request tracking — used to cancel stale loops when a new message arrives
   let _activeRequestId = 0;
-
-  // BUG-038: Consecutive stutter abort counter — persists across IPC requests.
-  // When a model stutters 3+ times in a row (across separate user messages or retries),
-  // the chatHistory is poisoned. Auto-clear it to rescue the session.
-  let _consecutiveStutterAborts = 0;
 
   // Pause/resume support for live takeover
   let _isPaused = false;
@@ -112,7 +107,7 @@ function register(ctx) {
 
   ipcMain.handle('ai-chat', async (_, message, context) => {
     const mainWindow = ctx.getMainWindow();
-    const MAX_AGENTIC_ITERATIONS = context?.maxIterations || 100; // Default 100 for long browser sessions
+    const MAX_AGENTIC_ITERATIONS = context?.maxIterations || _readConfig()?.userSettings?.maxAgenticIterations || 100; // Default 100; overridable via Settings UI
     const STUCK_THRESHOLD = 3; // Same tool+params repeated this many times = stuck
     const CYCLE_MIN_REPEATS = 3; // A 2-4 tool cycle must repeat this many times to be flagged
     let _completenessCheckedFiles = null; // One-shot guard for post-write completeness checks
@@ -130,7 +125,6 @@ function register(ctx) {
       await new Promise(r => setTimeout(r, 50));
     }
     ctx.agenticCancelled = false; // Reset cancel flag for this new request
-    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('agentic-phase', { phase: 'clear' });
 
     // Helper: check if this request is still the active one
     const isStale = () => myRequestId !== _activeRequestId || ctx.agenticCancelled;
@@ -263,7 +257,7 @@ function register(ctx) {
           // Browser tasks — need fast, capable models
           if (isBrowser) {
             if (has('groq')) return pick('groq', 'llama-3.3-70b-versatile');
-            if (has('cerebras')) return pick('cerebras', 'zai-glm-4.7');
+            if (has('cerebras')) return pick('cerebras', 'llama-3.3-70b');
             if (has('google')) return pick('google', 'gemini-2.5-flash');
             if (has('openai')) return pick('openai', 'gpt-4o');
             if (has('anthropic')) return pick('anthropic', 'claude-sonnet-4-20250514');
@@ -347,20 +341,12 @@ function register(ctx) {
           // Use the full system prompt so cloud models have tool awareness
           const systemPrompt = llmEngine._getSystemPrompt();
           
-          // Detect task type for cloud — same logic as local, prevents tool injection on greetings
-          const cloudTaskType = (() => {
-            const lower = (message || '').toLowerCase().trim();
-            const greetingPattern = /^(hi+|hello+|hey+|yo+|sup|howdy|hola|greetings|good\s*(morning|evening|afternoon|night)|what'?s?\s*up|how\s*are\s*you|how'?s?\s*it\s*going|thanks?|thank\s*you|bye|goodbye|see\s*ya|cheers|nice|cool|ok|okay|sure|yep|yeah|nope|no|yes|lol|lmao|haha|wow|great|awesome|help|who\s*are\s*you|what\s*are\s*you|what\s*can\s*you\s*do|tell\s*me\s*about\s*yourself|what'?s?\s*your\s*name|wtf|omg|bruh|hmm+|idk)[!?.,\s]*$/i;
-            if (greetingPattern.test(lower)) return 'chat';
-            if (lower.length < 20 && !/\b(file|code|bug|error|browse|navigate|search|http|www\.|\.com|create|build|write|edit|run|fix|debug|git|install|deploy|test)\b/.test(lower)) return 'chat';
-            const casualQuestion = /^(what|who|where|when|why|how|can|do|does|is|are|will|would|should|could)\b.*\b(you|weather|time|day|name|favorite|like|think|feel|opinion|recommend|suggest)\b/i;
-            if (casualQuestion.test(lower) && lower.length < 80 && !/\b(file|code|bug|error|browse|http|function|variable|debug|fix|build|edit|git)\b/.test(lower)) return 'chat';
-            if (/\b(browse|navigate|website|url|http|www\.|\.com|\.org|\.edu|visit|open.*site|go\s+to|login|sign\s+in)\b/i.test(lower)) return 'browser';
-            return 'general';
-          })();
-          
-          // Add MCP tool definitions for cloud models (skip for casual chat)
-          const toolPrompt = mcpToolServer.getToolPromptForTask(cloudTaskType);
+          // Task-type routing is handled by the model via system prompt — always use 'general'
+          // so cloud models receive full tool context. The regex classifier was removed because
+          // keyword matching is unreliable across phrasing, typos, and multi-part messages.
+          const cloudTaskType = 'general'; // see CHANGES_LOG.md 2026-02-25
+
+                    const toolPrompt = mcpToolServer.getToolPromptForTask(cloudTaskType);
           const cloudSystemPrompt = systemPrompt + (toolPrompt ? '\n\n' + toolPrompt : '');
 
           memoryStore.addConversation('user', message);
@@ -379,20 +365,7 @@ function register(ctx) {
           const WALL_CLOCK_DEADLINE = Date.now() + 30 * 60 * 1000; // 30-minute hard deadline
           let cloudIteration = 0;
           let currentCloudPrompt = fullPrompt;
-          // BUG-041: Sanitize conversation history before passing to cloud model.
-          // Local model failures (garbage HTML, raw-JSON tool leaks, 0-tool poison turns) must
-          // NEVER propagate to the cloud model — this was the root of the car-dealership
-          // data-corruption chain (BUG-033→034→038→041). Filter suspicious assistant turns.
-          const _rawCloudHistory = [...(context?.conversationHistory || [])];
-          const _sanitizeForCloud = (history) => history.filter(turn => {
-            if (turn.role !== 'assistant') return true; // Always keep user/system turns
-            const c = (turn.content || '').trim();
-            if (/^\[?\s*\{\s*"name"\s*:/.test(c)) return false;          // Raw OpenAI fn-call JSON leak
-            if (/<\s*(html|head|body|div|h1|nav|section)\b/i.test(c) && c.length > 300) return false; // Hallucinated HTML
-            if (c.length > 1500 && !/[.!?]/.test(c.slice(-200))) return false; // Long with no sentence endings
-            return true;
-          });
-          let cloudConversationHistory = _sanitizeForCloud(_rawCloudHistory);
+          let cloudConversationHistory = [...(context?.conversationHistory || [])];
           let allCloudToolResults = [];
           let fullCloudResponse = '';
           // Cap fullCloudResponse to prevent unbounded memory growth
@@ -469,13 +442,6 @@ function register(ctx) {
               if (iterPace > 0) {
                 console.log(`[Cloud] Proactive inter-iteration pace: ${iterPace}ms`);
                 await new Promise(r => setTimeout(r, iterPace));
-                // BUG-006: Re-check staleness after sleeping — a new request may have
-                // arrived during the delay, which would cause parallel sessions.
-                if (isStale()) {
-                  console.log('[Cloud] Request superseded during pacing delay, exiting loop');
-                  if (mainWindow) mainWindow.webContents.send('llm-token', '\n*[Interrupted — new message received]*\n');
-                  break;
-                }
               }
             }
 
@@ -487,57 +453,23 @@ function register(ctx) {
 
             const cloudTokenBatcher = createIpcTokenBatcher(mainWindow, 'llm-token', () => !isStale(), { flushIntervalMs: 25, maxBufferChars: 2048 });
             const cloudThinkingBatcher = createIpcTokenBatcher(mainWindow, 'llm-thinking-token', () => !isStale(), { flushIntervalMs: 35, maxBufferChars: 2048 });
-
-            // Cloud thinking token budget — cap verbose thinking models to prevent 100-paragraph think blocks
-            // Default cap: 4096 tokens (~16KB). Deduces effort from user settings if available.
-            const CLOUD_THINKING_CAP = context?.params?.reasoningEffort === 'high' ? 16384
-              : context?.params?.reasoningEffort === 'low' ? 1024
-              : 4096;
-            let cloudThinkingTokenCount = 0;
-            let cloudThinkingCapped = false;
-
             try {
               lastCloudResult = await cloudLLM.generate(currentCloudPrompt, {
                 provider: context.cloudProvider,
                 model: context.cloudModel,
                 systemPrompt: cloudSystemPrompt,
-                // Limit responses for BUNDLED keys only (our bandwidth cost).
-                // Users with their own keys face no artificial cap — they're paying for it themselves.
-                // Chat bundled: ~2 paragraphs (500 tokens). Agentic bundled: 8192.
-                // Own key: generous defaults (8192 chat, 32768 tools).
-                ...((() => {
-                  const usingBundled = cloudLLM._isBundledProvider(context.cloudProvider) && !cloudLLM.isUsingOwnKey(context.cloudProvider);
-                  const chatMax = usingBundled ? 500  : 8192;
-                  const genMax  = usingBundled ? 8192 : 32768;
-                  const base = cloudTaskType === 'chat' ? chatMax : genMax;
-                  return { maxTokens: context?.params?.maxTokens ? Math.min(context.params.maxTokens, base) : base };
-                })()),
+                maxTokens: cloudTaskType === 'chat' ? Math.min(context?.params?.maxTokens || 1024, 1024) : (context?.params?.maxTokens || 32768),
                 temperature: context?.params?.temperature || 0.7,
                 stream: true,
                 noFallback: !context?.autoMode, // Don't auto-switch providers when user manually selected a model
                 conversationHistory: cloudConversationHistory,
                 images: cloudIteration === 1 ? (context?.images || []) : [],
                 onToken: (token) => cloudTokenBatcher.push(token),
-                onThinkingToken: (token) => {
-                  cloudThinkingTokenCount++;
-                  if (!cloudThinkingCapped) {
-                    cloudThinkingBatcher.push(token);
-                    if (cloudThinkingTokenCount >= CLOUD_THINKING_CAP) {
-                      cloudThinkingCapped = true;
-                      cloudThinkingBatcher.push('\n\n[Thinking truncated — reached budget of ' + CLOUD_THINKING_CAP + ' tokens]\n');
-                      console.log(`[Cloud] Thinking token cap reached (${CLOUD_THINKING_CAP}), suppressing further thinking output`);
-                    }
-                  }
-                  // Note: we still let the API continue generating — we just stop forwarding
-                  // thinking tokens to the UI. The model's actual response is unaffected.
-                },
+                onThinkingToken: (token) => cloudThinkingBatcher.push(token),
               });
             } finally {
               cloudTokenBatcher.dispose();
               cloudThinkingBatcher.dispose();
-              if (cloudThinkingTokenCount > 0) {
-                console.log(`[Cloud] Thinking tokens this iteration: ${cloudThinkingTokenCount}${cloudThinkingCapped ? ' (CAPPED)' : ''}`);
-              }
             }
 
             // Check stale after cloud generation completes
@@ -742,20 +674,17 @@ function register(ctx) {
             cloudConversationHistory.push({ role: 'assistant', content: responseText });
 
             // ── Anti-hallucination guard for file edits (cloud path) ──
-            // Detect when the model claimed to modify files but never called edit_file/write_file.
-            {
-              const fileModTools = ['write_file', 'edit_file'];
-              const calledFileModTool = iterationToolResults.some(r => fileModTools.includes(r.tool));
-              const userAskedForEdit = /\b(edit|change|modif|updat|upgrad|add to|fix|improve|alter)\b/i.test(message || '');
-              const modelClaimedEdits = /\b(✔️|✅|upgraded|modified|edited|updated|changed|added|implemented|applied|enhanced)\b/i.test(responseText);
-              if (!calledFileModTool && userAskedForEdit && modelClaimedEdits && iterationToolResults.length > 0) {
-                console.log('[Cloud] Hallucination detected: model claimed file edits but no edit_file/write_file was called');
-                cloudConversationHistory.push({
-                  role: 'user',
-                  content: '[SYSTEM] WARNING: You claimed to make file changes but never called edit_file or write_file. No files were actually modified. You MUST use edit_file or write_file to modify files — browsing a file does NOT modify it. Execute the actual edits now using edit_file.'
-                });
-              }
-            }
+            // DISABLED 2026-02-25: Part of the over-engineered hallucination detection.
+            // Commented out for testing/simplification.
+            // {
+            //   const fileModTools = ['write_file', 'edit_file'];
+            //   const calledFileModTool = iterationToolResults.some(r => fileModTools.includes(r.tool));
+            //   const userAskedForEdit = /\b(edit|change|modif|...)\b/i.test(message || '');
+            //   const modelClaimedEdits = /\b(✔️|✅|upgraded|...)\b/i.test(responseText);
+            //   if (!calledFileModTool && userAskedForEdit && modelClaimedEdits && iterationToolResults.length > 0) {
+            //     cloudConversationHistory.push({ role: 'user', content: '[SYSTEM] WARNING: ...' });
+            //   }
+            // }
 
             // ── Post-write verification: fabrication + completeness (cloud path) ──
             {
@@ -868,9 +797,8 @@ function register(ctx) {
 
           // Clean up response display (heavy patterns already cleaned incrementally per-iteration)
           let cleanCloudResponse = fullCloudResponse;
-          // Strip raw inline JSON tool calls — nested-brace-aware to avoid leaking trailing }
-          // e.g. {"tool":"write_file","params":{"filePath":"x","content":"y"}} → fully removed
-          cleanCloudResponse = cleanCloudResponse.replace(/\[?\s*\{[^{}]*"(?:tool|name)"\s*:\s*"[^"]*"[^{}]*"(?:params|arguments)"\s*:\s*\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}[^{}]*\}\s*\]?/g, '');
+          // Strip raw inline JSON tool calls ({"tool": "..."...} or [{"tool": "..."...}])
+          cleanCloudResponse = cleanCloudResponse.replace(/\[?\s*\{\s*"(?:tool|name)"\s*:\s*"[^"]*"[\s\S]*?\}\s*\]?/g, '');
           // Strip tool execution result sections (in case cloud model echoed them)
           cleanCloudResponse = cleanCloudResponse.replace(/\n*## Tool Execution Results\n[\s\S]*?(?=\n## [^T]|\n\*(?:Detected|Reached)|$)/g, '');
           // Strip any remaining ### toolname [OK|FAIL] headers and their content
@@ -901,70 +829,6 @@ function register(ctx) {
       }
 
       // Default: use local LLM with agentic loop
-
-      // node-llama-cpp 3.x has no built-in vision API — but if Ollama is running
-      // locally with a VL model, we can silently re-route the request there instead.
-      if (context?.images?.length > 0) {
-        let routedToOllama = false;
-        try {
-          const ollamaUp = await cloudLLM.detectOllama();
-          if (ollamaUp) {
-            const vlModels = cloudLLM.getOllamaVisionModels();
-            if (vlModels.length > 0) {
-              console.log(`[AI Chat] Images detected with local model — routing to Ollama VL model: ${vlModels[0]}`);
-              if (mainWindow && !mainWindow.isDestroyed()) {
-                mainWindow.webContents.send('llm-token', `*Using Ollama local vision model: ${vlModels[0]}*\n\n`);
-              }
-              context.cloudProvider = 'ollama';
-              context.cloudModel = vlModels[0];
-              routedToOllama = true;
-            }
-          }
-        } catch (_) {}
-        if (!routedToOllama) {
-          if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send('llm-token', `\n\n*⚠️ Local models cannot process images. Install Ollama (ollama.com) and pull a vision model (e.g. \`ollama pull llava\`), or configure Google Gemini / OpenAI in Settings → Cloud Providers.*\n\n`);
-          }
-          context.images = [];
-        }
-      }
-
-      // BUG-024: If a model switch is in progress, wait for it to finish before dispatching.
-      if (llmEngine.isLoading) {
-        if (mainWindow) mainWindow.webContents.send('llm-token', '*⏳ Waiting for model to finish loading...*\n\n');
-        try {
-          await new Promise((resolve, reject) => {
-            const t = setTimeout(() => {
-              llmEngine.removeListener('status', onStatus);
-              reject(new Error('Model load timed out after 120 seconds.'));
-            }, 120000);
-            function onStatus(s) {
-              if (s.state === 'ready') {
-                clearTimeout(t);
-                llmEngine.removeListener('status', onStatus);
-                resolve();
-              } else if (s.state === 'error') {
-                clearTimeout(t);
-                llmEngine.removeListener('status', onStatus);
-                reject(new Error(`Model failed to load: ${s.message}`));
-              }
-            }
-            llmEngine.on('status', onStatus);
-          });
-        } catch (waitErr) {
-          if (mainWindow) mainWindow.webContents.send('llm-token', `\n*[${waitErr.message}]*\n`);
-          return { success: false, error: waitErr.message };
-        }
-        if (isStale()) return { success: false, error: 'Request superseded while waiting for model.' };
-      }
-
-      // BUG-024: If no model is loaded at all, tell the user immediately instead of throwing.
-      if (!llmEngine.isReady) {
-        const msg = '*No model is loaded. Please select a model before chatting.*';
-        if (mainWindow) mainWindow.webContents.send('llm-token', msg);
-        return { success: false, error: 'No model loaded.' };
-      }
-
       const modelStatus = llmEngine.getStatus();
       const hwContextSize = modelStatus.modelInfo?.contextSize || 32768;
 
@@ -975,13 +839,12 @@ function register(ctx) {
       // The ModelProfile registry provides effective context size, response reserve %,
       // and max response tokens tuned per model family and size tier.
       const modelTier = llmEngine.getModelTier();
-      let modelProfile = modelTier.profile;
+      const modelProfile = modelTier.profile;
       const isSmallLocalModel = modelTier.paramSize > 0 && modelTier.paramSize <= 4;
 
-      // Use the hardware context size — this is what node-llama-cpp actually allocated.
-      // The engine already targets the profile's effectiveContextSize during allocation
-      // and auto-shrinks if resources are insufficient, so hwContextSize is the true ceiling.
-      const totalCtx = hwContextSize;
+      // Use the SMALLER of hardware context and profile's effective context.
+      // This prevents small models from being given more context than they handle well.
+      const totalCtx = Math.min(hwContextSize, modelProfile.context.effectiveContextSize);
 
       const actualSystemPrompt = llmEngine._getActiveSystemPrompt();
       const sysPromptReserve = estimateTokens(actualSystemPrompt) + 50;
@@ -994,93 +857,14 @@ function register(ctx) {
       );
       const maxPromptTokens = Math.max(totalCtx - sysPromptReserve - maxResponseTokens, 256);
       
-      // Detect task type for tool filtering
-      const detectTaskType = (msg) => {
-        const lower = (msg || '').toLowerCase().trim();
-        // Greetings and casual chat — no tools needed at all
-        // CRITICAL: Be VERY conservative here. Misclassifying a task as 'chat' means
-        // ZERO tools are provided and the model CAN'T do anything. Only pure greetings
-        // and truly conversational messages should be 'chat'.
-        // Greeting detection: split the message into comma/sentence segments and check
-        // if ALL segments are pure greetings. This handles compound greetings like
-        // "Hi, how are you?" and "Thanks, see you later!" which a single-anchor regex misses.
-        const greetingSegment = /^(hi+|hello+|hey+|yo+|sup|howdy|hola|greetings|good\s*(morning|evening|afternoon|night)|what'?s?\s*up|how\s*are\s*you|how'?s?\s*it\s*going|thanks?\s*(?:for\s+(?:the|your|all\s+(?:the|your))?\s*(?:help|assistance|support|time|effort|response|answer)[s!.]*)?|thank\s*you\s*(?:so\s*much|a\s*lot|very\s*much|again)?|bye|goodbye|see\s*ya|cheers|nice|cool|ok|okay|sure|yep|yeah|nope|no|yes|lol|lmao|haha|wow|great|awesome|who\s*are\s*you|what\s*are\s*you|what\s*can\s*you\s*do|tell\s*me\s*about\s*yourself|what'?s?\s*your\s*name|wtf|omg|bruh|hmm+|idk)[!?.,\s]*$/i;
-        const greetingSegments = lower.split(/[,;]\s*/).map(s => s.trim()).filter(Boolean);
-        if (greetingSegments.length > 0 && greetingSegments.every(seg => greetingSegment.test(seg))) return 'chat';
-
-        // Pure knowledge questions that don't need real-time tools.
-        // These are questions about static facts (geography, history, definitions, concepts, math)
-        // that a language model already knows. Only applies when no action words are present and
-        // no real-time data is requested.
-        // Examples: "What is the capital of France?", "Explain recursion", "Who was Einstein?"
-        // NOT caught: "What's the current weather?", "Find me the latest news", "Create a file"
-        const requiresRealTimeData = /\b(today|current(?:ly)?|right\s+now|latest|recent(?:ly)?|this\s+(?:week|month|year)|live|real.?time|price|weather|stock|news|headlines|trending|2024|2025|2026)\b/i;
-        const knowledgeQuestionStart = /^(?:what\s+(?:is|are|was|were|does|do|did)|who\s+(?:is|are|was|were)|when\s+(?:is|are|was|were|did)|where\s+(?:is|are|was|were)|how\s+(?:is|are|does|do|did)\s+(?!(?:i|you\s+do))|why\s+(?:is|are|was|were|does|do|did)|explain\s+|describe\s+|define\s+|what\s+does\s+\w+\s+(?:mean|stand\s+for)|tell\s+me\s+(?:the|a|about\s+(?:the\s+)?(?:concept|meaning|definition|history|difference)))/i;
-        const hardActionInKnowledge = /\b(find|search|look\s*up|browse|create|make|build|write|edit|install|download|buy|order|shop|navigate|go\s+to|fetch|scrape|get\s+me|show\s+me)\b/i;
-        if (knowledgeQuestionStart.test(lower) && !requiresRealTimeData.test(lower) && !hardActionInKnowledge.test(lower) && lower.length < 200) {
-          return 'chat';
-        }
-
-        // Action words that ALWAYS mean the user wants something done — never classify as chat
-        const actionWords = /\b(find|search|look\s*up|browse|navigate|buy|order|shop|price|cheap|ebay|amazon|walmart|google|download|install|create|make|build|write|edit|open|go\s+to|show\s+me|get\s+me|fetch|scrape|research|compare|check|look\s+for|news|headlines|weather|stock|recipe|review|product|laptop|phone|computer)\b/i;
-        if (actionWords.test(lower)) {
-          // Has action words — determine if browser or code
-          const browserWords = /\b(browse|navigate|website|webpage|url|http|www\.|\.com|\.org|\.edu|\.net|visit|open.*site|go\s+to|search\s+online|google|login|sign\s+in|ebay|amazon|walmart|shop|buy|order|price|cheap|news|headlines|weather|stock|recipe|review|product|laptop|phone|computer)\b/;
-          const codeWords = /\b(code|file|function|class|variable|debug|fix|error|compile|build|refactor|write.*code|edit.*file|create.*file|read.*file|search.*code|git|commit|branch)\b/;
-          const isBrowser = browserWords.test(lower);
-          const isCode = codeWords.test(lower);
-          if (isBrowser && isCode) return 'general';
-          if (isBrowser) return 'browser';
-          if (isCode) return 'code';
-          return 'general';
-        }
-
-        // Short messages (under 15 chars) with no technical keywords = likely casual
-        if (lower.length < 15 && !/\b(file|code|bug|error|browse|navigate|search|http|www\.|\.com|create|build|write|edit|run|fix|debug|git|install|deploy|test|compile|refactor|find|look|get|show|make)\b/.test(lower)) return 'chat';
-
-        // Only classify as 'chat' for truly casual questions about feelings/opinions
-        // with NO action verbs and NO external topics
-        const pureCasualQuestion = /^(what|who|how)\s+(is|are|do|does)\s+(your|you)\s+(name|favorite|feeling|opinion)/i;
-        if (pureCasualQuestion.test(lower) && lower.length < 50) return 'chat';
-
-        const browserWords = /\b(browse|navigate|website|webpage|url|http|www\.|\.com|\.org|\.edu|\.net|visit|open.*site|go\s+to|search\s+online|google|login|sign\s+in)\b/;
-        const codeWords = /\b(code|file|function|class|variable|debug|fix|error|compile|build|refactor|write.*code|edit.*file|create.*file|read.*file|search.*code|git|commit|branch)\b/;
-        const isBrowser = browserWords.test(lower);
-        const isCode = codeWords.test(lower);
-        // Mixed tasks (browse + save/write/list files) need BOTH tool sets.
-        if (isBrowser && isCode) return 'general';
-        if (isBrowser) return 'browser';
-        if (isCode) return 'code';
-        return 'general';
-      };
-      let taskType = detectTaskType(message);
+      // Task-type routing is handled by the model via system prompt — always return 'general'
+      // so the model receives full tool context. The regex classifier was removed because
+      // keyword matching is unreliable across phrasing, typos, and multi-part messages.
+      // The system prompt instructs the model when to use tools vs answer conversationally.
+      // See CHANGES_LOG.md 2026-02-25 for rationale.
+      const detectTaskType = (msg) => { return 'general'; };
+            const taskType = detectTaskType(message);
       console.log(`[AI Chat] Detected task type: ${taskType}`);
-
-      // BUG-029: If the prompt budget is too tight to fit tool definitions, fall back to
-      // chat-only mode with a user-facing warning rather than silently failing or looping.
-      // Threshold is model-profile-aware: compact/grammar-only styles cost ~150 tok,
-      // full tool prompts cost ~2000 tok.
-      {
-        const _isCompactStyle = modelProfile.prompt.toolPromptStyle === 'grammar-only' ||
-                                 modelProfile.prompt.toolPromptStyle === 'compact';
-        const _toolCostEstimate = _isCompactStyle ? 150 : 2000;
-        if (taskType !== 'chat' && maxPromptTokens < _toolCostEstimate) {
-          // If full tool style doesn't fit but compact would, downgrade — don't strip tools entirely.
-          // This keeps small-context models in agentic mode with a reduced tool prompt.
-          if (!_isCompactStyle && maxPromptTokens >= 150) {
-            modelProfile = { ...modelProfile, prompt: { ...modelProfile.prompt, toolPromptStyle: 'compact' } };
-            console.warn(`[Context] BUG-029: downgrading tool style to compact (maxPromptTokens=${maxPromptTokens}) — keeping tools available`);
-          } else {
-            // Truly too small even for compact — chat-only as last resort
-            if (mainWindow && !mainWindow.isDestroyed()) {
-              mainWindow.webContents.send('llm-token',
-                `*Note: this model's context window is too small to load tool definitions — responding without tools.*\n\n`);
-            }
-            taskType = 'chat';
-            console.warn(`[Context] BUG-029: maxPromptTokens=${maxPromptTokens} < 150 (compact cost) — falling back to chat-only mode`);
-          }
-        }
-      }
 
       // Build initial context
       // Split into STATIC (tool defs, project instructions) and DYNAMIC (memory, RAG, file)
@@ -1106,20 +890,14 @@ function register(ctx) {
           return false;
         };
 
-        // User's custom system prompt OR default preamble (from Advanced Settings).
-        // Preamble selection priority:
-        //   1. User's custom system prompt (from Advanced Settings) — always wins
-        //   2. Chat preamble (3 lines) — when task type is 'chat' (greetings, casual conversation,
-        //      knowledge questions). No tools are injected for chat tasks, so no executor language needed.
-        //   3. Compact preamble — small models (tiny/small tier) on action tasks
-        //   4. Full preamble — medium/large/xlarge models on action tasks
+        // User's custom system prompt OR default preamble (from Advanced Settings)
+        // Use compact preamble for small local models to preserve context budget.
+        // Cloud models and large local models get the full preamble.
         const savedSettings = _readConfig()?.userSettings;
         const userPreamble = savedSettings?.systemPrompt && typeof savedSettings.systemPrompt === 'string' && savedSettings.systemPrompt.trim();
+        // Use ModelProfile to select preamble style
         const isSmallModel = modelProfile.prompt.style === 'compact';
-        const _preambleTaskType = taskTypeOverride || taskType;
-        const defaultPreamble = _preambleTaskType === 'chat'
-          ? (DEFAULT_CHAT_PREAMBLE || DEFAULT_SYSTEM_PREAMBLE)
-          : (isSmallModel ? (DEFAULT_COMPACT_PREAMBLE || DEFAULT_SYSTEM_PREAMBLE) : DEFAULT_SYSTEM_PREAMBLE);
+        const defaultPreamble = isSmallModel ? (DEFAULT_COMPACT_PREAMBLE || DEFAULT_SYSTEM_PREAMBLE) : DEFAULT_SYSTEM_PREAMBLE;
         const preamble = userPreamble || defaultPreamble;
         appendIfBudget(preamble + '\n\n', 'system-preamble');
 
@@ -1156,46 +934,6 @@ function register(ctx) {
           }
         }
 
-        // Few-shot examples for small models — teaches correct tool usage format
-        // by showing concrete input→output pairs. Dramatically improves tool call
-        // accuracy for ≤4B models that can't reliably infer format from descriptions alone.
-        if (effectiveTaskType !== 'chat' && modelProfile.prompt.fewShotExamples > 0) {
-          const fewShotCount = modelProfile.prompt.fewShotExamples;
-          const examples = [];
-
-          // Task-appropriate examples — each shows a user request and the correct tool call response
-          if (effectiveTaskType === 'code' || effectiveTaskType === 'general') {
-            examples.push({
-              user: 'Create a simple calculator app',
-              assistant: '```json\n{"tool":"write_file","params":{"filePath":"calculator.html","content":"<!DOCTYPE html>\\n<html><head><title>Calculator</title></head><body><h1>Calculator</h1><input id=\\"display\\"><script>/* calculator logic */</script></body></html>"}}\n```',
-            });
-            examples.push({
-              user: 'Read the contents of main.js',
-              assistant: '```json\n{"tool":"read_file","params":{"filePath":"main.js"}}\n```',
-            });
-          }
-          if (effectiveTaskType === 'browser' || effectiveTaskType === 'general') {
-            examples.push({
-              user: 'Search for the latest news about AI',
-              assistant: '```json\n{"tool":"web_search","params":{"query":"latest AI news 2026"}}\n```',
-            });
-            examples.push({
-              user: 'Go to github.com',
-              assistant: '```json\n{"tool":"browser_navigate","params":{"url":"https://github.com"}}\n```',
-            });
-          }
-
-          // Use up to fewShotCount examples
-          const selected = examples.slice(0, fewShotCount);
-          if (selected.length > 0) {
-            let fewShotBlock = '## Examples\n';
-            for (const ex of selected) {
-              fewShotBlock += `User: ${ex.user}\nAssistant:\n${ex.assistant}\n\n`;
-            }
-            appendIfBudget(fewShotBlock, 'few-shot');
-          }
-        }
-
         // Custom project instructions (.prompt.md / .guide-instructions.md)
         // Cached per-project to avoid sync FS reads on every message
         // Skip for chat tasks — keep casual conversation minimal
@@ -1206,7 +944,7 @@ function register(ctx) {
             _instructionCache = null;
             const instructionsCandidates = [
               '.guide-instructions.md', '.prompt.md', '.guide/instructions.md',
-              '.github/copilot-instructions.md', 'CODING_GUIDELINES.md',
+              'CODING_GUIDELINES.md',
             ];
             for (const file of instructionsCandidates) {
               try {
@@ -1342,20 +1080,17 @@ function register(ctx) {
       let fullResponseText = '';
       let displayResponseText = '';
       let iteration = 0;
-      let _incoherentOutputOccurred = false; // Set when incoherent_output fires — prevents salad being stored in memory
       // Smart continuation: track tool call patterns for stuck detection
       let recentToolCalls = []; // [{tool, paramsHash}]
       const toolFailCounts = {}; // Track per-tool failure counts for enrichErrorFeedback
-      let consecutiveAllToolFailures = 0; // BUG-005: counter for iterations where every tool fails
       let nudgesRemaining = 3; // Allow 3 nudges when model responds with text instead of tool calls
       let contextRotations = 0; // Track how many times we've rotated context
       const MAX_CONTEXT_ROTATIONS = 10; // Allow up to 10 rotations for long tasks
       let lastConvSummary = ''; // Conversation summary from last rotation
       let sessionJustRotated = false; // Flag to rebuild prompt after rotation
-      let savedExplanationText = ''; // Pre-rollback explanation text — used if final response is empty after cleaning
+      let overflowResponseBudgetReduced = false; // Flag: already tried reducing response budget on first-turn overflow
       let forcedToolFunctions = null; // Set by PILLAR 3 refusal recovery to force grammar on next iteration
       let consecutiveEmptyGrammarRetries = 0; // Track grammar failures for text-mode fallback
-      let grammarNoToolsCount = 0; // Track grammar attempts that produce text but no tool calls
 
       // ── Execution State Tracking (ported from Pocket Guide) ──
       // Ground truth of what actually happened — used for verification & context injection
@@ -1510,20 +1245,11 @@ function register(ctx) {
       // Build structured prompt with proper system/user role separation
       // systemContext = tool defs + memory + RAG + file context (goes in system message)
       // userMessage = the actual user request (goes in user message)
-      // For chat-type tasks, the model gets no tool definitions in the system prompt
-      // (buildStaticPrompt returns DEFAULT_CHAT_PREAMBLE with no tool schemas).
-      // NOTE: Do NOT prepend a chatModeDirective to userMessage. Any text prepended
-      // here gets stored as a permanent user turn in chatHistory. On the next request
-      // with a different taskType, the engine replaces chatHistory[0] (system) but
-      // leaves old user turns intact — creating a contradictory system+user state
-      // that causes word salad. The preamble selection is the correct mechanism.
-      const dynamicCtx = buildDynamicContext();
-
       let currentPrompt = {
         // Put the browser "CRITICAL INSTRUCTION" first so it isn't buried
         // under large tool prompts (improves compliance for small/finicky models).
         systemContext: basePrompt,
-        userMessage: (dynamicCtx ? '<context>\n' + dynamicCtx + '</context>\n' : '') + browserInstruction + webSearchInstruction + message
+        userMessage: buildDynamicContext() + browserInstruction + webSearchInstruction + message
       };
 
       // If the renderer provided conversation history (e.g., after a model switch or session reset),
@@ -1532,46 +1258,16 @@ function register(ctx) {
       try {
         if (Array.isArray(context?.conversationHistory) && context.conversationHistory.length > 0) {
           const isFreshSession = !llmEngine.chatHistory || llmEngine.chatHistory.length <= 1;
-          // Fix 5: Do not seed renderer history when the engine JUST loaded a new (different) model.
-          // The renderer sends its full message history on every request, but that history was
-          // generated by the previous model. Injecting it into the new model primes it with
-          // foreign context (function definitions, tool responses) → wrong behavior on first message.
-          // _justLoadedNewModel is set true on model switch, cleared here after the decision.
-          const isNewModelLoad = llmEngine._justLoadedNewModel === true;
-          llmEngine._justLoadedNewModel = false; // Always clear after first message
-          if (isFreshSession && !isNewModelLoad) {
+          if (isFreshSession) {
             const seeded = [{ type: 'system', text: llmEngine._getActiveSystemPrompt() }];
-            // Cap seeded history to prevent overflowing small contexts.
-            // Reserve 50% of context for new generation; each turn ~150 tokens avg.
-            const maxSeedTurns = Math.max(2, Math.floor((totalCtx * 0.40) / 150));
-            const history = context.conversationHistory;
-            // Take the most recent turns (skip oldest if too many)
-            const startIdx = Math.max(0, history.length - maxSeedTurns);
-            let seededCount = 0;
-            for (let i = startIdx; i < history.length; i++) {
-              const m = history[i];
+            for (const m of context.conversationHistory) {
               if (!m || typeof m.content !== 'string') continue;
-              // Skip very long messages that would eat context budget
-              const contentLen = m.content.length;
-              if (contentLen > totalCtx) continue; // Single message longer than context? Skip.
-              if (m.role === 'user') {
-                seeded.push({ type: 'user', text: m.content });
-              } else if (m.role === 'assistant') {
-                // Strip tool-call JSON blocks before seeding into the new model session.
-                // Model-specific JSON syntax confuses a different model. Keep natural language
-                // context intact so project goals and decisions transfer across model switches.
-                const cleanContent = m.content
-                  .replace(/```(?:json|tool_call|tool)[^\n]*\n[\s\S]*?```/g, '')
-                  .replace(/\{\s*"(?:tool|name)"\s*:\s*"[^"]+"\s*,\s*"(?:params|arguments)"[\s\S]*?\}/g, '')
-                  .replace(/\n{3,}/g, '\n\n')
-                  .trim();
-                if (cleanContent) seeded.push({ type: 'model', response: [cleanContent] });
-              }
-              seededCount++;
+              if (m.role === 'user') seeded.push({ type: 'user', text: m.content });
+              else if (m.role === 'assistant') seeded.push({ type: 'model', response: [m.content] });
             }
             llmEngine.chatHistory = seeded;
             llmEngine.lastEvaluation = null;
-            console.log(`[AI Chat] Seeded local chatHistory from renderer (${seededCount} of ${history.length} turns, max=${maxSeedTurns} for ${totalCtx}-token context)`);
+            console.log(`[AI Chat] Seeded local chatHistory from renderer (${seeded.length - 1} turns)`);
           }
         }
       } catch (e) {
@@ -1582,7 +1278,7 @@ function register(ctx) {
 
       // ── Model Capability Tiering ──
       // modelTier already computed above (for prompt budget calculation)
-      console.log(`[AI Chat] Model: ${modelProfile._meta.profileSource} (${modelTier.paramSize}B ${modelTier.family}) — tools=${modelTier.maxToolsPerPrompt}, grammar=${modelTier.tier === 'tiny' ? 'never' : modelTier.grammarAlwaysOn ? (modelTier.tier === 'small' ? 'limited(3)' : 'always') : 'limited'}, retry=${modelTier.retryBudget}, quirks=${JSON.stringify(modelProfile.quirks)}`);
+      console.log(`[AI Chat] Model: ${modelProfile._meta.profileSource} (${modelTier.paramSize}B ${modelTier.family}) — tools=${modelTier.maxToolsPerPrompt}, grammar=${modelTier.grammarAlwaysOn ? 'always' : 'limited'}, retry=${modelTier.retryBudget}, quirks=${JSON.stringify(modelProfile.quirks)}`);
 
       // NOTE: Behavioral priming was removed — injecting fake tool-calling history
       // caused models of all sizes to force tool use on non-tool tasks (e.g., greetings
@@ -1591,7 +1287,6 @@ function register(ctx) {
       // ── Transactional Rollback State ──
       let rollbackRetries = 0;
       const maxRollbackRetries = modelTier.retryBudget;
-      let savedTemperature = null; // Preserve original temperature across rollback retries (BUG-2 fix)
 
       let nonContextRetries = 0;
       let lastIterationResponse = ''; // Track for repetition detection
@@ -1614,39 +1309,21 @@ function register(ctx) {
         console.log(`[AI Chat] Prompt: ~${estimateTokens(typeof currentPrompt === 'string' ? currentPrompt : (currentPrompt.systemContext || '') + (currentPrompt.userMessage || ''))} tokens`);
 
         // ── PROACTIVE PRE-GENERATION CONTEXT CHECK ──
-        // Before generating, check context usage. If already high (>60%),
-        // proactively compact BEFORE the generation call. At 90%+, force
-        // rotation to prevent node-llama-cpp from hanging on a full KV cache.
-        // Runs on ALL iterations (including first) to catch contexts that were
-        // already near-full from seeded chatHistory or prior conversations.
-        {
+        // Before generating, estimate context usage. If it's already high (>60%),
+        // proactively compact BEFORE the generation call instead of waiting for
+        // the post-generation check. This prevents context overflow errors that
+        // waste an entire generation cycle.
+        if (iteration > 1) {
           try {
             let preGenContextUsed = 0;
-            // ACCURATE method: read actual KV cache token count from sequence
             try {
               if (llmEngine.sequence?.nTokens) preGenContextUsed = llmEngine.sequence.nTokens;
             } catch (_) {}
-            // Fallback: rough character-based estimation
             if (!preGenContextUsed) {
               const promptLen = typeof currentPrompt === 'string' ? currentPrompt.length : ((currentPrompt.systemContext || '').length + (currentPrompt.userMessage || '').length);
-              // Also factor in chatHistory length for more accurate estimation
-              let historyLen = 0;
-              try {
-                for (const entry of (llmEngine.chatHistory || [])) {
-                  if (entry.type === 'user') historyLen += (entry.text || '').length;
-                  else if (entry.type === 'model') historyLen += (Array.isArray(entry.response) ? entry.response.join('').length : 0);
-                  else if (entry.type === 'system') historyLen += (entry.text || '').length;
-                }
-              } catch (_) {}
-              preGenContextUsed = Math.ceil(Math.max(historyLen, promptLen + fullResponseText.length) / 4);
+              preGenContextUsed = Math.ceil((promptLen + fullResponseText.length) / 4);
             }
             const preGenPct = preGenContextUsed / totalCtx;
-
-            // Report context usage to UI on every iteration
-            if (mainWindow) {
-              mainWindow.webContents.send('context-usage', { used: preGenContextUsed, total: totalCtx });
-            }
-
             if (preGenPct > 0.60) {
               const preCompaction = progressiveContextCompaction({
                 contextUsedTokens: preGenContextUsed,
@@ -1659,12 +1336,9 @@ function register(ctx) {
                 fullResponseText = preCompaction.newFullResponseText;
                 console.log(`[AI Chat] Pre-generation compaction: phase ${preCompaction.phase}, ${preCompaction.pruned} items at ${Math.round(preGenPct * 100)}%`);
               }
-              // Force rotation at 80%+ (previously 85%) — prevents model from
-              // entering the "nearly full" zone where generation slows to a crawl
-              if ((preCompaction.shouldRotate || preGenPct > 0.80) && contextRotations < MAX_CONTEXT_ROTATIONS) {
+              if (preCompaction.shouldRotate && contextRotations < MAX_CONTEXT_ROTATIONS) {
                 contextRotations++;
-                console.log(`[AI Chat] Pre-generation rotation ${contextRotations}/${MAX_CONTEXT_ROTATIONS} at ${Math.round(preGenPct * 100)}%`);
-                if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('agentic-phase', { phase: 'rotating-context', status: 'start', label: `Rotating context (${Math.round(preGenPct * 100)}% used)` });
+                console.log(`[AI Chat] Pre-generation rotation ${contextRotations}/${MAX_CONTEXT_ROTATIONS}`);
                 summarizer.markRotation();
                 lastConvSummary = summarizer.generateQuickSummary();
                 await llmEngine.resetSession(true);
@@ -1697,30 +1371,26 @@ function register(ctx) {
 
         // ── Decide: Native Function Calling vs Legacy Text Parsing ──
         // Native function calling uses node-llama-cpp's grammar-constrained decoding
-        // to produce valid tool calls. However, grammar constraining can CORRUPT output
-        // for models whose probability distributions don't align with the grammar —
-        // they're forced to select low-probability tokens, producing gibberish.
+        // to FORCE valid tool calls. The model literally cannot produce invalid JSON,
+        // wrong tool names, or malformed parameters. This is the key reliability improvement.
         //
-        // ARCHITECTURE: Text-first for small models, grammar for capable ones.
-        // - tiny models (≤1B): ALWAYS text mode — too small for grammar, use parser instead
-        // - small models (1-4B): grammar for first 3 iterations, then text mode fallback
-        // - medium models (≤8B): grammar always (these models handle it well)
-        // - large models (8-14B): grammar for first 5 iterations
-        // - xlarge models (14B+): grammar for first 2 iterations
-        // Text mode generation + mcpToolParser is the safer path — it lets the model
-        // generate from its natural distribution (coherent output) and extracts tool
-        // calls from the text post-hoc. This matches how models behave in LM Studio.
-        // GRAMMAR DISABLED — was causing infinite loops, stuck generation, and Phi-4 zero tokens.
-        // Text mode + mcpToolParser is the only reliable path.
-        const grammarIterLimit = 0;
-        const useNativeFunctions = false;
+        // ARCHITECTURAL CHANGE: Grammar constraining is now tier-aware.
+        // - tiny/small/medium models (≤8B): grammar ON for ALL agentic iterations
+        // - large models (8-14B): grammar ON for first 5 iterations
+        // - xlarge models (14B+): grammar ON for first 2 iterations (original behavior)
+        // The model can still output free text even with grammar constraining enabled —
+        // the grammar only ensures that WHEN tool calls are made, they're structurally valid.
+        const grammarIterLimit = modelTier.grammarAlwaysOn ? Infinity
+          : modelTier.tier === 'large' ? 5 : 2;
+        const useNativeFunctions = (taskType !== 'chat') && iteration <= grammarIterLimit;
         let nativeFunctions = null;
-        if (consecutiveEmptyGrammarRetries >= 2 || grammarNoToolsCount >= 2) {
-          // Grammar-to-text fallback: model can't produce useful grammar output.
-          // This triggers on EITHER empty responses OR grammar producing text but no tool calls.
+        if (consecutiveEmptyGrammarRetries >= 1) {
+          // Grammar-to-text fallback: model can't produce grammar output, degrade gracefully.
+          // Threshold lowered to 1 — the second native function call attempt can hang at the
+          // C++ level and never return. One failure is enough to switch to text mode safely.
           nativeFunctions = null;
           forcedToolFunctions = null;
-          console.log(`[AI Chat] Grammar disabled — text mode fallback (empty=${consecutiveEmptyGrammarRetries}, noTools=${grammarNoToolsCount})`);
+          console.log(`[AI Chat] Grammar disabled — falling back to text mode after ${consecutiveEmptyGrammarRetries} consecutive empty grammar responses`);
         } else if (forcedToolFunctions) {
           // PILLAR 3 refusal recovery: override normal grammar with forced tool set
           nativeFunctions = forcedToolFunctions;
@@ -1734,11 +1404,9 @@ function register(ctx) {
             // based on task type, iteration, and what tools have been used recently.
             // Turns a 30-way decision into a 5-10 way decision for small models.
             const recentToolNames = (recentToolCalls || []).map(tc => tc.tool);
-            if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('agentic-phase', { phase: 'optimizing-tools', status: 'start', label: 'Optimizing tool selection' });
             const filterNames = getProgressiveTools(taskType, iteration, recentToolNames, modelTier.maxToolsPerPrompt);
             nativeFunctions = LLMEngine.convertToolsToFunctions(toolDefs, filterNames);
-            if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('agentic-phase', { phase: 'optimizing-tools', status: 'done', label: 'Optimizing tool selection' });
-            console.log(`[AI Chat] Using native function calling with ${Object.keys(nativeFunctions).length} functions (tier=${modelTier.tier}, iter=${iteration}/${grammarIterLimit === Infinity ? '∞' : grammarIterLimit})`); 
+            console.log(`[AI Chat] Using native function calling with ${Object.keys(nativeFunctions).length} functions (tier=${modelTier.tier}, iter=${iteration}/${grammarIterLimit === Infinity ? '∞' : grammarIterLimit})`);
           } catch (e) {
             console.warn(`[AI Chat] Failed to build native functions, falling back to text: ${e.message}`);
             nativeFunctions = null;
@@ -1759,13 +1427,7 @@ function register(ctx) {
           try {
             if (nativeFunctions && Object.keys(nativeFunctions).length > 0) {
               // ── NATIVE FUNCTION CALLING PATH ──
-              // Grammar-constrained: model can only produce valid tool calls.
-              // Use a SHORT timeout (5s) because grammar-constrained generation
-              // either produces conformant tokens within seconds or gets permanently
-              // stuck in rejection sampling. If it can't produce tokens in 5s, it
-              // won't in 15s. This keeps the 2-retry → text-fallback cycle under
-              // ~15s instead of ~35s.
-              const GRAMMAR_TIMEOUT_MS = 5_000;
+              // Grammar-constrained: model can only produce valid tool calls
               const nativeResult = await llmEngine.generateWithFunctions(
                 currentPrompt,
                 nativeFunctions,
@@ -1779,12 +1441,12 @@ function register(ctx) {
                   localThinkingBatcher.push(thinkToken);
                 },
                 (funcCall) => {
-                  // Tool calls are surfaced via the 'tool-executing' IPC event after generation
-                  // completes. Do NOT also push to llm-token — that would double-render the JSON
-                  // as raw text in the chat bubble alongside the CollapsibleToolBlock.
+                  // Tool execution is visualized via the tool-executing IPC event (sendToolExecutionEvents),
+                  // which drives the ToolCallGroup in the renderer. Injecting raw JSON into the
+                  // llm-token text stream caused duplicate code bubbles when parseToolCall failed
+                  // on aliased or alternate-format tool calls from small models. Suppressed here.
                   void funcCall;
-                },
-                { timeoutMs: GRAMMAR_TIMEOUT_MS }
+                }
               );
               result = nativeResult;
               nativeFunctionCalls = nativeResult.functionCalls || [];
@@ -1796,7 +1458,6 @@ function register(ctx) {
               result = await llmEngine.generateStream(currentPrompt, {
                 ...(context?.params || {}),
                 maxTokens: effectiveMaxTokens,
-                taskType: taskType,
               }, (token) => {
                 if (isStale()) { llmEngine.cancelGeneration('user'); return; }
                 localTokenBatcher.push(token);
@@ -1814,16 +1475,46 @@ function register(ctx) {
           console.error(`[AI Chat] Generation error on iteration ${iteration}:`, genError.message);
           
           // Handle CONTEXT_OVERFLOW from llmEngine (it already reset the session)
-          const isContextOverflow = genError.message?.startsWith('CONTEXT_OVERFLOW:');
+          // Also treat the node-llama-cpp "default context shift strategy" error as a context overflow —
+          // it is a context overflow but is not prefixed with CONTEXT_OVERFLOW:.
+          const isContextOverflow = genError.message?.startsWith('CONTEXT_OVERFLOW:') ||
+            genError.message?.includes('default context shift strategy did not return') ||
+            genError.message?.includes('context size is too small');
 
           // Only rotate context on actual context overflow. Previously, ANY generation
           // error could trigger rotation, which looked like the app was "summarizing"
           // on the very first turn.
           if (isContextOverflow && contextRotations < MAX_CONTEXT_ROTATIONS) {
+            // ── FIRST-TURN OVERFLOW DETECTION ──
+            // If no tool calls have been made (completedSteps === 0), there's nothing to
+            // summarize. Rotation is pointless — the rebuilt prompt will be the same size.
+            // Instead: reduce the response budget and retry once. If that also overflows,
+            // break cleanly instead of looping 10 times through empty summaries.
+            if (summarizer.completedSteps.length === 0 && !overflowResponseBudgetReduced) {
+              overflowResponseBudgetReduced = true;
+              contextRotations++;
+              console.log(`[AI Chat] First-turn overflow — no history to summarize. Reducing response budget and retrying.`);
+              if (genError.partialResponse) fullResponseText += genError.partialResponse;
+              try { await llmEngine.resetSession(true); } catch (_) {}
+              sessionJustRotated = true;
+              const rotatedBase = buildStaticPrompt();
+              currentPrompt = {
+                systemContext: rotatedBase,
+                userMessage: buildDynamicContext() + '\n' + message
+              };
+              continue;
+            }
+            if (summarizer.completedSteps.length === 0 && overflowResponseBudgetReduced) {
+              console.log(`[AI Chat] First-turn overflow persists after budget reduction — context too small for this prompt.`);
+              const overflowMsg = '\n\n*[The context size is too small to generate a response for this prompt. Try a shorter message or a model with more context capacity.]*\n';
+              if (mainWindow) mainWindow.webContents.send('llm-token', overflowMsg);
+              fullResponseText += overflowMsg;
+              break;
+            }
             contextRotations++;
             console.log(`[AI Chat] Context rotation ${contextRotations}/${MAX_CONTEXT_ROTATIONS} — summarizing and continuing`);
             
-            if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('agentic-phase', { phase: 'rotating-context', status: 'start', label: 'Rotating context — freeing space' });
+            if (mainWindow) mainWindow.webContents.send('llm-thinking-token', '[Summarizing conversation to free context space...]\n');
             
             try {
               // Use structured summarizer instead of lossy getConversationSummary
@@ -1841,7 +1532,12 @@ function register(ctx) {
               
               // Show the summary content in the thinking bubble so the user can see it
               if (convSummary && mainWindow) {
-                mainWindow.webContents.send('llm-thinking-token', convSummary + '\n[Context rotated — continuing seamlessly]\n');
+                // Strip tool-call code blocks from the summary before sending to the thinking bubble.
+                // The auto-generated summary includes raw tool call JSON fences (e.g. ```json {...}) which
+                // bleed into the model's reasoning panel as visible ```json artifacts.
+                const thinkableSummary = convSummary
+                  .replace(/```(?:json|tool_call|tool)[^\n]*\n[\s\S]*?```/g, '');
+                mainWindow.webContents.send('llm-thinking-token', thinkableSummary + '\n[Context rotated — continuing seamlessly]\n');
               }
               
               if (!llmEngine.chat) {
@@ -1874,9 +1570,6 @@ function register(ctx) {
                     llmEngine.tokenPredictor ? { tokenPredictor: llmEngine.tokenPredictor } : undefined
                   );
                   llmEngine.chat = new LlamaChat({ contextSequence: llmEngine.sequence });
-                  // BUG-044: Reapply correct wrapper — new LlamaChat() resets to auto-detected
-                  // default which may be wrong (e.g. Llama3ChatWrapper for Llama 3.2).
-                  llmEngine._applyChatWrapperOverride();
                   llmEngine.chatHistory = [{ type: 'system', text: llmEngine._getActiveSystemPrompt() }];
                   llmEngine.lastEvaluation = null;
                 } catch (sessErr) {
@@ -1891,8 +1584,6 @@ function register(ctx) {
                         llmEngine.tokenPredictor ? { tokenPredictor: llmEngine.tokenPredictor } : undefined
                       );
                       llmEngine.chat = new LlamaChat({ contextSequence: llmEngine.sequence });
-                      // BUG-044: Reapply correct wrapper after last-resort recreation.
-                      llmEngine._applyChatWrapperOverride();
                       llmEngine.chatHistory = [{ type: 'system', text: llmEngine._getActiveSystemPrompt() }];
                       llmEngine.lastEvaluation = null;
                       console.log('[AI Chat] Full context+chat recreated as last resort');
@@ -1920,12 +1611,13 @@ function register(ctx) {
               console.error('[AI Chat] Context rotation failed:', resetErr.message);
             }
           }
-          
-          // BUG-012: Terminal break when context rotation limit is exhausted
-          if (isContextOverflow && contextRotations >= MAX_CONTEXT_ROTATIONS) {
-            const maxMsg = `\n\n*[Context rotated ${MAX_CONTEXT_ROTATIONS}/${MAX_CONTEXT_ROTATIONS} times — conversation too long. Please start a new chat.]*\n`;
-            if (mainWindow) mainWindow.webContents.send('llm-token', maxMsg);
-            fullResponseText += maxMsg;
+          // Context overflow with no rotations remaining — stop cleanly.
+          // Do NOT fall through to nonContextRetries which would send the raw CONTEXT_OVERFLOW
+          // error message (including the entire conversation summary) as visible llm-token text.
+          if (isContextOverflow) {
+            const overflowMsg = '\n\n*[This conversation has exceeded the model\'s context limit. Please start a new chat to continue.]*\n';
+            if (mainWindow) mainWindow.webContents.send('llm-token', overflowMsg);
+            fullResponseText += overflowMsg;
             break;
           }
 
@@ -1987,58 +1679,11 @@ function register(ctx) {
 
         const responseText = result.text || '';
 
-        // ── BUG-038: Consecutive Stutter Detection & Auto-Clear ──
-        // If the engine aborted due to repetition/template-spam, handle it immediately
-        // before any other logic. Don't commit stutter text; track consecutive failures.
-        if (result.stopReason === 'repetition' || result.stopReason === 'template') {
-          _consecutiveStutterAborts++;
-          console.log(`[AI Chat] Stutter abort detected (${_consecutiveStutterAborts} consecutive)`);
-          if (_consecutiveStutterAborts >= 3) {
-            _consecutiveStutterAborts = 0;
-            // Wipe chatHistory to system prompt only — the context is poisoned
-            llmEngine.chatHistory = [{ type: 'system', text: llmEngine._getActiveSystemPrompt() }];
-            llmEngine.lastEvaluation = null;
-            try { await llmEngine.resetSession(true); } catch (_e) {}
-            const clearMsg = '\n\n*[⚠️ The model entered a stutter loop 3 times in a row. Context has been cleared to break the cycle. Please resend your message.]*\n';
-            if (mainWindow) mainWindow.webContents.send('llm-token', clearMsg);
-            fullResponseText += clearMsg;
-          } else {
-            const stutterMsg = '\n\n*[The model produced repeated output and was stopped. Please try again.]*\n';
-            if (mainWindow) mainWindow.webContents.send('llm-token', stutterMsg);
-            fullResponseText += stutterMsg;
-          }
-          break; // Never commit stutter text — end this request here
-        } else {
-          _consecutiveStutterAborts = 0; // Reset on any successful (non-stutter) generation
-        }
-
-        // ── Grammar Effectiveness Tracking ──
-        // Track whether grammar-constrained generation is actually producing tool calls.
-        // If grammar keeps producing text-only output (no function calls) for agentic tasks,
-        // it means the model's distribution doesn't align with the grammar — switch to text mode.
-        // This catches the case where grammar produces GIBBERISH text (not empty, so the
-        // consecutiveEmptyGrammarRetries counter never fires, and grammar stays on forever).
-        if (nativeFunctions && Object.keys(nativeFunctions).length > 0 && taskType !== 'chat') {
-          if (nativeFunctionCalls.length === 0) {
-            grammarNoToolsCount++;
-            console.log(`[AI Chat] Grammar produced no tool calls (${grammarNoToolsCount} consecutive) — response length: ${responseText.length}`);
-          } else {
-            grammarNoToolsCount = 0; // Reset on successful grammar tool call
-          }
-        }
-
         // ── Transactional Rollback Evaluation ──
         // Evaluate the response BEFORE committing it to context.
         // If it's a failure (refusal, hallucination, empty), rollback and retry.
         // The model never sees its own failures — no failure contagion.
         const responseVerdict = evaluateResponse(responseText, nativeFunctionCalls, taskType, iteration);
-        // BUG-014: Timeout results should never trigger a ROLLBACK loop — we have
-        // the best partial response we can get. Force COMMIT to break the cycle.
-        if (result?.wasTimeout && responseVerdict.verdict === 'ROLLBACK') {
-          console.log('[AI Chat] Generation timed out — accepting partial response to avoid ROLLBACK loop');
-          responseVerdict.verdict = 'COMMIT';
-          responseVerdict.reason = 'timeout_accept';
-        }
         if (responseVerdict.verdict === 'ROLLBACK' && rollbackRetries < maxRollbackRetries) {
           rollbackRetries++;
           // Track consecutive empty grammar failures for text-mode fallback
@@ -2049,23 +1694,7 @@ function register(ctx) {
             consecutiveEmptyGrammarRetries = 0; // Reset on non-empty or non-grammar failure
           }
           console.log(`[AI Chat] ⚠️ ROLLBACK (${responseVerdict.reason}) — retry ${rollbackRetries}/${maxRollbackRetries}, restoring checkpoint`);
-          if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('agentic-phase', { phase: 'retrying', status: 'start', label: `Retrying (${rollbackRetries}/${maxRollbackRetries})...` });
-          // BUG-019: Clear the already-streamed failed tokens from the chat UI.
-          // Before clearing: save any pre-tool-call explanation text as a fallback
-          // so we can show it to the user if all retries also fail to produce a clean response.
-          const _preRollback = responseText
-            .replace(/```(?:json|tool)?[\s\S]*?```/g, '')
-            .replace(/\{[\s\S]*?"tool"\s*:[\s\S]*?\}/g, '')
-            .trim();
-          // BUG-FIX: Lower threshold from 20 → 3 so short planning phrases like
-          // "I'll check" are preserved. Also strip <think> tags before checking length.
-          const _preRollbackClean = _preRollback
-            .replace(/<think(?:ing)?>([ -￿]*?)<\/think(?:ing)?>/gi, '')
-            .trim();
-          if (_preRollbackClean.length > 3 && !savedExplanationText) {
-            savedExplanationText = _preRollbackClean;
-          }
-          if (mainWindow) mainWindow.webContents.send('llm-replace-last', '');
+          // Do NOT send retry status as llm-thinking-token — internal detail that pollutes the reasoning dropdown.
 
           // Restore checkpoint — model never sees its failure
           if (checkpoint.chatHistory) {
@@ -2076,19 +1705,7 @@ function register(ctx) {
           // Escalating retry strategy
           if (rollbackRetries === 1) {
             // First retry: same prompt, slightly lower temperature for focus
-            if (context?.params) {
-              if (savedTemperature === null) savedTemperature = context.params.temperature; // Preserve original before mutation
-              context.params.temperature = Math.max((context.params.temperature || 0.7) - 0.2, 0.1);
-            }
-            // BUG-031/BUG-030: For described_not_executed, inject explicit correction on the FIRST retry.
-            // Simply re-sending the identical prompt causes models to refuse or repeat the same
-            // behaviour (they pattern-match "already tried"). An explicit JSON nudge breaks the loop.
-            if (responseVerdict.reason === 'described_not_executed') {
-              currentPrompt = {
-                systemContext: buildStaticPrompt(),
-                userMessage: `CORRECTION: Your last response described an action in plain text instead of executing it as a tool call. You MUST output a JSON tool call block \u2014 do NOT explain, narrate, or apologize. Just call the tool NOW.\n\nUser request: ${message.substring(0, 500)}\n\nOutput the JSON tool call immediately:`,
-              };
-            }
+            if (context?.params) context.params.temperature = Math.max((context.params.temperature || 0.7) - 0.2, 0.1);
           } else if (rollbackRetries === 2) {
             // Second retry: simplified prompt with explicit tool instruction
             currentPrompt = {
@@ -2126,37 +1743,18 @@ function register(ctx) {
         if (responseVerdict.verdict === 'COMMIT') {
           rollbackRetries = 0;
           consecutiveEmptyGrammarRetries = 0;
-          // Restore temperature that may have been lowered during rollback retries (BUG-2 fix)
-          if (savedTemperature !== null && context?.params) {
-            context.params.temperature = savedTemperature;
-            savedTemperature = null;
-          }
-          // ── COMMIT: record response for display ──
-          fullResponseText += responseText;
-          displayResponseText += responseText;
-          console.log(`[AI Chat] Response committed to display: ${responseText.length} chars | display total: ${displayResponseText.length} chars | preview: "${responseText.replace(/<think[\s\S]*?<\/think>/gi, '').substring(0, 60).replace(/\n/g, '\\n')}"`);
-        } else if (responseVerdict.verdict === 'ROLLBACK') {
-          // Budget exhausted — forced to accept bad response (BUG-1 fix)
-          // Reset rollback counter so future iterations can still use rollback safety.
-          // BUT do NOT reset consecutiveEmptyGrammarRetries — if grammar proved
-          // ineffective (produced 0 tokens), re-enabling it just causes the same
-          // 15s×2 timeout cycle on the next iteration, cascading into a 7+ minute hang.
-          console.log(`[AI Chat] ⚠️ Rollback budget exhausted — discarding garbage response, grammar stays ${consecutiveEmptyGrammarRetries >= 2 ? 'DISABLED' : 'enabled'}`);
-          rollbackRetries = 0;
-          // consecutiveEmptyGrammarRetries intentionally NOT reset — grammar stays disabled
-          if (savedTemperature !== null && context?.params) {
-            context.params.temperature = savedTemperature;
-            savedTemperature = null;
-          }
-          // BUG-034 FIX: Do NOT add the garbage response to displayResponseText.
-          // The last retry already streamed tokens to the UI — clear them now.
-          // This prevents the garbage from entering result.text → messages[] → conversationHistory,
-          // which was the root cause of context contamination across model switches and to cloud.
-          if (mainWindow) mainWindow.webContents.send('llm-replace-last', '');
-          fullResponseText += responseText; // Keep in raw log for debugging but not display
-          console.log(`[AI Chat] Response NOT committed to display (garbage rollback): ${responseText.length} chars dropped | display remains ${displayResponseText.length} chars`);
-          // Skip displayResponseText += responseText intentionally
         }
+
+        fullResponseText += responseText;
+        // Strip tool-call JSON fences from the user-visible copy before accumulating.
+        // fullResponseText (fed back to the model for context) keeps the raw text.
+        // displayResponseText (committed to the chat message) should only have natural language.
+        // Targets: ```tool_call```, ```tool```, and ```json``` whose root object is a tool call.
+        const displayChunk = responseText
+          .replace(/```(?:tool_call|tool)[^\n]*\n[\s\S]*?```/g, '')
+          .replace(/```json[^\n]*\n\s*(?:\[\s*)?\{\s*"(?:tool|name)"\s*:[\s\S]*?```/g, '')
+          .replace(/\n{3,}/g, '\n\n');
+        displayResponseText += displayChunk;
 
         // Check stale after generation — user may have sent a new message during inference
         if (isStale()) {
@@ -2183,7 +1781,6 @@ function register(ctx) {
             contextUsed = Math.ceil((promptLen + fullResponseText.length) / 4);
           }
 
-          if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('agentic-phase', { phase: 'summarizing-history', status: 'start', label: 'Summarizing conversation history' });
           const compaction = progressiveContextCompaction({
             contextUsedTokens: contextUsed,
             totalContextTokens: totalCtx,
@@ -2199,23 +1796,23 @@ function register(ctx) {
               mainWindow.webContents.send('llm-thinking-token', `[Context compaction phase ${compaction.phase}: ${compaction.pruned} items compacted at ${Math.round((contextUsed / totalCtx) * 100)}%]\n`);
             }
           }
-          if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('agentic-phase', { phase: 'summarizing-history', status: 'done', label: 'Summarizing conversation history' });
 
           // Phase 4: Hard rotation as absolute last resort
           if (compaction.shouldRotate && contextRotations < MAX_CONTEXT_ROTATIONS) {
             contextRotations++;
             console.log(`[AI Chat] Context rotation ${contextRotations}/${MAX_CONTEXT_ROTATIONS} at ${Math.round((contextUsed / totalCtx) * 100)}% (compaction phase 4)`);
-            if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('agentic-phase', { phase: 'compressing-context', status: 'start', label: 'Compressing context' });
+            if (mainWindow) mainWindow.webContents.send('llm-thinking-token', `[Context at ${Math.round((contextUsed / totalCtx) * 100)}% — summarizing to free space...]\n`);
             
             summarizer.markRotation();
             lastConvSummary = summarizer.generateQuickSummary();
             
             if (lastConvSummary && mainWindow) {
-              mainWindow.webContents.send('llm-thinking-token', lastConvSummary + '\n[Context rotated — continuing seamlessly]\n');
+              const thinkableSummary = lastConvSummary
+                .replace(/```(?:json|tool_call|tool)[^\n]*\n[\s\S]*?```/g, '');
+              mainWindow.webContents.send('llm-thinking-token', thinkableSummary + '\n[Context rotated — continuing seamlessly]\n');
             }
             
             await llmEngine.resetSession(true);
-            if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('agentic-phase', { phase: 'compressing-context', status: 'done', label: 'Compressing context' });
             sessionJustRotated = true;
           }
 
@@ -2318,14 +1915,6 @@ function register(ctx) {
               }
               const toolResult = await mcpToolServer.executeTool(call.tool, call.params);
               results.push({ tool: call.tool, params: call.params, result: toolResult });
-              // Real-time gatheredWebData update — runs BEFORE write deferral messages are built
-              // for subsequent calls in the same batch. This ensures the deferral hint includes
-              // the data the model just gathered, so it can write the file on the next iteration.
-              if (call.tool === 'web_search' && toolResult?.success && Array.isArray(toolResult?.results)) {
-                for (const r of toolResult.results) {
-                  if (r.title && r.url) gatheredWebData.push({ title: r.title, url: r.url, snippet: r.snippet || '' });
-                }
-              }
               // Pace update_todo calls so each IPC message gets its own renderer paint
               if (call.tool === 'update_todo') await new Promise(r => setTimeout(r, 80));
             } catch (execErr) {
@@ -2339,23 +1928,6 @@ function register(ctx) {
             capped: browserSkipped > 0,
             skippedToolCalls: browserSkipped,
           };
-        } else if (taskType === 'chat') {
-          // ── BUG-016: CHAT-TYPE HARD GATE (moved before processResponse) ──
-          // For chat-type tasks (greetings, casual conversation), NEVER execute tools.
-          // Exception: if the ENTIRE response is function-call JSON (no text content at all),
-          // route it through processResponse. Function-calling-specialist models (e.g.
-          // Qwen3-4B-Function-Calling-Pro) emit OpenAI array JSON even for "hi" — we should
-          // attempt to parse/execute it rather than display raw JSON to the user.
-          const _cleanedForGate = (responseText || '').replace(/<think[\s\S]*?<\/think>/gi, '').trim();
-          const _isPureFnCallJSON = /^\[?\s*\{\s*"name"\s*:/.test(_cleanedForGate) && !_cleanedForGate.replace(/[\s\[\]{}",:.\w-]/g, '').length;
-          if (_isPureFnCallJSON) {
-            console.log(`[AI Chat] Chat-type gate: response is pure function-call JSON — routing to processResponse instead of displaying raw JSON`);
-            const textOpts = { toolPaceMs: localToolPace, skipWriteDeferral: modelTier.tier === 'tiny' };
-            toolResults = await mcpToolServer.processResponse(responseText, textOpts);
-          } else {
-            console.log(`[AI Chat] Chat-type hard gate | USER_MSG="${message.substring(0, 40)}" | MODEL_GENERATED="${_cleanedForGate.substring(0, 60).replace(/\n/g, '\\n')}" (${(responseText || '').length} raw chars) — skipping tool parsing`);
-            toolResults = { hasToolCalls: false, results: [], toolCalls: [], capped: false, skippedToolCalls: 0 };
-          }
         } else {
           // ── LEGACY TEXT PARSING PATH ──
           const textOpts = { toolPaceMs: localToolPace, skipWriteDeferral: modelTier.tier === 'tiny' };
@@ -2381,32 +1953,21 @@ function register(ctx) {
         }
         
         // ── Anti-hallucination: strip fake tool results from displayed text ──
-        // Small models hallucinate tool outputs inline: "I navigated to X and found Y".
-        // If real tool calls were found AND the response also contains hallucinated
-        // results text, send a cleaned version to the frontend.
-        if (toolResults.hasToolCalls && toolResults.results.length > 0) {
-          // Strip: (a) tool call JSON blocks, (b) hallucinated result descriptions that follow them
-          let cleaned = responseText;
-          // Remove ```json/tool/tool_call blocks entirely
-          cleaned = cleaned.replace(/```(?:tool_call|tool|json)[^\n]*\n[\s\S]*?```/g, '');
-          // Remove raw JSON tool calls — nested-brace-aware pattern prevents leaking the outer }
-          // e.g. {"tool":"read_file","params":{"filePath":"x"}} → fully removed (not just inner })
-          cleaned = cleaned.replace(/\{[^{}]*"(?:tool|name)"\s*:\s*"[^"]*"[^{}]*"(?:params|arguments)"\s*:\s*\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}[^{}]*\}/g, '');
-          // Remove hallucinated result lines that follow tool calls
-          cleaned = cleaned.replace(/\n*(?:Result|Output|Response|Status|Success|Navigated|Clicked|Typed|Found|Page|Content|Screenshot|Done|OK)[:]\s*[^\n]+/gi, '');
-          // Remove "I navigated to..." / "I clicked on..." type hallucinations
-          cleaned = cleaned.replace(/\n*(?:I\s+(?:navigated|browsed|went|visited|opened|clicked|typed|searched|found|retrieved|extracted|created|wrote|saved|generated|executed|ran)\s+[^\n]+)/gi, '');
-          // Collapse excessive whitespace
-          cleaned = cleaned.replace(/\n{3,}/g, '\n\n').trim();
-
-          // Always send llm-replace-last to wipe raw tool JSON from the streaming bubble.
-          // When the entire iteration was a tool call, cleaned = '' — sending '' clears
-          // the buffer so the stray JSON (or lone trailing }) never commits to the message.
-          if (mainWindow) {
-            console.log(`[AI Chat] Anti-hallucination: stripped tool JSON (${responseText.length} → ${cleaned.length} chars)`);
-            mainWindow.webContents.send('llm-replace-last', cleaned);
-          }
-        }
+        // DISABLED 2026-02-25: This block sent llm-replace-last which replaced the ENTIRE
+        // accumulated stream buffer (streamBufferRef.current) in useChatStreaming.ts with only
+        // the current iteration's stripped text, wiping everything the user was reading.
+        // Root cause of the "response deletes itself mid-generation" bug. Commented out for testing.
+        // if (toolResults.hasToolCalls && toolResults.results.length > 0) {
+        //   let cleaned = responseText;
+        //   cleaned = cleaned.replace(/```(?:tool_call|tool|json)[^\n]*\n[\s\S]*?```/g, '');
+        //   cleaned = cleaned.replace(/\{\s*"(?:tool|name)"\s*:\s*"[^"]+"\s*,\s*"(?:params|arguments)"[\s\S]*?\}/g, '');
+        //   cleaned = cleaned.replace(/\n*(?:Result|Output|Response|Status|...)[:]\.../gi, '');
+        //   cleaned = cleaned.replace(/\n*(?:I\s+(?:navigated|browsed|...)\s+[^\n]+)/gi, '');
+        //   cleaned = cleaned.replace(/\n{3,}/g, '\n\n').trim();
+        //   if (cleaned.length < responseText.length * 0.7 && mainWindow) {
+        //     mainWindow.webContents.send('llm-replace-last', cleaned || '*Executing tools...*');
+        //   }
+        // }
         
         if (!toolResults.hasToolCalls || toolResults.results.length === 0) {
           // ── PILLAR 3: Structured Error Recovery ──
@@ -2424,30 +1985,8 @@ function register(ctx) {
             console.log(`[AI Chat] Failure classified: ${failure.type} (severity: ${failure.severity})`);
 
             if (failure.severity === 'stop') {
-              // Terminal failure (e.g., repetition, incoherent_output) — end the loop
-              if (failure.type === 'incoherent_output') {
-                // BUG-039: Context-poison-induced gibberish — wipe chatHistory and reset KV cache
-                // so the user's NEXT message starts clean. DO NOT nudge (nudging always fails here).
-                _incoherentOutputOccurred = true;
-                try {
-                  llmEngine.chatHistory = [];
-                  await llmEngine.resetSession(true);
-                  console.log('[AI Chat] BUG-039: Cleared poisoned context after incoherent_output');
-                  // Also purge the most recent assistant turn(s) from memory so that the
-                  // NEXT request's buildDynamicContext() does not re-inject word salad as
-                  // "Recent Conversation Context". This is what caused the self-perpetuating
-                  // salad loop: old salad → stored in memoryStore → injected next turn → new salad.
-                  while (memoryStore.conversations.length > 0 &&
-                         memoryStore.conversations[memoryStore.conversations.length - 1].role === 'assistant') {
-                    memoryStore.conversations.pop();
-                  }
-                  memoryStore._scheduleSave(); // Persist the purge to disk so it survives the next app launch
-                  console.log('[AI Chat] BUG-039: Purged last assistant turn(s) from memoryStore');
-                } catch (_) {}
-                if (mainWindow) mainWindow.webContents.send('llm-token', '\n*⚠️ Model produced incoherent output (context poisoning detected). Context has been cleared — please resend your message.*\n');
-              } else {
-                if (mainWindow) mainWindow.webContents.send('llm-token', `\n*[Stopped — ${failure.type}]*\n`);
-              }
+              // Terminal failure (e.g., repetition) — end the loop
+              if (mainWindow) mainWindow.webContents.send('llm-token', `\n*[Stopped — ${failure.type}]*\n`);
               break;
             }
 
@@ -2500,24 +2039,6 @@ function register(ctx) {
 
         // Track last response for repetition detection (even when tools are called)
         lastIterationResponse = responseText;
-
-        // Pre-tool acknowledgement: if the model produced no preamble text (went straight to
-        // tool calls), emit a brief status so the chat bubble isn't visually empty.
-        const _preToolText = responseText
-          .replace(/```(?:json|tool)?[\s\S]*?```/g, '')
-          .replace(/\{[\s\S]*?"tool"\s*:[\s\S]*?\}/g, '')
-          .replace(/<think[\s\S]*?<\/think>/gi, '')
-          .trim();
-        if (_preToolText.length < 10 && mainWindow && !mainWindow.isDestroyed() && !isStale()) {
-          const _firstTool = toolResults.results[0]?.tool || '';
-          const _ack =
-            _firstTool === 'web_search' ? 'Searching...' :
-            (_firstTool === 'write_file' || _firstTool === 'edit_file' || _firstTool === 'create_directory') ? 'Working on it...' :
-            (_firstTool === 'read_file' || _firstTool === 'list_directory' || _firstTool === 'grep_search') ? 'Looking at that...' :
-            _firstTool.startsWith('browser_') ? 'Opening that...' :
-            _firstTool === 'run_command' ? 'Running that...' : 'On it...';
-          mainWindow.webContents.send('llm-token', _ack);
-        }
 
         // Send live tool execution indicators BEFORE executing
         if (mainWindow) {
@@ -2609,7 +2130,9 @@ function register(ctx) {
             } else if (tr.tool === 'find_files' && tr.result?.files) {
               toolFeedback += `**Found ${tr.result.files.length} Files:**\n${tr.result.files.slice(0, 20).join('\n')}\n`;
             } else if (tr.tool === 'web_search' && tr.result?.results) {
-              toolFeedback += `**Search Results for "${tr.params?.query}":**\n`;
+              // Include the actual current date so the model can evaluate whether search result snippets are stale.
+              const searchDate = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+              toolFeedback += `**Search Results for "${tr.params?.query}":** *(search performed on ${searchDate})*\n`;
               for (const r of (tr.result.results || []).slice(0, 5)) {
                 toolFeedback += `- [${r.title}](${r.url}): ${r.snippet?.substring(0, 120)}\n`;
               }
@@ -2628,9 +2151,7 @@ function register(ctx) {
                 const currentProvider = context?.cloudProvider || '';
                 const currentModel = context?.cloudModel || '';
                 const hasVision = currentProvider && cloudLLM._supportsVision?.(currentProvider, currentModel);
-                // node-llama-cpp 3.x has no vision API — even VL-named local models cannot
-                // process images. Always false so screenshots route to cloud vision or show error.
-                const hasLocalVision = false;
+                const hasLocalVision = !currentProvider && llmEngine?.modelInfo?.name?.toLowerCase().includes('vl');
 
                 if (!hasVision && !hasLocalVision) {
                   // Current model can't see images — try available vision-capable provider
@@ -2742,21 +2263,6 @@ function register(ctx) {
           }
         }
 
-        // BUG-005: Track consecutive iterations where ALL tools failed
-        const anyToolSuccess = toolResults.results.some(r => r.result?.success === true);
-        if (toolResults.results.length > 0 && !anyToolSuccess) {
-          consecutiveAllToolFailures++;
-          console.log(`[AI Chat] BUG-005: All tools failed (${consecutiveAllToolFailures} consecutive all-fail iterations)`);
-          if (consecutiveAllToolFailures >= 3) {
-            const failMsg = `\n\n*[All tool calls have failed ${consecutiveAllToolFailures} times in a row. There may be a system or permission issue. Stopping to avoid a loop.]*\n`;
-            if (mainWindow) mainWindow.webContents.send('llm-token', failMsg);
-            fullResponseText += failMsg;
-            break;
-          }
-        } else {
-          consecutiveAllToolFailures = 0; // Reset on any success
-        }
-
         // ── Domain retry limiter (ported from Pocket Guide) ──
         // If any browser_navigate was just called, check domain limits and warn the model
         for (const tr of toolResults.results) {
@@ -2784,16 +2290,11 @@ function register(ctx) {
         // This ensures the model sees ground truth FIRST, not as an afterthought.
 
         // Send progress update to UI
-        // NOTE: toolFeedback is NOT sent to llm-token — the raw markdown (## Tool Execution
-        // Results / ### toolname [OK|FAIL] / bullet lists) would appear as loose plain text in
-        // the streaming bubble alongside the CollapsibleToolBlock widgets that already display
-        // the same data cleanly. The results are committed to displayResponseText below and
-        // parsed by extractToolResults() at render time for merging into the tool blocks.
         if (mainWindow) {
+          mainWindow.webContents.send('llm-token', toolFeedback);
           mainWindow.webContents.send('mcp-tool-results', toolResults.results);
         }
         fullResponseText += toolFeedback;
-        displayResponseText += toolFeedback; // Include [OK]/[FAIL] markers in saved message for UI parsing
 
         // Cap fullResponseText to prevent unbounded memory growth (same 2MB as cloud path)
         if (fullResponseText.length > 2 * 1024 * 1024) {
@@ -2801,18 +2302,18 @@ function register(ctx) {
         }
 
         // ── Anti-hallucination guard for file edits (local path) ──
-        // Detect when the model claimed to modify files but never called edit_file/write_file.
-        {
-          const fileModTools = ['write_file', 'edit_file'];
-          const calledFileModTool = toolResults.results.some(r => fileModTools.includes(r.tool));
-          const userAskedForEdit = /\b(edit|change|modif|updat|upgrad|add to|fix|improve|alter)\b/i.test(message || '');
-          const modelClaimedEdits = /\b(✔️|✅|upgraded|modified|edited|updated|changed|added|implemented|applied|enhanced)\b/i.test(responseText);
-          if (!calledFileModTool && userAskedForEdit && modelClaimedEdits && toolResults.results.length > 0) {
-            console.log('[AI Chat] Hallucination detected: model claimed file edits but no edit_file/write_file was called');
-            toolFeedback += '\n\n[SYSTEM] WARNING: You claimed to make file changes but never called edit_file or write_file. No files were actually modified. You MUST use edit_file or write_file to modify files — browsing a file does NOT modify it. Execute the actual edits now using edit_file.\n';
-            if (mainWindow) mainWindow.webContents.send('llm-token', '\n*[Anti-hallucination: model claimed edits without tool calls — retrying]*\n');
-          }
-        }
+        // DISABLED 2026-02-25: Part of the over-engineered hallucination detection that was
+        // causing more problems than it solved. Commented out for testing/simplification.
+        // {
+        //   const fileModTools = ['write_file', 'edit_file'];
+        //   const calledFileModTool = toolResults.results.some(r => fileModTools.includes(r.tool));
+        //   const userAskedForEdit = /\b(edit|change|modif|...)\b/i.test(message || '');
+        //   const modelClaimedEdits = /\b(✔️|✅|upgraded|modified|...)\b/i.test(responseText);
+        //   if (!calledFileModTool && userAskedForEdit && modelClaimedEdits && toolResults.results.length > 0) {
+        //     toolFeedback += '\n\n[SYSTEM] WARNING: ...';
+        //     if (mainWindow) mainWindow.webContents.send('llm-token', '\n*[Anti-hallucination...]*\n');
+        //   }
+        // }
 
         // ── Post-write verification: fabrication detection + completeness checks (local path) ──
         {
@@ -2853,11 +2354,9 @@ function register(ctx) {
                   if (overlapCount === 0 && gatheredWebData.length > 0) {
                     // Auto-correct: replace fabricated content with well-formatted real data
                     // (analogous to how file paths are already auto-corrected from hallucinated to real)
-                    const now = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-                    const faSections = gatheredWebData.slice(0, 10).map((d, i) =>
-                      `## ${i+1}. ${d.title || 'Result'}\n**URL:** ${d.url || 'N/A'}${(d.snippet || '').trim() ? '\n\n' + d.snippet.substring(0, 300) : ''}`
-                    );
-                    const correctedContent = `# Research Results\n*Compiled ${now}*\n\n${faSections.join('\n\n---\n\n')}`;
+                    const correctedContent = gatheredWebData.slice(0, 10).map((d, i) =>
+                      `${i+1}. ${d.title || 'Untitled'}\n   URL: ${d.url || 'N/A'}\n   ${(d.snippet || '').substring(0, 200)}`
+                    ).join('\n\n');
                     const writtenPath = wr.params?.filePath;
                     if (writtenPath && correctedContent.length > 50) {
                       try {
@@ -3063,10 +2562,7 @@ function register(ctx) {
       // never ends abruptly on raw tool output
       // IMPORTANT: avoid blocking browser automations with an extra summary call.
       const shouldAutoSummarize = allToolResults.length > 0 && iteration >= 2 && !userWantsBrowser;
-      // BUG-032: Skip summary if the request was superseded (e.g. user switched models
-      // mid-generation). The old model is gone; attempting generateStream would throw
-      // "Model not loaded" and log a confusing error.
-      if (shouldAutoSummarize && !isStale()) {
+      if (shouldAutoSummarize) {
         const lastResponseTrimmed = (fullResponseText || '').trim();
         const endsWithToolOutput = lastResponseTrimmed.endsWith('```') || 
           lastResponseTrimmed.endsWith('Done') ||
@@ -3075,7 +2571,7 @@ function register(ctx) {
         if (endsWithToolOutput || iteration >= MAX_AGENTIC_ITERATIONS) {
           try {
             console.log('[AI Chat] Generating final summary...');
-            if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('agentic-phase', { phase: 'generating-summary', status: 'start', label: 'Generating response summary' });
+            if (mainWindow) mainWindow.webContents.send('llm-thinking-token', '[Generating summary...]\n');
             
             const toolsSummary = allToolResults.slice(-10).map(tr => {
               const s = tr.result?.success ? 'done' : 'failed';
@@ -3091,11 +2587,11 @@ function register(ctx) {
               maxTokens: 512,
               temperature: 0.3,
             }, (token) => {
-              if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('llm-token', token);
+              // Don't stream summary tokens into the main response; it can look like a hang.
+              // We only append the finished summary at the end.
             }, (thinkToken) => {
               if (mainWindow) mainWindow.webContents.send('llm-thinking-token', thinkToken);
             });
-            if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('agentic-phase', { phase: 'generating-summary', status: 'done', label: 'Generating response summary' });
             
             if (summaryResult.text) {
               fullResponseText += '\n\n' + summaryResult.text;
@@ -3117,15 +2613,12 @@ function register(ctx) {
                               /\b(?:file|desktop|document)\b.*\b(?:save|write|create)\b/i.test(message);
         const wroteFile = allToolResults.some(tr => tr.tool === 'write_file' && tr.result?.success);
 
-        // Build corrected content from gathered data — formatted as proper Markdown report.
-        // Uses a structured format with headers and URLs so it passes quality checks
-        // and is actually readable for the end user. All three fallback paths use this.
+        // Build corrected content from gathered data
         const buildCorrectedContent = () => {
-          const now = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-          const sections = gatheredWebData.slice(0, 10).map((r, i) =>
-            `## ${i + 1}. ${r.title || 'Result'}\n**URL:** ${r.url}${r.snippet ? '\n\n' + r.snippet.substring(0, 300) : ''}`
+          const lines = gatheredWebData.slice(0, 10).map((r, i) =>
+            `${i + 1}. ${r.title}\n   URL: ${r.url}${r.snippet ? '\n   ' + r.snippet.substring(0, 200) : ''}`
           );
-          return `# Research Results\n*Compiled ${now}*\n\n${sections.join('\n\n---\n\n')}`;
+          return `Results gathered from web search:\n\n${lines.join('\n\n')}`;
         };
 
         if (userWantsFile && !wroteFile) {
@@ -3168,87 +2661,26 @@ function register(ctx) {
         }
       }
 
-      // Skip storing incoherent output — memoryStore was already purged in BUG-039 handler.
-      // Storing word salad here would re-inject it as context on the very next request.
-      if (!_incoherentOutputOccurred) {
-        memoryStore.addConversation('assistant', fullResponseText);
-      }
-
-      // ── Post-loop history cleanup ──
-      // After the agentic loop finishes, the chatHistory contains intermediate
-      // turns: injected tool feedback (as 'user'), iteration prompts, continue
-      // instructions, and intermediate model responses. For large models this
-      // doesn't matter, but for small models (0.6B-4B) it completely poisons
-      // the next user message — they pattern-match on the tool feedback and
-      // repeat "No further action is needed" regardless of the new question.
-      //
-      // Fix: condense chatHistory to system + original user message + final
-      // model response. This gives the next message a clean slate while
-      // preserving the conversation thread. KV cache must be invalidated
-      // since the history no longer matches the evaluated sequence.
-      if (iteration > 1 && llmEngine.chatHistory?.length > 3) {
-        const systemMsg = llmEngine.chatHistory.find(h => h.type === 'system');
-        const condensed = [];
-        if (systemMsg) condensed.push(systemMsg);
-        // Keep only the user's original message (first user entry after system)
-        // and the model's final response (last model entry)
-        const userEntries = llmEngine.chatHistory.filter(h => h.type === 'user');
-        const modelEntries = llmEngine.chatHistory.filter(h => h.type === 'model');
-        if (userEntries.length > 0) condensed.push(userEntries[0]); // Original user message
-        if (modelEntries.length > 0) condensed.push(modelEntries[modelEntries.length - 1]); // Final model response
-        llmEngine.chatHistory = condensed;
-        llmEngine.lastEvaluation = null; // Invalidate KV cache
-        console.log(`[AI Chat] Condensed chatHistory: ${userEntries.length + modelEntries.length} turns → ${condensed.length} entries (prevents template loop)`);
-      }
+      memoryStore.addConversation('assistant', fullResponseText);
 
       // Clean up response display: ONLY the assistant's natural-language responses.
       // Tool output is streamed live and should not become the final assistant message.
       let cleanLocalResponse = displayResponseText;
       cleanLocalResponse = cleanLocalResponse.replace(/<think(?:ing)?>\s*[\s\S]*?<\/think(?:ing)?>/gi, '');
       cleanLocalResponse = cleanLocalResponse.replace(/<\/?think(?:ing)?>/gi, '');
-      // Strip fenced tool call JSON blocks (```json\n{"tool":...}```) from the committed message.
-      cleanLocalResponse = cleanLocalResponse.replace(/```(?:json|tool)?\s*\n?\s*\{[\s\S]*?"tool"[\s\S]*?```/g, '');
-      // Strip bare unfenced tool call JSON objects ({"tool":...}) from the committed message.
-      // Nested-brace-aware: {"tool":"x","params":{"key":"val"}} → fully removed (not just inner }).
-      cleanLocalResponse = cleanLocalResponse.replace(/^\s*\{[^{}]*"tool"\s*:\s*"[^"]*"[^{}]*"params"\s*:\s*\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}[^{}]*\}\s*$/gm, '');
-      // Also strip any isolated lone } that prior cleanup may have left behind
-      cleanLocalResponse = cleanLocalResponse.replace(/^\s*\}\s*$/gm, '');
       cleanLocalResponse = cleanLocalResponse.replace(/\n\n\*(?:Continuing browser automation|Detected repetitive loop|Reached max \d+ iterations)\.\.\.?\*\n?/g, '');
       cleanLocalResponse = cleanLocalResponse.replace(/\n{3,}/g, '\n\n').trim();
 
       // Never return an empty success response (this causes "No response generated" in the UI)
-      // BUG-FIX: If we have a pre-rollback planning phrase (e.g. "I will check your code")
-      // AND the committed response is also non-empty, prepend the planning phrase so the user
-      // sees both the intent AND the result — not just the result.
-      if (savedExplanationText && cleanLocalResponse &&
-          !cleanLocalResponse.startsWith(savedExplanationText.substring(0, 20))) {
-        cleanLocalResponse = savedExplanationText + '\n\n' + cleanLocalResponse;
-        console.log(`[AI Chat] Prepended savedExplanationText (${savedExplanationText.length} chars) to cleanLocalResponse`);
-      }
-
       if (!cleanLocalResponse) {
-        const rawPreview = displayResponseText.substring(0, 120).replace(/\n/g, '\\n');
-        console.log(`[AI Chat] ⚠️ cleanLocalResponse is EMPTY — displayResponseText was ${displayResponseText.length} chars (raw preview: "${rawPreview}") | allToolResults: ${allToolResults.length}`);
-        // Use the pre-rollback explanation text if available (e.g. model explained before failing to call a tool)
-        if (savedExplanationText) {
-          cleanLocalResponse = savedExplanationText;
-          console.log(`[AI Chat] Using savedExplanationText (${cleanLocalResponse.length} chars) as final response`);
-        } else if (allToolResults.length > 0) {
-          // Tools ran but no prose — return empty string. The tool call blocks in the
-          // UI already show what happened; a canned sentence adds nothing.
-          cleanLocalResponse = '';
-        } else {
-          // Model produced only <think> blocks or empty output — return '' so
-          // the frontend shows the thinking block alone, not "No response generated."
-          cleanLocalResponse = '';
-        }
+        if (allToolResults.length > 0) cleanLocalResponse = 'Tools executed. Continue with the next step or ask for a summary.';
+        else cleanLocalResponse = 'No response generated.';
       }
 
       // Report token telemetry for local LLM
       const localTokensUsed = estimateTokens(fullResponseText);
       _reportTokenStats(localTokensUsed, mainWindow);
 
-      console.log(`[AI Chat] ══ FINAL RETURN ══ ${cleanLocalResponse.length} chars → UI | preview: "${cleanLocalResponse.substring(0, 80).replace(/\n/g, '\\n')}"`);
       return {
         success: true,
         text: cleanLocalResponse,

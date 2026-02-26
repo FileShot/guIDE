@@ -35,8 +35,7 @@ function detectTruncation(responseText) {
   const hasUnclosedCodeBlock = (trimmedResponse.match(/```/g) || []).length % 2 !== 0;
   const endsAbruptly = trimmedResponse.length > 100 && (
     hasUnclosedCodeBlock ||
-    /[{(\[,:;=]$/.test(trimmedResponse) ||
-    (/\w$/.test(trimmedResponse) && !trimmedResponse.endsWith('.'))
+    /[{(\[,:;=]$/.test(trimmedResponse)
   );
   return { trimmedResponse, hasUnclosedCodeBlock, endsAbruptly };
 }
@@ -273,7 +272,7 @@ function enrichErrorFeedback(toolName, error, failCounts = {}) {
     tips.push('Provide the complete file content in the "content" parameter. Never send empty content.');
   }
   if (/not found|no such file/i.test(err) && /file/i.test(toolName)) {
-    tips.push('File does not exist. Use list_directory to see available files, or create it with write_file.');
+    tips.push('File does not exist. Use find_files to search for it by name across the project, then retry read_file with the correct full path.');
   }
 
   // Browser errors
@@ -483,7 +482,7 @@ const EXPANDED_REFUSAL_PATTERNS = new RegExp([
  * @param {number} iteration - Current agentic iteration
  * @returns {{ verdict: string, reason: string }}
  */
-function evaluateResponse(responseText, functionCalls, taskType, iteration) {
+function evaluateResponse(responseText, functionCalls, taskType, iteration, hasRunTools = false) {
   const text = (responseText || '').trim();
   const hasFunctionCalls = Array.isArray(functionCalls) && functionCalls.length > 0;
 
@@ -523,7 +522,9 @@ function evaluateResponse(responseText, functionCalls, taskType, iteration) {
   // ── REFUSAL DETECTION (agentic tasks, iterations 1-5) ──
   // After iteration 5, the model may legitimately be explaining limitations
   // encountered during execution (e.g., "I couldn't find X on that page").
-  if (EXPANDED_REFUSAL_PATTERNS.test(text) && iteration <= 5) {
+  // BUG-NEW-B: If real tools ran this iteration, skip refusal ROLLBACK — the model
+  // is summarizing what it found, not refusing to act.
+  if (EXPANDED_REFUSAL_PATTERNS.test(text) && iteration <= 5 && !hasRunTools) {
     return { verdict: 'ROLLBACK', reason: 'refusal' };
   }
 
@@ -531,8 +532,10 @@ function evaluateResponse(responseText, functionCalls, taskType, iteration) {
   // Only catches clear cases: model says "I've done X" / "completed" / "finished"
   // but never actually called any tools. Does NOT catch future-tense ("I'll do X")
   // because the model may be about to call tools in the same response.
+  // BUG-NEW-B: If real tools ran this iteration, past-tense language is a legitimate
+  // summary ("I searched and found..."), not hallucination — skip the ROLLBACK.
   const { hallucinatedActions } = detectActionHallucination(text);
-  if (hallucinatedActions && text.length > 50 && iteration <= 3) {
+  if (hallucinatedActions && text.length > 50 && iteration <= 3 && !hasRunTools) {
     return { verdict: 'ROLLBACK', reason: 'hallucination' };
   }
 
@@ -556,7 +559,7 @@ function evaluateResponse(responseText, functionCalls, taskType, iteration) {
   // instead of doing it, rollback so it tries again. After iteration 2,
   // the nudge system handles this instead (model sees feedback).
   const { describedActions } = detectActionHallucination(text);
-  if (describedActions && iteration <= 2) {
+  if (describedActions && iteration <= 2 && !hasRunTools) {
     return { verdict: 'ROLLBACK', reason: 'described_not_executed' };
   }
 
@@ -768,7 +771,13 @@ function classifyResponseFailure(responseText, hasToolCalls, taskType, iteration
   if (taskType === 'chat') return null;
 
   // ── 1. REFUSAL — model says it can't do something it can ──
-  if (EXPANDED_REFUSAL_PATTERNS.test(text) && iteration < 10) {
+  // CRITICAL: if real tools already ran this session (allToolResults.length > 0),
+  // a text-only response is the FINAL ANSWER — not a refusal. Without this guard,
+  // the classifier flags valid summaries like "Summary of Latest AI News..." as refusals
+  // because the prose incidentally matches a pattern (e.g. "you can..."), triggering
+  // forced retries that REPLACE the good response with a weaker one. Same guard exists
+  // in evaluateResponse (!hasRunTools) — both must be in sync.
+  if (EXPANDED_REFUSAL_PATTERNS.test(text) && iteration < 10 && allToolResults.length === 0) {
     const lower = (originalMessage || '').toLowerCase();
     let forcedTools = null;
     if (/\b(search|look\s*up|find|news|weather|current|latest|trending)\b/i.test(lower)) forcedTools = 'web_search';
@@ -824,29 +833,7 @@ function classifyResponseFailure(responseText, hasToolCalls, taskType, iteration
         severity: 'nudge',
         recovery: {
           action: 'nudge',
-          prompt: `STOP. You wrote tool calls using bash/shell syntax inside a code block. That format does NOT execute any tool.\n\nTo call a tool you MUST output a JSON block in exactly this format:\n\`\`\`json\n{"tool": "TOOL_NAME", "params": {"key": "value"}}\n\`\`\`\n\nCall the appropriate tool now using the JSON format above.`,
-        },
-      };
-    }
-  }
-
-  // ── 2c. FABRICATED PROJECT INFO — model states file/directory details without calling a tool ──
-  // Models sometimes output file listings or directory structures invented from memory
-  // instead of calling the appropriate tool to read actual disk state. The data is unreliable.
-  if (taskType !== 'chat' && nudgesRemaining > 0) {
-    const fileListEntryRegex = /^[\s]*[-*\d.]\s+[\w./\\][\w./\\-]*\.\w{2,6}\s*$/gm;
-    const fileListMatches = text.match(fileListEntryRegex);
-    const hasFabricatedListing = fileListMatches && fileListMatches.length >= 3;
-    const inlineFileListRegex = /\w+\.\w{2,5}(?:,\s*\w+\.\w{2,5}){2,}/;
-    const hasFileListContext = /\b(files?|directory|folder|contents?|structure)\b.{0,60}\b\w+\.\w{2,5}\b/i.test(text)
-      || /\b\w+\.\w{2,5}\b.{0,30}\b(file|exists?|found|located|contain)\b/i.test(text);
-    if ((hasFabricatedListing || (inlineFileListRegex.test(text) && hasFileListContext)) && iteration <= 4) {
-      return {
-        type: 'fabricated_info',
-        severity: 'nudge',
-        recovery: {
-          action: 'nudge',
-          prompt: `STOP. You described files or project details from memory — that data is unreliable. You MUST call the appropriate tool to read what actually exists on disk. Do NOT guess or invent. Call a tool now to get the real information.`,
+          prompt: `STOP. You wrote tool calls using bash/shell syntax inside a code block. That format does NOT execute any tool.\n\nTo call a tool you MUST output a JSON block in exactly this format:\n\`\`\`json\n{"tool": "read_file", "params": {"filePath": "src/app.js"}}\n\`\`\`\n\nCall the appropriate tool now using the JSON format above.`,
         },
       };
     }
@@ -898,7 +885,14 @@ function classifyResponseFailure(responseText, hasToolCalls, taskType, iteration
   // repetition and near-zero unique vocabulary — detect that pattern and classify correctly.
   // Also detect multilingual token salad: high non-ASCII density signals the model is
   // emitting cross-language token patterns rather than coherent English responses.
-  const _gWords = text.toLowerCase().replace(/[^a-z\s]/g, ' ').split(/\s+/).filter(w => w.length > 2);
+  //
+  // IMPORTANT: Filter common English stopwords before computing repetition ratio.
+  // Without this, normal creative writing (stories, essays) triggers false positives
+  // because words like "the", "and", "was", "in", "of" naturally repeat many times.
+  // Real gibberish/token-salad repeats CONTENT words, not just function words.
+  const _gStopwords = new Set(['the','and','was','is','are','were','be','been','being','have','has','had','do','does','did','will','would','could','should','may','might','shall','can','that','this','these','those','with','from','into','onto','upon','they','them','their','there','here','when','where','what','which','who','how','but','not','for','nor','yet','its','his','her','our','your','him','she','him','out','all','each','every','both','few','more','most','other','some','such','than','too','very','just','also','over','then','now','only','even','back','after','before','about','through','during','because','while','since','although','though','however','therefore','thus','hence','whether','either','neither','another','again','already','much','many','any','one','two','three','four','five','six','seven','eight','nine','ten']);
+  const _gAllWords = text.toLowerCase().replace(/[^a-z\s]/g, ' ').split(/\s+/).filter(w => w.length > 2);
+  const _gWords = _gAllWords.filter(w => !_gStopwords.has(w));
   const _gNonASCIIRatio = (text.match(/[^\x00-\x7F]/g) || []).length / Math.max(text.length, 1);
   if (_gWords.length >= 20) {
     const _gFreq = {};
@@ -906,7 +900,7 @@ function classifyResponseFailure(responseText, hasToolCalls, taskType, iteration
     const _gUnique = Object.keys(_gFreq).length;
     const _gHighRepeat = Object.values(_gFreq).filter(c => c >= 3).length;
     const _gRepRatio = (_gWords.length - _gUnique) / _gWords.length;
-    if ((_gRepRatio > 0.4 && _gHighRepeat > 5) || _gNonASCIIRatio > 0.03) {
+    if ((_gRepRatio > 0.6 && _gHighRepeat > 10) || _gNonASCIIRatio > 0.03) {
       return {
         type: 'incoherent_output',
         severity: 'stop',

@@ -110,6 +110,10 @@ export const RATE_LIMITS = {
   analytics: { name: 'analytics', maxRequests: 30, windowSeconds: 60 },
   /** General API: 60 per minute per IP */
   general: { name: 'general', maxRequests: 60, windowSeconds: 60 },
+  /** OAuth initiations (GitHub/Google login): 15 per 15 min per IP */
+  oauth: { name: 'oauth', maxRequests: 15, windowSeconds: 15 * 60 },
+  /** Stripe checkout session creation: 10 per hour per IP */
+  checkout: { name: 'checkout', maxRequests: 10, windowSeconds: 60 * 60 },
 } as const;
 
 /**

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { Menu, X } from 'lucide-react';
 
@@ -35,7 +36,7 @@ export default function Header() {
       <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2.5 group">
-          <img src="/logo.png" alt="guIDE" className="w-8 h-8" />
+          <Image src="/logo.png" alt="guIDE" width={32} height={32} priority />
           <span className="text-lg font-semibold tracking-tight brand-font">
             <span className="text-white group-hover:text-neutral-300 transition-colors">gu</span>
             <span className="text-accent">IDE</span>

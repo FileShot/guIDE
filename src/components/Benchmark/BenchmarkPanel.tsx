@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  Play, Square, BarChart3, CheckCircle, XCircle,
-  Clock, Cpu, ChevronDown, ChevronRight, RefreshCw,
-  Loader2, Zap, Target, MessageSquare, Code, Copy,
+  Play, Square, BarChart3, CheckCircle, XCircle, AlertTriangle,
+  Clock, Cpu, ChevronDown, ChevronRight, RefreshCw, Save,
+  Loader2, Zap, Target, MessageSquare, Globe, FileText,
 } from 'lucide-react';
 import type {
   AvailableModel, LLMStatusEvent, BenchmarkTestCase,
@@ -14,15 +14,12 @@ interface BenchmarkPanelProps {
   llmStatus: LLMStatusEvent;
 }
 
-// Score a result based on the test case definition.
-// ⚠️  CANONICAL SOURCE: main/benchmarkScorer.js — keep this in sync!
-// This is duplicated here because the renderer cannot import Node modules.
-// The headless benchmark script uses the canonical module directly.
+// Score a result based on the test case definition (mirrors main process logic)
 function scoreResult(
   tc: BenchmarkTestCase,
   chatResult: any,
   capturedTools: string[]
-): { score: number; passed: boolean; errors: string[]; refusalDetected: boolean; contentChecksPassed: number; contentChecksTotal: number } {
+): { score: number; passed: boolean; errors: string[]; refusalDetected: boolean } {
   const responseText: string = chatResult?.text || chatResult?.response || '';
   const uniqueTools = [...new Set(capturedTools)];
   const errors: string[] = [];
@@ -69,43 +66,16 @@ function scoreResult(
     }
   }
 
-  // ── Fact-checking: expectedContent verification ──
-  let contentChecksPassed = 0;
-  let contentChecksTotal = 0;
-
-  if ((tc as any).expectedContent && Array.isArray((tc as any).expectedContent) && (tc as any).expectedContent.length > 0) {
-    const lower = responseText.toLowerCase();
-    const expectedContent: string[][] = (tc as any).expectedContent;
-    contentChecksTotal = expectedContent.length;
-
-    for (const group of expectedContent) {
-      const groupMatch = group.some((keyword: string) => lower.includes(keyword.toLowerCase()));
-      if (groupMatch) {
-        contentChecksPassed++;
-      } else {
-        const exp = group.length === 1 ? `"${group[0]}"` : `one of [${group.join(', ')}]`;
-        errors.push(`Fact-check: expected ${exp} not found`);
-        score = Math.max(0, score - 15);
-      }
-    }
-
-    // If less than half of content checks pass, fail the test
-    if (contentChecksPassed < Math.ceil(contentChecksTotal / 2)) {
-      passed = false;
-    }
-  }
-
-  return { score, passed, errors, refusalDetected, contentChecksPassed, contentChecksTotal };
+  return { score, passed, errors, refusalDetected };
 }
 
 // Category icons
 const CATEGORY_ICONS: Record<string, React.ReactNode> = {
-  'Explicit Task': <Target size={12} className="text-[#569cd6]" />,
-  'Vague Inference': <Zap size={12} className="text-[#dcdcaa]" />,
+  'Tool Recognition': <Target size={12} className="text-[#569cd6]" />,
+  'Implicit Tool Use': <Zap size={12} className="text-[#dcdcaa]" />,
   'Multi-step': <RefreshCw size={12} className="text-[#c586c0]" />,
-  'Coding': <Code size={12} className="text-[#4ec9b0]" />,
+  'Refusal Detection': <AlertTriangle size={12} className="text-[#d7ba7d]" />,
   'Chat Baseline': <MessageSquare size={12} className="text-[#89d185]" />,
-  'Duplicate Tool': <Copy size={12} className="text-[#d7ba7d]" />,
 };
 
 export const BenchmarkPanel: React.FC<BenchmarkPanelProps> = ({
@@ -123,17 +93,6 @@ export const BenchmarkPanel: React.FC<BenchmarkPanelProps> = ({
   const [showTestPicker, setShowTestPicker] = useState(true);
   const cancelledRef = useRef(false);
   const capturedToolsRef = useRef<string[]>([]);
-  const capturedFileWritesRef = useRef<Array<{ path: string; content: string }>>([]); 
-  const allResultsRef = useRef<Record<string, BenchmarkModelResult>>({});
-
-  // ── Reliability constants ──
-  const CONSECUTIVE_FAIL_SKIP = 3;   // Skip remaining tests after N consecutive timeouts/failures
-  const PER_TEST_TIMEOUT = 90_000;   // 90 seconds per test
-  const MODEL_LOAD_TIMEOUT = 180_000; // 3 minutes to load a model
-  const SETTLE_DELAY = 2000;          // ms after model load
-  const POST_RESET_DELAY = 300;       // ms after session reset
-  const POST_CANCEL_DELAY = 1000;     // ms after cancel to let engine recover
-  const SAVE_INTERVAL = 3;            // Save results every N tests
 
   // Load test cases on mount
   useEffect(() => {
@@ -177,7 +136,7 @@ export const BenchmarkPanel: React.FC<BenchmarkPanelProps> = ({
     });
   }, [testCases]);
 
-  // Run the benchmark — hardened for multi-model reliability
+  // Run the benchmark
   const runBenchmark = useCallback(async () => {
     const api = window.electronAPI;
     if (!api) return;
@@ -191,22 +150,12 @@ export const BenchmarkPanel: React.FC<BenchmarkPanelProps> = ({
     setLiveResults([]);
     cancelledRef.current = false;
     const allResults: Record<string, BenchmarkModelResult> = {};
-    allResultsRef.current = allResults;
 
     const activeTests = testCases.filter(tc => testIds.includes(tc.id));
 
-    // Subscribe to tool execution events to capture tools + file writes
-    const toolCleanup = api.onToolExecuting?.((data: { tool: string; params: any }) => {
+    // Subscribe to tool execution events to capture what tools are called
+    const toolCleanup = api.onToolExecuting?.((data: { tool: string }) => {
       if (data?.tool) capturedToolsRef.current.push(data.tool);
-      // Capture file write contents for HTML output examples
-      if (data?.tool && /write|create|save/i.test(data.tool) && data.params) {
-        const p = data.params;
-        const filePath = p.path || p.filePath || p.file || '';
-        const content = p.content || p.data || p.text || '';
-        if (filePath && content && /\.html?$/i.test(filePath)) {
-          capturedFileWritesRef.current.push({ path: filePath, content });
-        }
-      }
     });
 
     // Helper: run a promise with a timeout (prevents benchmark freeze)
@@ -219,26 +168,6 @@ export const BenchmarkPanel: React.FC<BenchmarkPanelProps> = ({
       ]);
     };
 
-    // Helper: aggressive engine reset (fixes stuck state after timeouts)
-    const hardReset = async () => {
-      try { await api.llmCancel?.(); } catch (_) {}
-      await new Promise(r => setTimeout(r, POST_CANCEL_DELAY));
-      try { await api.llmResetSession(); } catch (_) {}
-      try { await (api as any).memoryClearConversations?.(); } catch (_) {}
-      await new Promise(r => setTimeout(r, POST_RESET_DELAY));
-    };
-
-    // Helper: save intermediate results so nothing is lost
-    const saveIntermediate = () => {
-      if (Object.keys(allResults).length > 0 && api.benchmarkSaveResults) {
-        api.benchmarkSaveResults({
-          timestamp: new Date().toISOString(),
-          models: { ...allResults },
-          partial: true,
-        });
-      }
-    };
-
     try {
       for (let mi = 0; mi < modelPaths.length; mi++) {
         if (cancelledRef.current) break;
@@ -247,21 +176,22 @@ export const BenchmarkPanel: React.FC<BenchmarkPanelProps> = ({
 
         setProgress({ phase: 'Loading model...', model: modelName, test: '', pct: (mi / modelPaths.length) * 100 });
 
-        // ── Full hard reset before loading new model ──
-        await hardReset();
+        // ── CRITICAL: Clear ALL state between models to prevent session bleed ──
+        // Without this, memoryStore injects prior test conversations into prompts
+        try { await api.llmResetSession(); } catch (_) {}
+        try { await (api as any).memoryClearConversations?.(); } catch (_) {}
 
-        // Load model (with timeout for large models)
+        // Load model (with 3-minute timeout for large models)
         try {
           const loadResult = await withTimeout(
             api.llmLoadModel(modelPath),
-            MODEL_LOAD_TIMEOUT,
+            180_000,
             `Loading ${modelName}`
           );
           if (!loadResult.success) throw new Error(loadResult.error || 'Load failed');
           // Give model time to settle
-          await new Promise(r => setTimeout(r, SETTLE_DELAY));
+          await new Promise(r => setTimeout(r, 2000));
         } catch (loadErr: any) {
-          console.warn(`[Benchmark] Model load failed for ${modelName}: ${loadErr.message}`);
           allResults[modelName] = {
             modelName, modelPath, error: loadErr.message,
             tests: activeTests.map(tc => ({
@@ -273,141 +203,65 @@ export const BenchmarkPanel: React.FC<BenchmarkPanelProps> = ({
             overallScore: 0, totalPassed: 0, totalTests: activeTests.length,
           };
           setResults({ ...allResults });
-          saveIntermediate();
-          continue; // Skip to next model
+          continue;
         }
 
         const modelResults: BenchmarkTestResult[] = [];
-        let consecutiveFailures = 0;
-        let skippedRemainder = false;
 
         for (let ti = 0; ti < activeTests.length; ti++) {
           if (cancelledRef.current) break;
           const tc = activeTests[ti];
 
-          // ── Auto-skip: if model timed out/failed N times in a row, skip rest ──
-          if (consecutiveFailures >= CONSECUTIVE_FAIL_SKIP) {
-            if (!skippedRemainder) {
-              console.warn(`[Benchmark] ${modelName}: ${consecutiveFailures} consecutive failures — skipping remaining ${activeTests.length - ti} tests`);
-              skippedRemainder = true;
-            }
-            modelResults.push({
-              testId: tc.id, category: tc.category, description: tc.description,
-              modelName, passed: false, score: 0, toolsCalled: [],
-              response: '', errors: [`Skipped: model failed ${consecutiveFailures} consecutive tests`],
-              refusalDetected: false, durationMs: 0,
-            });
-            setLiveResults(prev => [...prev, modelResults[modelResults.length - 1]]);
-            continue;
-          }
-
           setProgress({
-            phase: skippedRemainder ? 'Skipping...' : 'Testing...',
+            phase: 'Testing...',
             model: modelName,
             test: tc.description,
             pct: ((mi * activeTests.length + ti) / (modelPaths.length * activeTests.length)) * 100,
           });
 
-          // ── Full state reset between EVERY test ──
+          // ── CRITICAL: Full state reset between EVERY test ──
+          // Reset LLM session (clears chatHistory + KV cache)
           try { await api.llmResetSession(); } catch (_) {}
+          // Clear conversation memory (prevents prior test context from bleeding in)
           try { await (api as any).memoryClearConversations?.(); } catch (_) {}
-          await new Promise(r => setTimeout(r, POST_RESET_DELAY));
+          // Small delay to let engine settle
+          await new Promise(r => setTimeout(r, 300));
 
-          // Clear captured tools and file writes
+          // Clear captured tools
           capturedToolsRef.current = [];
-          capturedFileWritesRef.current = [];
 
           const start = Date.now();
           let chatResult: any;
-          let timedOut = false;
           try {
+            // Per-test timeout: 90 seconds. Prevents the benchmark from freezing
+            // if a model hangs during generation or enters an infinite agentic loop.
             chatResult = await withTimeout(
               api.aiChat(tc.prompt, {
                 maxIterations: tc.maxIterations || 3,
               }),
-              PER_TEST_TIMEOUT,
+              90_000,
               `Test: ${tc.description}`
             );
           } catch (err: any) {
             chatResult = { success: false, error: err.message };
-            timedOut = err.message?.includes('Timeout');
-            // Force-cancel any stuck generation
+            // If the test timed out, cancel any ongoing generation
             try { await api.llmCancel?.(); } catch (_) {}
-            await new Promise(r => setTimeout(r, POST_CANCEL_DELAY));
-            // Extra reset after timeout to clear corrupted state
-            if (timedOut) {
-              try { await api.llmResetSession(); } catch (_) {}
-              await new Promise(r => setTimeout(r, POST_RESET_DELAY));
-            }
+            // Small delay to let cancellation propagate
+            await new Promise(r => setTimeout(r, 500));
           }
 
           const { score, passed, errors, refusalDetected } = scoreResult(tc, chatResult, capturedToolsRef.current);
           const uniqueTools = [...new Set(capturedToolsRef.current)];
 
-          // For coding tests, capture the full HTML output
-          const isCoding = tc.category === 'Coding';
-          const responseText = chatResult?.text || chatResult?.response || '';
-          let htmlOutput: string | undefined;
-          if (isCoding) {
-            // First try: captured file write content
-            const htmlWrite = capturedFileWritesRef.current.find(w => /\.html?$/i.test(w.path));
-            if (htmlWrite?.content) {
-              htmlOutput = htmlWrite.content;
-            } else {
-              // Fallback: try to read HTML from desktop
-              try {
-                const desktop = (await (api as any).getDesktopPath?.()) || `C:\\Users\\${require('os')?.userInfo?.()?.username || 'brend'}\\Desktop`;
-                // Check common filenames from our coding prompts
-                const candidates = ['tic-tac-toe.html', 'tictactoe.html', 'portfolio.html', 'snake.html', 'calculator.html', 'bean-there.html', 'landing.html', 'index.html'];
-                for (const fname of candidates) {
-                  try {
-                    const content = await api.readFile?.(`${desktop}\\${fname}`);
-                    if (content && typeof content === 'string' && content.length > 50) {
-                      htmlOutput = content;
-                      break;
-                    }
-                  } catch (_) {}
-                }
-              } catch (_) {}
-            }
-            // Last fallback: extract HTML from response if it contains a full document
-            if (!htmlOutput && responseText.includes('<!DOCTYPE') || responseText.includes('<html')) {
-              const htmlMatch = responseText.match(/<!DOCTYPE[\s\S]*<\/html>/i) || responseText.match(/<html[\s\S]*<\/html>/i);
-              if (htmlMatch) htmlOutput = htmlMatch[0];
-            }
-          }
-
           const result: BenchmarkTestResult = {
             testId: tc.id, category: tc.category, description: tc.description,
             modelName, passed, score, toolsCalled: uniqueTools,
-            response: isCoding ? responseText : responseText.substring(0, 500),
-            ...(htmlOutput ? { htmlOutput } : {}),
+            response: (chatResult?.text || chatResult?.response || '').substring(0, 500),
             errors, refusalDetected, durationMs: Date.now() - start,
           };
 
           modelResults.push(result);
           setLiveResults(prev => [...prev, result]);
-
-          // Track consecutive failures (timeout or score=0)
-          if (timedOut || (score === 0 && !passed)) {
-            consecutiveFailures++;
-          } else {
-            consecutiveFailures = 0;
-          }
-
-          // Periodic intermediate save
-          if ((ti + 1) % SAVE_INTERVAL === 0) {
-            const partialScore = modelResults.length > 0
-              ? Math.round(modelResults.reduce((a, r) => a + r.score, 0) / modelResults.length) : 0;
-            allResults[modelName] = {
-              modelName, modelPath, tests: [...modelResults], overallScore: partialScore,
-              totalPassed: modelResults.filter(r => r.passed).length,
-              totalTests: modelResults.length,
-            };
-            allResultsRef.current = { ...allResults };
-            setResults({ ...allResults });
-            saveIntermediate();
-          }
         }
 
         const overallScore = modelResults.length > 0
@@ -419,24 +273,19 @@ export const BenchmarkPanel: React.FC<BenchmarkPanelProps> = ({
           totalPassed: modelResults.filter(r => r.passed).length,
           totalTests: modelResults.length,
         };
-        allResultsRef.current = { ...allResults };
         setResults({ ...allResults });
         setExpandedModels(prev => new Set([...prev, modelName]));
-
-        // Save after each model completes
-        saveIntermediate();
       }
     } finally {
       if (typeof toolCleanup === 'function') toolCleanup();
       setIsRunning(false);
       setProgress(null);
 
-      // Final save
-      const finalResults = Object.keys(allResults).length > 0 ? allResults : allResultsRef.current;
-      if (Object.keys(finalResults).length > 0 && api.benchmarkSaveResults) {
+      // Save results
+      if (Object.keys(allResults).length > 0 && api.benchmarkSaveResults) {
         api.benchmarkSaveResults({
           timestamp: new Date().toISOString(),
-          models: finalResults,
+          models: allResults,
         });
       }
     }
@@ -497,24 +346,8 @@ export const BenchmarkPanel: React.FC<BenchmarkPanelProps> = ({
       <div className="flex-1 overflow-auto">
         {/* Model Selection */}
         <div className="px-3 py-2 border-b border-[#3c3c3c]">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-1 text-[11px] text-[#858585] uppercase tracking-wider">
-              <Cpu size={10} /> Select Models to Test
-            </div>
-            {availableModels.length > 0 && (
-              <button
-                onClick={() => {
-                  if (selectedModels.size === availableModels.length) {
-                    setSelectedModels(new Set());
-                  } else {
-                    setSelectedModels(new Set(availableModels.map(m => m.path)));
-                  }
-                }}
-                className="text-[10px] text-[#569cd6] hover:text-[#7ec0ee] transition-colors"
-              >
-                {selectedModels.size === availableModels.length ? 'Deselect All' : 'Select All'}
-              </button>
-            )}
+          <div className="flex items-center gap-1 text-[11px] text-[#858585] uppercase tracking-wider mb-2">
+            <Cpu size={10} /> Select Models to Test
           </div>
           <div className="space-y-0.5 max-h-[150px] overflow-auto">
             {availableModels.map(model => (

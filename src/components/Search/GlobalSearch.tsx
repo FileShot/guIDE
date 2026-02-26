@@ -188,6 +188,7 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ rootPath, onResultCl
               value={query}
               onChange={e => setQuery(e.target.value)}
               onKeyDown={handleKeyDown}
+              autoFocus
             />
             <button
               className={`p-1 mx-0.5 rounded ${caseSensitive ? 'bg-[#007acc] text-white' : 'text-[#858585] hover:text-white'}`}

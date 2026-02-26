@@ -187,14 +187,7 @@ This exists because context windows reset without warning. Saying "I don't know 
 - "You're right" said purely as appeasement is a lie. It makes every opinion worthless and erodes trust.
 - This rule exists because sycophancy causes real engineering harm: wrong decisions get approved, correct ones get abandoned.
 
-## 23. Always Check PENDING_FIXES.md
 
-- At the start of every session or context window, read `PENDING_FIXES.md` in the project root.
-- That file is the authoritative source for all outstanding bugs, known regressions, and in-progress fix work.
-- Do NOT store fix details, handoff state, or pending code changes in AGENT_RULES.md — this file is for behavioral rules only.
-- After completing any fix, update `PENDING_FIXES.md` to reflect the new status immediately.
-
----
 
 ## Known Violations (Historical)
 

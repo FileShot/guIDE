@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import FadeIn from '@/components/FadeIn';
@@ -44,7 +45,7 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         <FadeIn>
           <div className="text-center mb-8">
-            <img src="/logo.png" alt="guIDE" className="w-12 h-12 mx-auto mb-4" />
+            <Image src="/logo.png" alt="guIDE" width={48} height={48} className="mx-auto mb-4" priority />
             <h1 className="text-2xl font-bold text-white">Welcome back</h1>
             <p className="text-sm text-neutral-400 mt-1">
               Sign in to your guIDE account

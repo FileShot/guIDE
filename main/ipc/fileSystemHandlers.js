@@ -5,6 +5,24 @@ const { ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs').promises;
 
+// ── Format on Save ─────────────────────────────────────────────────────────
+// Extensions that Prettier can format (auto-detects parser from filepath)
+const PRETTIER_EXTS = new Set([
+  '.js', '.jsx', '.mjs', '.cjs',
+  '.ts', '.tsx',
+  '.css', '.scss', '.less',
+  '.html', '.vue', '.svelte',
+  '.json', '.jsonc',
+  '.md', '.mdx',
+  '.yaml', '.yml',
+  '.graphql', '.gql',
+]);
+let _prettier = null;
+function getPrettier() {
+  if (_prettier) return _prettier;
+  try { _prettier = require('prettier'); return _prettier; } catch { return null; }
+}
+
 function register(ctx) {
   ipcMain.handle('read-file', async (_, filePath) => {
     if (!ctx.isPathAllowed(filePath)) return { success: false, error: 'Access denied: path outside allowed directories' };
@@ -14,9 +32,22 @@ function register(ctx) {
 
   ipcMain.handle('write-file', async (_, filePath, content) => {
     if (!ctx.isPathAllowed(filePath)) return { success: false, error: 'Access denied: path outside allowed directories' };
+    // Format on Save: run Prettier if the extension is supported and Prettier is available
+    let finalContent = content;
+    if (PRETTIER_EXTS.has(path.extname(filePath).toLowerCase())) {
+      const prettier = getPrettier();
+      if (prettier) {
+        try {
+          finalContent = await prettier.format(content, { filepath: filePath });
+        } catch { /* malformed code or unsupported parser — save as-is */ }
+      }
+    }
     try {
       await fs.mkdir(path.dirname(filePath), { recursive: true });
-      await fs.writeFile(filePath, content, 'utf8');
+      await fs.writeFile(filePath, finalContent, 'utf8');
+      const win = ctx.getMainWindow();
+      if (win) win.webContents.send('files-changed');
+      try { require('./liveServerHandlers').notifyReload(); } catch {}
       return { success: true };
     } catch (error) { return { success: false, error: error.message }; }
   });

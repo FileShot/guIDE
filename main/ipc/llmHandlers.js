@@ -138,6 +138,19 @@ function register(ctx) {
     console.log(`[LLM] Reasoning effort set to: ${level} (thought budget: ${budgetMap[level] === -1 ? 'unlimited' : budgetMap[level]})`);
     return { success: true };
   });
+
+  ipcMain.handle('llm-set-thinking-budget', (_, budget) => {
+    if (budget === 0) {
+      // Reset to profile default based on current reasoningEffort
+      const budgetMap = { low: 256, medium: 1024, high: -1 };
+      ctx.llmEngine.thoughtTokenBudget = budgetMap[ctx.llmEngine.reasoningEffort] ?? 1024;
+      console.log(`[LLM] Thinking budget reset to auto (profile default: ${ctx.llmEngine.thoughtTokenBudget})`);
+    } else {
+      ctx.llmEngine.thoughtTokenBudget = budget; // -1 = unlimited, or exact token count
+      console.log(`[LLM] Thinking budget set to: ${budget === -1 ? 'unlimited' : budget}`);
+    }
+    return { success: true };
+  });
 }
 
 module.exports = { register };

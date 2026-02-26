@@ -42,6 +42,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   fileExists: (filePath) => ipcRenderer.invoke('file-exists', filePath),
   listDirectory: (dirPath) => ipcRenderer.invoke('list-directory', dirPath),
   searchInFiles: (rootPath, query, options) => ipcRenderer.invoke('search-in-files', rootPath, query, options),
+  scanTodos: (rootPath) => ipcRenderer.invoke('scan-todos', rootPath),
+  liveServerStart: (filePath) => ipcRenderer.invoke('live-server-start', filePath),
+  liveServerStop: () => ipcRenderer.invoke('live-server-stop'),
+  liveServerStatus: () => ipcRenderer.invoke('live-server-status'),
+  restRequest: (opts) => ipcRenderer.invoke('rest-request', opts),
 
   // ── Dialogs ──
   showSaveDialog: (options) => ipcRenderer.invoke('show-save-dialog', options),
@@ -73,6 +78,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   llmUpdateParams: (params) => ipcRenderer.invoke('llm-update-params', params),
   llmSetContextSize: (contextSize) => ipcRenderer.invoke('llm-set-context-size', contextSize),
   llmSetReasoningEffort: (level) => ipcRenderer.invoke('llm-set-reasoning-effort', level),
+  llmSetThinkingBudget: (budget) => ipcRenderer.invoke('llm-set-thinking-budget', budget),
   
   // ── GPU ──
   gpuGetInfo: () => ipcRenderer.invoke('gpu-get-info'),
@@ -318,6 +324,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   fileUndoAll: () => ipcRenderer.invoke('file-undo-all'),
   fileAcceptChanges: (filePaths) => ipcRenderer.invoke('file-accept-changes', filePaths),
 
+  // ── Checkpoints ──
+  checkpointList: () => ipcRenderer.invoke('checkpoint-list'),
+  checkpointRestore: (turnId) => ipcRenderer.invoke('checkpoint-restore', turnId),
+  onCheckpointReady: (callback) => _on('checkpoint-ready', callback),
+
   // ── Context Usage ──
   onContextUsage: (callback) => _on('context-usage', callback),
 
@@ -331,11 +342,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // ── Audio Transcription (Speech-to-Text) ──
   transcribeAudio: (audioBase64) => ipcRenderer.invoke('transcribe-audio', audioBase64),
 
-  // ── Image Generation ──
+  // ── Image Generation (cloud) ──
   imageGenerate: (prompt, options) => ipcRenderer.invoke('image-generate', prompt, options),
   imageSave: (imageBase64, mimeType, suggestedName) => ipcRenderer.invoke('image-save', imageBase64, mimeType, suggestedName),
   imageSaveToProject: (imageBase64, mimeType, fileName) => ipcRenderer.invoke('image-save-to-project', imageBase64, mimeType, fileName),
   imageGenStatus: () => ipcRenderer.invoke('image-gen-status'),
+
+  // ── Local Image Generation (stable-diffusion.cpp) ──
+  localImageGenerate: (params) => ipcRenderer.invoke('local-image-generate', params),
+  localImageCancel: () => ipcRenderer.invoke('local-image-cancel'),
+  localImageEngineStatus: () => ipcRenderer.invoke('local-image-engine-status'),
+  onLocalImageProgress: (callback) => {
+    const handler = (_, data) => callback(data);
+    ipcRenderer.on('local-image-progress', handler);
+    return () => ipcRenderer.removeListener('local-image-progress', handler);
+  },
 
   // ── Video Generation ──
   videoGenerate: (prompt, options) => ipcRenderer.invoke('video-generate', prompt, options),
@@ -362,6 +383,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // ── Browser Automation ──
   browserNavigate: (url) => ipcRenderer.invoke('browser-navigate', url),
   browserShow: (bounds) => ipcRenderer.invoke('browser-show', bounds),
+  browserFocus: () => ipcRenderer.invoke('browser-focus'),
   browserHide: () => ipcRenderer.invoke('browser-hide'),
   browserSetBounds: (bounds) => ipcRenderer.invoke('browser-set-bounds', bounds),
   browserGoBack: () => ipcRenderer.invoke('browser-go-back'),

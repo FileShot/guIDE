@@ -36,6 +36,12 @@ class MCPToolServer {
     this._maxFileBackups = 200; // Prevent unbounded growth in long sessions
     this.maxHistory = 50;
 
+    // Checkpoint turn tracking — persistent ring buffer (survives Keep/Undo)
+    this._turnSnapshots = []; // [{ turnId, timestamp, userMessage, files: [{filePath, fileName, isNew, original}] }]
+    this._maxTurnSnapshots = 20;
+    this._currentTurnId = null;
+    this._currentTurnCapture = new Map(); // filePath → {original, isNew} — first write per file per turn
+
     // Cache for tool definitions and prompt (they never change at runtime)
     this._toolDefsCache = null;
     this._toolPromptCache = null;
@@ -159,7 +165,11 @@ class MCPToolServer {
 
     if (toolName === 'list_directory') {
       if (normalized.dirPath == null) {
-        if (typeof normalized.path === 'string') {
+        if (typeof normalized.filePath === 'string') {
+          // Models copy filePath from the system prompt example and use it for all tools
+          normalized.dirPath = normalized.filePath;
+          delete normalized.filePath;
+        } else if (typeof normalized.path === 'string') {
           normalized.dirPath = normalized.path;
           delete normalized.path;
         } else if (typeof normalized.dir === 'string') {
@@ -235,7 +245,18 @@ class MCPToolServer {
     
     // If it's already relative (and validated above), return as-is
     if (!path.isAbsolute(filePath)) return filePath;
-    
+
+    // Detect doubled project root — common model error: model appends projectName to projectPath
+    // e.g. projectPath = /Users/brend/my-app, model provides /Users/brend/my-app/my-app/src/file.js
+    const projBasename = path.basename(this.projectPath).toLowerCase();
+    const afterProj = resolvedNorm.substring(projNorm.length); // e.g. "/my-app" or "/my-app/src/file.js"
+    if (afterProj === '/' + projBasename || afterProj.startsWith('/' + projBasename + '/')) {
+      const rest = afterProj.substring(('/' + projBasename).length); // e.g. "" or "/src/file.js"
+      const corrected = this.projectPath + rest.replace(/\//g, path.sep);
+      console.log(`[MCPToolServer] Doubled project root corrected: "${filePath}" → "${corrected}"`);
+      return corrected;
+    }
+
     // If it starts with the actual project path, it's fine
     if (normalized.toLowerCase().startsWith(projNormalized.toLowerCase())) return filePath;
     
@@ -323,9 +344,9 @@ class MCPToolServer {
       },
       {
         name: 'list_directory',
-        description: 'List files and directories at a path.',
+        description: 'List files and directories at a path. Use "." to list the project root.',
         parameters: {
-          dirPath: { type: 'string', description: 'Directory path', required: true },
+          dirPath: { type: 'string', description: 'Directory path — use "." for project root', required: true },
           recursive: { type: 'boolean', description: 'Recursive listing', required: false },
         },
       },
@@ -1125,6 +1146,10 @@ class MCPToolServer {
   // Bounded backup insertion â€” evicts oldest entries when limit exceeded
   _setFileBackup(filePath, backup) {
     this._fileBackups.set(filePath, backup);
+    // Capture into current turn snapshot (first write per file wins -- preserves true before-state)
+    if (this._currentTurnId && !this._currentTurnCapture.has(filePath)) {
+      this._currentTurnCapture.set(filePath, { original: backup.original, isNew: backup.isNew });
+    }
     if (this._fileBackups.size > this._maxFileBackups) {
       // Evict oldest by timestamp
       let oldestKey = null, oldestTime = Infinity;
@@ -1214,6 +1239,68 @@ class MCPToolServer {
       this._fileBackups.delete(fp);
     }
     return { success: true, cleared: filePaths.length };
+  }
+
+  /** Start a new checkpoint turn -- called at the beginning of each ai-chat request */
+  startTurn(turnId) {
+    this._currentTurnId = turnId;
+    this._currentTurnCapture = new Map();
+  }
+
+  /** Finalize the current turn -- returns snapshot if files were touched, null otherwise */
+  finalizeCurrentTurn(userMessage) {
+    if (!this._currentTurnId || this._currentTurnCapture.size === 0) {
+      this._currentTurnId = null;
+      return null;
+    }
+    const files = [];
+    for (const [filePath, data] of this._currentTurnCapture) {
+      files.push({ filePath, fileName: path.basename(filePath), isNew: data.isNew, original: data.original });
+    }
+    const snapshot = {
+      turnId: this._currentTurnId,
+      timestamp: Date.now(),
+      userMessage: (userMessage || '').substring(0, 100),
+      files,
+    };
+    this._turnSnapshots.push(snapshot);
+    if (this._turnSnapshots.length > this._maxTurnSnapshots) this._turnSnapshots.shift();
+    this._currentTurnId = null;
+    return snapshot;
+  }
+
+  /** Get checkpoint list (metadata only -- no file content) */
+  getCheckpointList() {
+    return this._turnSnapshots.map(s => ({
+      turnId: s.turnId,
+      timestamp: s.timestamp,
+      userMessage: s.userMessage,
+      files: s.files.map(f => ({ filePath: f.filePath, fileName: f.fileName, isNew: f.isNew })),
+    }));
+  }
+
+  /** Restore all files from a checkpoint turn to their before-state */
+  async restoreCheckpoint(turnId) {
+    const snapshot = this._turnSnapshots.find(s => s.turnId === turnId);
+    if (!snapshot) return { success: false, error: 'Checkpoint not found' };
+    const results = [];
+    for (const file of snapshot.files) {
+      try {
+        if (file.isNew) {
+          try { await fs.unlink(file.filePath); } catch (_) {}
+          results.push({ filePath: file.filePath, action: 'deleted' });
+        } else {
+          await fs.writeFile(file.filePath, file.original, 'utf8');
+          results.push({ filePath: file.filePath, action: 'restored' });
+        }
+      } catch (err) {
+        results.push({ filePath: file.filePath, action: 'failed', error: err.message });
+      }
+    }
+    // Remove this and all later snapshots (can't restore forward after rolling back)
+    const idx = this._turnSnapshots.findIndex(s => s.turnId === turnId);
+    if (idx !== -1) this._turnSnapshots.splice(idx);
+    return { success: true, results, restoredCount: results.filter(r => r.action !== 'failed').length };
   }
 
   async _fetchWebpage(url) {

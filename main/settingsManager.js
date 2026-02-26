@@ -57,7 +57,7 @@ function createSettingsManager(appBasePath) {
 }
 
 function registerSettingsHandlers(ctx) {
-  const { _readConfig, _writeConfig, cloudLLM, encryptApiKey, mcpToolServer, DEFAULT_SYSTEM_PREAMBLE, imageGen } = ctx;
+  const { _readConfig, _writeConfig, cloudLLM, encryptApiKey, mcpToolServer, DEFAULT_SYSTEM_PREAMBLE, imageGen, llmEngine } = ctx;
 
   ipcMain.handle('save-settings', (_, settings) => {
     const config = _readConfig();
@@ -80,7 +80,37 @@ function registerSettingsHandlers(ctx) {
       _writeConfig(config);
     }
 
-    return { success: true };
+    // ── Apply inference params to live engine (no model reload needed) ────────
+    // These 7 params take effect on the NEXT generation call.
+    // contextSize and gpuLayers require a model reload — we do NOT apply those here.
+    const appliedToEngine = !!(llmEngine && llmEngine.isReady);
+    if (llmEngine) {
+      if (typeof settings.temperature === 'number')   llmEngine.defaultParams.temperature  = settings.temperature;
+      if (typeof settings.maxTokens    === 'number')  llmEngine.defaultParams.maxTokens    = settings.maxTokens;
+      if (typeof settings.topP         === 'number')  llmEngine.defaultParams.topP         = settings.topP;
+      if (typeof settings.topK         === 'number')  llmEngine.defaultParams.topK         = settings.topK;
+      if (typeof settings.repeatPenalty === 'number') llmEngine.defaultParams.repeatPenalty = settings.repeatPenalty;
+      if (typeof settings.seed         === 'number')  llmEngine.defaultParams.seed         = settings.seed;
+      if (typeof settings.generationTimeoutSec === 'number') {
+        llmEngine.generationTimeoutMs = settings.generationTimeoutSec * 1000;
+      }
+      console.log('[Settings] Inference params applied to live engine:', {
+        temperature: llmEngine.defaultParams.temperature,
+        maxTokens:   llmEngine.defaultParams.maxTokens,
+        topP:        llmEngine.defaultParams.topP,
+        topK:        llmEngine.defaultParams.topK,
+        repeatPenalty: llmEngine.defaultParams.repeatPenalty,
+        seed:        llmEngine.defaultParams.seed,
+        generationTimeoutMs: llmEngine.generationTimeoutMs,
+      });
+    }
+
+    return {
+      success: true,
+      appliedToEngine,
+      // Fields that require model reload to take effect
+      needsReload: ['contextSize', 'gpuLayers', 'gpuPreference'],
+    };
   });
 
   ipcMain.handle('load-settings', () => {

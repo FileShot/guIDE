@@ -50,9 +50,10 @@ export function sanitizeSVG(svg: string): string {
  */
 function applyInlineMarkdown(text: string): string {
   return text
-    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/`([^`]+)`/g, '<code style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:3px;padding:1px 4px;font-family:monospace;font-size:0.9em;white-space:nowrap">$1</code>')
     .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*([^*]+)\*/g, '<em>$1</em>');
+    .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" style="color:#3794ff;text-decoration:underline;text-decoration-color:rgba(55,148,255,0.4);cursor:pointer">$1</a>');
 }
 
 /**

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect, forwardRef, useImperativeHandle } from 'react';
-import { X, Circle, Undo2, Check, Search, Play, Code2, Eye, Columns, Globe, MoreHorizontal } from 'lucide-react';
+import { X, Circle, Undo2, Check, Search, Play, Code2, Eye, Columns, Globe, MoreHorizontal, Wifi } from 'lucide-react';
 import { MonacoEditor } from './MonacoEditor';
 import { DiffViewer } from './DiffViewer';
 import { SearchReplace } from './SearchReplace';
@@ -37,6 +37,7 @@ interface EditorProps {
   onSelectionChange?: (text: string) => void;
   onFileChange?: (filePath: string) => void;
   onTabsChange?: (hasTabs: boolean) => void;
+  onMarkersChange?: (errors: number, warnings: number) => void;
 }
 
 interface EditorTab {
@@ -66,6 +67,7 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(({
   onSelectionChange,
   onFileChange,
   onTabsChange,
+  onMarkersChange,
 }, ref) => {
   const [tabs, setTabs] = useState<EditorTab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
@@ -76,6 +78,7 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(({
   const tabMenuRef = useRef<HTMLDivElement>(null);
   const [previewTabIds, setPreviewTabIds] = useState<Set<string>>(new Set());
   const [splitTabId, setSplitTabId] = useState<string | null>(null);
+  const [liveServerPort, setLiveServerPort] = useState<number | null>(null);
   const [inlineChatOpen, setInlineChatOpen] = useState(false);
   const editorInstanceRef = useRef<any>(null);
   const splitEditorRef = useRef<any>(null);
@@ -151,6 +154,40 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(({
   tabsRef.current = tabs;
   const activeTabRef = useRef(activeTab);
   activeTabRef.current = activeTab;
+
+  const toggleLiveServer = useCallback(async () => {
+    const api = window.electronAPI;
+    if (!api) return;
+    if (liveServerPort !== null) {
+      await api.liveServerStop();
+      setLiveServerPort(null);
+    } else {
+      const tab = activeTabRef.current;
+      if (!tab) return;
+      const result = await api.liveServerStart(tab.filePath);
+      if (result.success && result.port && result.url) {
+        setLiveServerPort(result.port);
+        const existing = tabsRef.current.find(t => t.isBrowser);
+        if (!existing) {
+          const newTab: EditorTab = {
+            id: `browser-tab-${Date.now()}`,
+            filePath: '__browser__',
+            fileName: 'Live Server',
+            content: '',
+            originalContent: '',
+            isDirty: false,
+            language: 'plaintext',
+            isBrowser: true,
+            browserUrl: result.url,
+          };
+          setTabs(prev => [...prev, newTab]);
+          setActiveTabId(newTab.id);
+        } else {
+          setActiveTabId(existing.id);
+        }
+      }
+    }
+  }, [liveServerPort]);
 
   // Expose methods to parent
   useImperativeHandle(ref, () => ({
@@ -681,6 +718,18 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(({
                 <Play size={14} />
               </button>
             )}
+            {activeTab && isHtmlFile(activeTab.filePath) && !activeTab.isBrowser && (
+              <button
+                className={`p-1 rounded hover:bg-[#3c3c3c] transition-colors flex items-center gap-1 text-[12px] font-medium ${
+                  liveServerPort !== null ? 'text-[#4ec9b0]' : 'text-[#858585] hover:text-white'
+                }`}
+                onClick={toggleLiveServer}
+                title={liveServerPort !== null ? `Live Server :${liveServerPort} (click to stop)` : 'Go Live'}
+              >
+                <Wifi size={13} />
+                {liveServerPort !== null ? <span>:{liveServerPort}</span> : <span>Go Live</span>}
+              </button>
+            )}
             <button
               className={`p-1 rounded hover:bg-[#3c3c3c] transition-colors ${splitTabId ? 'text-[#007acc]' : 'text-[#858585] hover:text-white'}`}
               onClick={() => {
@@ -801,6 +850,7 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(({
                   onCursorChange={onCursorChange}
                   onSelectionChange={onSelectionChange}
                   onEditorMount={(editor: any) => { editorInstanceRef.current = editor; }}
+                  onMarkersChange={onMarkersChange}
                 />
 
                 {/* Inline Chat (Ctrl+I) overlay */}

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Sparkles, X, Loader2, Check, Undo2 } from 'lucide-react';
+import { Sparkles, X, Loader2, Check, Undo2, GripHorizontal } from 'lucide-react';
 
 /**
  * InlineChat — Ctrl+I triggers a lightweight prompt at the cursor position
@@ -22,6 +22,9 @@ export const InlineChat: React.FC<InlineChatProps> = ({ editor, filePath, onClos
   const [applied, setApplied] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  // Drag state — null means use default centred position
+  const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null);
+  const dragStartRef = useRef<{ mx: number; my: number; ox: number; oy: number } | null>(null);
 
   // Focus input on mount
   useEffect(() => {
@@ -148,22 +151,66 @@ export const InlineChat: React.FC<InlineChatProps> = ({ editor, filePath, onClos
 
   const handleReject = useCallback(() => {
     if (applied && originalText !== null) {
-      // Undo the edit
       editor?.trigger('inline-chat', 'undo', null);
     }
     onClose();
   }, [applied, originalText, editor, onClose]);
 
+  // ── Drag logic ──────────────────────────────────────────────────────────────
+  const startDrag = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const container = containerRef.current;
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    const ox = dragPos ? dragPos.x : rect.left;
+    const oy = dragPos ? dragPos.y : rect.top;
+    dragStartRef.current = { mx: e.clientX, my: e.clientY, ox, oy };
+    const onMove = (ev: MouseEvent) => {
+      if (!dragStartRef.current) return;
+      const { mx, my, ox, oy } = dragStartRef.current;
+      const parentRect = container.parentElement?.getBoundingClientRect();
+      let nx = ox + (ev.clientX - mx);
+      let ny = oy + (ev.clientY - my);
+      if (parentRect) {
+        nx = Math.max(parentRect.left, Math.min(parentRect.right - rect.width, nx));
+        ny = Math.max(parentRect.top, Math.min(parentRect.bottom - rect.height, ny));
+        nx -= parentRect.left;
+        ny -= parentRect.top;
+      }
+      setDragPos({ x: nx, y: ny });
+    };
+    const onUp = () => {
+      dragStartRef.current = null;
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = '';
+    };
+    document.body.style.cursor = 'grabbing';
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }, [dragPos]);
+
   return (
     <div
       ref={containerRef}
-      className="absolute z-50 left-[60px] right-4"
-      style={{ top: '50%', transform: 'translateY(-50%)' }}
+      className="absolute z-50"
+      style={dragPos
+        ? { left: dragPos.x, top: dragPos.y, right: 'auto', width: 'clamp(320px, 50%, 600px)' }
+        : { left: '60px', right: '16px', top: '50%', transform: 'translateY(-50%)' }
+      }
     >
       <div className="bg-[#252526] border border-[#007acc] rounded-lg shadow-2xl overflow-hidden"
         style={{ boxShadow: '0 0 20px rgba(0,122,204,0.3)' }}>
-        {/* Input row */}
+        {/* Drag handle + Input row */}
         <div className="flex items-center gap-2 px-3 py-2">
+          {/* Drag grip */}
+          <div
+            className="flex-shrink-0 cursor-grab active:cursor-grabbing text-[#555] hover:text-[#888] transition-colors"
+            onMouseDown={startDrag}
+            title="Drag to move"
+          >
+            <GripHorizontal size={14} />
+          </div>
           <Sparkles size={14} className="text-[#007acc] flex-shrink-0" />
           <input
             ref={inputRef}

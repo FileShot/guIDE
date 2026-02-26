@@ -13,6 +13,7 @@ export interface ChatSettings {
   repeatPenalty: number;
   seed: number;
   reasoningEffort: 'low' | 'medium' | 'high';
+  thinkingBudget: number;
   maxIterations: number;
   gpuPreference: 'auto' | 'cpu';
   useWebSearch: boolean;
@@ -33,6 +34,7 @@ export interface ChatSettingsActions {
   setRepeatPenalty: (v: number) => void;
   setSeed: (v: number) => void;
   setReasoningEffort: (v: 'low' | 'medium' | 'high') => void;
+  setThinkingBudget: (v: number) => void;
   setMaxIterations: (v: number) => void;
   setGpuPreference: (v: 'auto' | 'cpu') => void;
   setUseWebSearch: (v: boolean) => void;
@@ -54,6 +56,7 @@ export function useChatSettings(): ChatSettings & ChatSettingsActions {
   const [repeatPenalty, setRepeatPenalty] = useState(1.15);
   const [seed, setSeed] = useState(-1);
   const [reasoningEffort, setReasoningEffort] = useState<'low' | 'medium' | 'high'>('medium');
+  const [thinkingBudget, setThinkingBudget] = useState(0); // 0 = auto (model profile), -1 = unlimited, >0 = exact token cap
   const [maxIterations, setMaxIterations] = useState(50);
   const [gpuPreference, setGpuPreference] = useState<'auto' | 'cpu'>('auto');
   const [useWebSearch, setUseWebSearch] = useState(false);
@@ -65,21 +68,21 @@ export function useChatSettings(): ChatSettings & ChatSettingsActions {
     try { return localStorage.getItem('guide-cloud-provider') || 'cerebras'; } catch { return 'cerebras'; }
   });
   const [cloudModel, setCloudModel] = useState<string | null>(() => {
-    try { return localStorage.getItem('guide-cloud-model') || 'zai-glm-4.7'; } catch { return 'zai-glm-4.7'; }
+    try { return localStorage.getItem('guide-cloud-model') || 'gpt-oss-120b'; } catch { return 'gpt-oss-120b'; }
   });
 
-  // One-time migration: switch old defaults to zai-glm-4.7.
+  // One-time migration: migrate removed models (zai-glm-4.7 was removed) back to gpt-oss-120b.
   useEffect(() => {
     try {
-      const migrated = localStorage.getItem('guide-cloud-default-model-migrated-v2');
+      const migrated = localStorage.getItem('guide-cloud-default-model-migrated-v3');
       if (migrated === 'true') return;
       const storedProvider = localStorage.getItem('guide-cloud-provider') || 'cerebras';
       const storedModel = localStorage.getItem('guide-cloud-model');
-      if (storedProvider === 'cerebras' && (!storedModel || storedModel === 'gpt-oss-120b' || storedModel === 'glm-4-9b')) {
-        localStorage.setItem('guide-cloud-model', 'zai-glm-4.7');
-        setCloudModel('zai-glm-4.7');
+      if (storedProvider === 'cerebras' && (!storedModel || storedModel === 'zai-glm-4.7' || storedModel === 'glm-4-9b')) {
+        localStorage.setItem('guide-cloud-model', 'gpt-oss-120b');
+        setCloudModel('gpt-oss-120b');
       }
-      localStorage.setItem('guide-cloud-default-model-migrated-v2', 'true');
+      localStorage.setItem('guide-cloud-default-model-migrated-v3', 'true');
     } catch {
       // ignore
     }
@@ -100,8 +103,8 @@ export function useChatSettings(): ChatSettings & ChatSettingsActions {
           if (s.repeatPenalty !== undefined) setRepeatPenalty(s.repeatPenalty);
           if (s.seed !== undefined) setSeed(s.seed);
           if (s.maxIterations !== undefined) setMaxIterations(s.maxIterations);
-          if (s.cloudProvider !== undefined) setCloudProvider(s.cloudProvider);
-          if (s.cloudModel !== undefined) setCloudModel(s.cloudModel);
+          if (s.cloudProvider !== undefined && s.cloudProvider !== null) setCloudProvider(s.cloudProvider);
+          if (s.cloudModel !== undefined && s.cloudModel !== null) setCloudModel(s.cloudModel);
           if (s.useWebSearch !== undefined) setUseWebSearch(s.useWebSearch);
           if (s.useRAG !== undefined) setUseRAG(s.useRAG);
           if (s.ttsEnabled !== undefined) setTtsEnabled(s.ttsEnabled);
@@ -162,6 +165,7 @@ export function useChatSettings(): ChatSettings & ChatSettingsActions {
     setRepeatPenalty(1.15);
     setSeed(-1);
     setReasoningEffort('medium');
+    setThinkingBudget(0);
     setMaxIterations(50);
     (window as any).electronAPI?.llmSetContextSize?.(0);
     (window as any).electronAPI?.llmSetReasoningEffort?.('medium');
@@ -169,10 +173,10 @@ export function useChatSettings(): ChatSettings & ChatSettingsActions {
 
   return {
     temperature, maxTokens, contextSize, topP, topK, repeatPenalty, seed,
-    reasoningEffort, maxIterations, gpuPreference, useWebSearch, useRAG,
+    reasoningEffort, thinkingBudget, maxIterations, gpuPreference, useWebSearch, useRAG,
     ttsEnabled, autoMode, planMode, cloudProvider, cloudModel,
     setTemperature, setMaxTokens, setContextSize, setTopP, setTopK,
-    setRepeatPenalty, setSeed, setReasoningEffort, setMaxIterations,
+    setRepeatPenalty, setSeed, setReasoningEffort, setThinkingBudget, setMaxIterations,
     setGpuPreference, setUseWebSearch, setUseRAG, setTtsEnabled,
     setAutoMode, setPlanMode, setCloudProvider, setCloudModel,
     resetToDefaults,

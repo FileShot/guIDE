@@ -1,7 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
+import { checkRateLimit, RATE_LIMITS, rateLimitResponse } from '@/lib/rateLimit';
 
 export async function GET(req: NextRequest) {
+  // Rate limit OAuth initiations: 15 per 15 min per IP
+  const rl = checkRateLimit(req, RATE_LIMITS.oauth);
+  if (!rl.allowed) {
+    const r = rateLimitResponse(rl);
+    return NextResponse.json(r.body, { status: r.status, headers: r.headers });
+  }
+
   const clientId = process.env.GOOGLE_CLIENT_ID;
   if (!clientId) {
     return NextResponse.json({ error: 'Google OAuth not configured' }, { status: 500 });

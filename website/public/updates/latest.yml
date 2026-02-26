@@ -1,8 +1,8 @@
-version: 2.1.4
+version: 2.4.2
 files:
-  - url: guIDE-Setup-2.1.4.exe
-    sha512: sSCC/ggMhaKmSicqWqrKOYs0bUc655xCHuN4sggTD04fBfbmqtpiW18RwmOC6wF0BFqVuQVDKWrFonP+ZZxdPg==
-    size: 408215392
-path: guIDE-Setup-2.1.4.exe
-sha512: sSCC/ggMhaKmSicqWqrKOYs0bUc655xCHuN4sggTD04fBfbmqtpiW18RwmOC6wF0BFqVuQVDKWrFonP+ZZxdPg==
-releaseDate: '2026-02-23T04:53:45.886Z'
+  - url: guIDE-Setup-2.4.2.exe
+    sha512: gRkj8j0P6rtrZbK0S8jminTw3PjE/wp7qxdwM85hEFcX4CAOP2srhaChqXy2hh9qNH36PeDr8NDuiQ+rrE3wsg==
+    size: 187949120
+path: guIDE-Setup-2.4.2.exe
+sha512: gRkj8j0P6rtrZbK0S8jminTw3PjE/wp7qxdwM85hEFcX4CAOP2srhaChqXy2hh9qNH36PeDr8NDuiQ+rrE3wsg==
+releaseDate: '2026-02-26T23:38:09.045Z'

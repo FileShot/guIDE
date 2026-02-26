@@ -128,7 +128,7 @@ function register(ctx) {
       // Quota exceeded — surface a clear upgrade prompt instead of a raw error
       if (error.isQuotaError || error.message?.includes('quota_exceeded')) {
         const msg = error.message?.replace('quota_exceeded\n', '').trim()
-          || "You've reached your daily cloud AI limit. Upgrade to Pro (500/day) or Unlimited at graysoft.dev/account.";
+          || "You've reached your free daily guIDE Cloud AI limit.\n\nTo continue:\n\u2022 **Upgrade** for more cloud requests \u2192 graysoft.dev/account\n\u2022 **Load a local model** — download a free GGUF model from Quick Add (no limits, works offline)\n\u2022 **Add your own API keys** in Settings \u2192 Cloud Providers";
         return { success: false, error: msg, isQuotaError: true };
       }
       return { success: false, error: error.message };

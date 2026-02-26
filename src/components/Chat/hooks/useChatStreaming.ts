@@ -46,15 +46,20 @@ export function useChatStreaming(): ChatStreamingState {
     // This way, tokens are accepted during active generation, but discarded after clear/cancel
     // until a new generation begins and re-syncs the epochs.
 
-    // Typewriter effect: advance at most this many chars per animation frame (~60fps).
-    // 60 chars/frame × 60fps ≈ 3600 chars/sec — fast enough to feel responsive,
-    // slow enough that rapid models (Cerebras 1000 tok/s) don't dump the whole response at once.
-    const MAX_CHARS_PER_FRAME = 60;
-    const flushStreamUpdate = () => {
+    // Typewriter effect: advance at a fixed chars-per-second rate, time-based not frame-based.
+    // Frame-based (e.g. 15 chars/frame) runs 2.4x faster on 144Hz than 60Hz monitors.
+    // Time-based ensures the same pace on all hardware regardless of refresh rate.
+    // 100 chars/sec: deliberate pace to avoid overwhelming the user with fast text.
+    const CHARS_PER_SECOND = 100;
+    let lastFrameTime = 0;
+    const flushStreamUpdate = (timestamp: number) => {
       streamRafRef.current = null;
       streamDirtyRef.current = false;
       const buffer = streamBufferRef.current;
-      const target = Math.min(displayPosRef.current + MAX_CHARS_PER_FRAME, buffer.length);
+      const elapsed = lastFrameTime === 0 ? 16 : Math.min(timestamp - lastFrameTime, 100); // cap at 100ms to avoid huge jump after tab switch
+      lastFrameTime = timestamp;
+      const charsThisFrame = Math.max(1, Math.round(CHARS_PER_SECOND * elapsed / 1000));
+      const target = Math.min(displayPosRef.current + charsThisFrame, buffer.length);
       displayPosRef.current = target;
       setStreamingText(buffer.slice(0, target));
       // Continue animating until the full buffer has been revealed
@@ -94,14 +99,6 @@ export function useChatStreaming(): ChatStreamingState {
       streamBufferRef.current = streamBufferRef.current
         .replace(/<thinking>/gi, '<think>')
         .replace(/<\/thinking>/gi, '</think>');
-
-      // Strip internal reasoning patterns
-      streamBufferRef.current = streamBufferRef.current
-        .replace(/^\s*We need to[^.]*\.[^\n]*\n?/gim, '')
-        .replace(/^\s*The user[^.]*\.[^\n]*\n?/gim, '')
-        .replace(/^\s*Let me think[^.]*\.[^\n]*\n?/gim, '')
-        .replace(/\*\*Summary\*\*[\s\S]*?(?=\n\n[A-Z#]|$)/gi, '')
-        .replace(/\nWe need to[^\n]*\n/gi, '\n');
 
       // Frontend fallback: detect <think>...</think> tags
       const buf = streamBufferRef.current;
@@ -148,6 +145,14 @@ export function useChatStreaming(): ChatStreamingState {
       } else {
         thinkingSegmentsRef.current[thinkingSegmentsRef.current.length - 1] += token;
       }
+      // Strip code-fence artifacts that bleed from tool-calling iterations into thinking output.
+      // Models sometimes write `json or ```json inside <think> as a self-note before outputting a tool call.
+      const lastIdx = thinkingSegmentsRef.current.length - 1;
+      thinkingSegmentsRef.current[lastIdx] = thinkingSegmentsRef.current[lastIdx]
+        // Strip complete tool-call code blocks (```json ... ``` etc.) that bleed from context summaries
+        .replace(/```(?:json|tool_call|tool)[^\n]*\n[\s\S]*?```/g, '')
+        // Strip any remaining lone opening fence markers left after partial streaming
+        .replace(/^`{1,3}(?:json|tool_call|tool)\s*/gim, '');
       scheduleThinkingUpdate();
     });
 

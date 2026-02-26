@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   X, Cpu, Cloud, Check, Key, FolderPlus, Sparkles, Loader2,
-  ChevronDown, ChevronRight, Star, Eye,
+  ChevronDown, ChevronRight, Star, Eye, ImageIcon,
 } from 'lucide-react';
 import type { LLMStatusEvent, AvailableModel, OpenRouterModel, RecommendedModel } from '@/types/electron';
 
@@ -40,6 +40,15 @@ export const PROVIDER_INFO: Record<string, { signupUrl: string; free: boolean; p
   openai:     { signupUrl: 'https://platform.openai.com/api-keys', free: false, placeholder: 'sk-...' },
   anthropic:  { signupUrl: 'https://console.anthropic.com/settings/keys', free: false, placeholder: 'sk-ant-...' },
   xai:        { signupUrl: 'https://console.x.ai/', free: false, placeholder: 'xai-...' },
+  perplexity: { signupUrl: 'https://www.perplexity.ai/settings/api', free: false, placeholder: 'pplx-...', note: 'Web-search grounded responses' },
+  deepseek:   { signupUrl: 'https://platform.deepseek.com/api_keys', free: false, placeholder: 'sk-...', note: 'V3 + R1 reasoning' },
+  ai21:       { signupUrl: 'https://studio.ai21.com/account/api-key', free: false, placeholder: 'key...', note: 'Jamba 256K context' },
+  deepinfra:  { signupUrl: 'https://deepinfra.com/dash/api_keys', free: false, placeholder: 'key...', note: 'Pay-per-use, cheap inference' },
+  hyperbolic: { signupUrl: 'https://app.hyperbolic.xyz/settings', free: false, placeholder: 'key...' },
+  novita:     { signupUrl: 'https://novita.ai/settings/key-management', free: false, placeholder: 'key...' },
+  moonshot:   { signupUrl: 'https://platform.moonshot.cn/console/api-keys', free: false, placeholder: 'key...', note: 'Kimi K2 agentic model' },
+  upstage:    { signupUrl: 'https://console.upstage.ai/api-keys', free: false, placeholder: 'up-...' },
+  lepton:     { signupUrl: 'https://dashboard.lepton.ai/', free: false, placeholder: 'key...' },
 };
 
 export interface ModelPickerProps {
@@ -52,7 +61,7 @@ export interface ModelPickerProps {
   setCloudProvider: (p: string | null) => void;
   setCloudModel: (m: string | null) => void;
   cloudProviders: { provider: string; label: string; models: { id: string; name: string }[] }[];
-  allCloudProviders: { provider: string; label: string; models: { id: string; name: string }[]; hasKey: boolean }[];
+  allCloudProviders: { provider: string; label: string; models: { id: string; name: string }[]; hasKey: boolean; isBundled?: boolean }[];
 
   // Favorites (shared)
   favoriteModels: Set<string>;
@@ -63,6 +72,8 @@ export interface ModelPickerProps {
   isUsingCloud: boolean;
   llmStatus: LLMStatusEvent;
   switchModel: (model: AvailableModel) => void;
+  switchImageModel?: (model: AvailableModel) => void;
+  activeImageModelPath?: string | null;
 
   // Actions
   cancelAndResetStream: () => void;
@@ -86,6 +97,8 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({
   isUsingCloud,
   llmStatus,
   switchModel,
+  switchImageModel,
+  activeImageModelPath,
   cancelAndResetStream,
   refreshAllProviders,
   refreshCloudProviders,
@@ -105,6 +118,8 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({
   const [showRecommended, setShowRecommended] = useState(false);
   const [recommendedModels, setRecommendedModels] = useState<{ recommended: RecommendedModel[]; other: RecommendedModel[]; maxModelGB: number; vramGB: number } | null>(null);
   const [showOtherModels, setShowOtherModels] = useState(false);
+  const [showOwnKeySection, setShowOwnKeySection] = useState(false);
+  const [showPremiumSection, setShowPremiumSection] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState<Map<string, { progress: number; downloadedMB: string; totalMB: string; complete?: boolean; error?: string }>>(new Map());
 
   // ── Fetch OpenRouter live model catalog ──
@@ -257,8 +272,9 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({
 
         {/* Cloud providers — show ALL with inline API key input for unconfigured */}
         {allCloudProviders.length > 0 && (() => {
-          const freeProviders = allCloudProviders.filter(p => PROVIDER_INFO[p.provider]?.free);
-          const paidProviders = allCloudProviders.filter(p => !PROVIDER_INFO[p.provider]?.free);
+          // Include non-bundled free providers AND bundled providers where users can supplement with their own key
+          const freeProviders = allCloudProviders.filter(p => PROVIDER_INFO[p.provider]?.free && (!p.isBundled || p.provider === 'cerebras' || p.provider === 'sambanova'));
+          const paidProviders = allCloudProviders.filter(p => !PROVIDER_INFO[p.provider]?.free && !p.isBundled);
 
           const renderProvider = (provider: typeof allCloudProviders[0]) => {
             const isExpanded = expandedProviders.has(provider.provider);
@@ -546,7 +562,8 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({
             );
           };
 
-          const configuredCount = allCloudProviders.filter(p => p.hasKey).length;
+          const configuredCount = allCloudProviders.filter(p => !p.isBundled && p.hasKey).length
+            + (allCloudProviders.some(p => p.isBundled && p.hasKey) ? 1 : 0);
 
           return (
             <>
@@ -575,18 +592,59 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({
                 </button>
                 {showCloudProviders && (
                   <>
-                    {/* Free cloud providers */}
-                    <div className="px-2 py-0.5 text-[9px] text-[#89d185] bg-[#1e1e1e] border-b border-[#454545] uppercase tracking-wider">
-                      Free Providers
-                    </div>
-                    {freeProviders.map(renderProvider)}
-                    {/* Premium cloud providers */}
+                    {/* guIDE Cloud AI — single entry, auto-rotates internally, no user model selection */}
+                    {(() => {
+                      const BUNDLED = new Set(['cerebras', 'groq', 'sambanova', 'google', 'openrouter']);
+                      const isGuideActive = BUNDLED.has(cloudProvider || '');
+                      return (
+                        <button
+                          className={`w-full px-2 py-1.5 text-[11px] flex items-center gap-2 hover:bg-[#094771] ${
+                            isGuideActive ? 'bg-[#094771]' : 'bg-[#2a2a2a]'
+                          }`}
+                          onClick={() => {
+                            cancelAndResetStream();
+                            setCloudProvider('cerebras');
+                            setCloudModel('gpt-oss-120b');
+                            onClose();
+                            addSystemMessage('Switched to **guIDE Cloud AI**');
+                          }}
+                        >
+                          {isGuideActive
+                            ? <Check size={9} className="text-[#89d185] flex-shrink-0" />
+                            : <Cloud size={9} className="text-[#3794ff] flex-shrink-0" />
+                          }
+                          <div className="min-w-0 flex-1 text-left">
+                            <span className="text-[#cccccc]">guIDE Cloud AI</span>
+                            <span className="text-[9px] text-[#89d185] ml-2">Free</span>
+                          </div>
+                          <span className="text-[9px] text-[#585858]">Auto</span>
+                        </button>
+                      );
+                    })()}
+                    {/* Free cloud providers (own key required) — collapsed by default */}
+                    {freeProviders.length > 0 && (
+                      <>
+                        <button
+                          className="w-full px-2 py-0.5 text-[9px] text-[#89d185] bg-[#1e1e1e] border-b border-[#454545] uppercase tracking-wider flex items-center gap-1 hover:bg-[#252525]"
+                          onClick={() => setShowOwnKeySection(v => !v)}
+                        >
+                          {showOwnKeySection ? <ChevronDown size={8} /> : <ChevronRight size={8} />}
+                          Add Your Own Key — Free
+                        </button>
+                        {showOwnKeySection && freeProviders.map(renderProvider)}
+                      </>
+                    )}
+                    {/* Premium cloud providers — collapsed by default */}
                     {paidProviders.length > 0 && (
                       <>
-                        <div className="px-2 py-0.5 text-[9px] text-[#dcdcaa] bg-[#1e1e1e] border-b border-[#454545] border-t uppercase tracking-wider">
+                        <button
+                          className="w-full px-2 py-0.5 text-[9px] text-[#dcdcaa] bg-[#1e1e1e] border-b border-[#454545] border-t uppercase tracking-wider flex items-center gap-1 hover:bg-[#252525]"
+                          onClick={() => setShowPremiumSection(v => !v)}
+                        >
+                          {showPremiumSection ? <ChevronDown size={8} /> : <ChevronRight size={8} />}
                           Premium Providers
-                        </div>
-                        {paidProviders.map(renderProvider)}
+                        </button>
+                        {showPremiumSection && paidProviders.map(renderProvider)}
                       </>
                     )}
                   </>
@@ -747,16 +805,16 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({
           </div>
         )}
 
-        {/* Local models */}
+        {/* Local LLM models */}
         <div className="px-2 py-1 text-[10px] text-[#858585] uppercase tracking-wider bg-[#2d2d2d] border-b border-[#454545] border-t flex items-center gap-1">
           <Cpu size={10} /> Local Models
         </div>
-        {availableModels.length === 0 ? (
+        {availableModels.filter(m => m.modelType !== 'diffusion').length === 0 ? (
           <div className="p-2 text-[11px] text-[#858585]">
             No local models found. Add .gguf files below.
           </div>
         ) : (
-          availableModels.map(model => (
+          availableModels.filter(m => m.modelType !== 'diffusion').map(model => (
             <button
               key={model.path}
               className={`w-full text-left px-2 py-1.5 text-[11px] hover:bg-[#094771] flex items-center gap-2 ${
@@ -787,6 +845,40 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({
               )}
             </button>
           ))
+        )}
+
+        {/* Image Models — only shown when diffusion models are present */}
+        {availableModels.filter(m => m.modelType === 'diffusion').length > 0 && (
+          <>
+            <div className="px-2 py-1 text-[10px] text-[#c586c0] uppercase tracking-wider bg-[#2d2d2d] border-b border-[#454545] border-t flex items-center gap-1">
+              <ImageIcon size={10} /> Image Models
+            </div>
+            {availableModels.filter(m => m.modelType === 'diffusion').map(model => (
+              <button
+                key={model.path}
+                className={`w-full text-left px-2 py-1.5 text-[11px] hover:bg-[#3a2a4a] flex items-center gap-2 ${
+                  activeImageModelPath === model.path ? 'bg-[#3a2a4a]' : ''
+                }`}
+                onClick={() => {
+                  setCloudProvider(null);
+                  setCloudModel(null);
+                  switchImageModel?.(model);
+                  onClose();
+                }}
+              >
+                <ImageIcon size={11} className="flex-shrink-0 text-[#c586c0]" />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[#cccccc]">{model.name}</div>
+                  <div className="text-[10px] text-[#858585]">
+                    {model.sizeFormatted} • {model.details.quantization}
+                  </div>
+                </div>
+                {activeImageModelPath === model.path && (
+                  <Check size={11} className="text-[#c586c0] flex-shrink-0" />
+                )}
+              </button>
+            ))}
+          </>
         )}
         <button
           className="w-full text-left px-2 py-1.5 text-[11px] text-[#3794ff] hover:bg-[#094771] border-t border-[#454545] flex items-center gap-2"

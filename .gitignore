@@ -78,3 +78,16 @@ coverage/
 
 # Pipeline backups
 _pipeline_backup*/
+
+# Pipeline test clone (dev-only, not shipped)
+pipeline-clone/
+
+# Dev-only scripts and test output
+pipeline-runner.js
+probe-small-models.js
+fresh_logs.txt
+helper-log.txt
+test-results-*.txt
+vitest-results.txt
+build-output*.txt
+builder-output*.txt

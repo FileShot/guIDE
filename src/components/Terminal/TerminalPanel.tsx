@@ -52,6 +52,13 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({ cwd, onClose }) =>
     }
   }, [activeTerminal, bottomTab]);
 
+  // Switch to Problems tab when status bar is clicked
+  useEffect(() => {
+    const handler = () => setBottomTab('problems');
+    window.addEventListener('guide-show-problems', handler);
+    return () => window.removeEventListener('guide-show-problems', handler);
+  }, []);
+
   // Listen for externally-created terminals (e.g. code runner)
   useEffect(() => {
     const handleExternalTerminal = (e: Event) => {
@@ -330,18 +337,22 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({ cwd, onClose }) =>
       <div className="h-[35px] bg-[#252526] flex items-center border-b border-[#1e1e1e] flex-shrink-0">
         {/* Panel tabs */}
         <div className="flex items-center h-full">
-          {(['terminal', 'problems', 'output'] as const).map(tab => (
-            <button
-              key={tab}
-              className={`px-3 h-full text-[11px] uppercase tracking-wider font-medium transition-colors border-b-2 ${
-                bottomTab === tab
-                  ? 'text-white border-white'
-                  : 'text-[#858585] border-transparent hover:text-[#cccccc]'
-              }`}
-              onClick={() => setBottomTab(tab)}
-            >
-              {tab}
-            </button>
+          {(['terminal', 'problems', 'output'] as const).map((tab, i) => (
+            <React.Fragment key={tab}>
+              {i > 0 && (
+                <span className="text-[11px] select-none pointer-events-none px-0.5" style={{ color: 'var(--theme-foreground-subtle)' }}>/</span>
+              )}
+              <button
+                className={`px-2 h-full text-[11px] uppercase tracking-wider font-medium transition-colors border-b-2 ${
+                  bottomTab === tab
+                    ? 'text-white border-white'
+                    : 'text-[#858585] border-transparent hover:text-[#cccccc]'
+                }`}
+                onClick={() => setBottomTab(tab)}
+              >
+                {tab}
+              </button>
+            </React.Fragment>
           ))}
         </div>
 
@@ -359,7 +370,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({ cwd, onClose }) =>
                 onClick={() => setActiveTerminal(t.id)}
               >
                 <TerminalIcon size={11} />
-                <span>{t.title}</span>
+                <span className="whitespace-nowrap max-w-[96px] truncate">{t.title}</span>
                 <button
                   className="ml-1 hover:text-[#f44747] opacity-60 hover:opacity-100"
                   onClick={(e) => { e.stopPropagation(); closeTerminal(t.id); }}

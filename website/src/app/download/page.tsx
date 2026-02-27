@@ -2,7 +2,7 @@
 
 // Single source of truth for the displayed release version.
 // Updated automatically by: npm run release:deploy (from IDE root)
-const CURRENT_VERSION = '2.4.2';
+const CURRENT_VERSION = '2.4.3';
 
 import Link from 'next/link';
 import { useState } from 'react';
@@ -19,8 +19,8 @@ const platforms: { id: Platform; label: string; icon: React.ReactNode }[] = [
 ];
 
 const downloads: Record<Platform, { name: string; file: string; size: string; format: string; available: boolean; note?: string }> = {
-  windows: { name: 'guIDE for Windows', file: '/downloads/guIDE-Setup.exe', size: '~360 MB', format: 'NSIS Installer (.exe)', available: true },
-  linux: { name: 'guIDE for Linux', file: '/downloads/guIDE-Linux-x64.tar.gz', size: '~149 MB', format: 'Portable Archive (.tar.gz)', available: true, note: 'Extract and run ./guIDE' },
+  windows: { name: 'guIDE for Windows', file: 'https://github.com/FileShot/guIDE/releases/download/v2.4.3/guIDE-Setup.exe', size: '~180 MB', format: 'NSIS Installer (.exe)', available: true },
+  linux: { name: 'guIDE for Linux', file: 'https://github.com/FileShot/guIDE/releases/download/v2.4.3/guIDE-Linux-x64.tar.gz', size: '~149 MB', format: 'Portable Archive (.tar.gz)', available: true, note: 'Extract and run ./guIDE' },
   mac: { name: 'guIDE for macOS', file: '#', size: 'TBD', format: 'DMG (Intel + Apple Silicon)', available: false, note: 'macOS builds coming soon via CI/CD' },
 };
 

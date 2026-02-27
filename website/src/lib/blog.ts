@@ -159,8 +159,8 @@ Built from the ground up with Electron 27, React 18, and TypeScript, guIDE is a 
 
 - **Monaco Editor** — the same world-class editing engine that powers Visual Studio Code, with full syntax highlighting, IntelliSense, multi-cursor editing, and minimap support
 - **llama.cpp Backend** — native C++ inference engine for running GGUF quantized models at maximum performance on NVIDIA, AMD, and Intel GPUs — or CPU-only if you prefer
-- **69+ Built-in MCP Tools** — Model Context Protocol tools for file management, browser automation, git operations, persistent memory, web search, code execution, and much more
-- **17 Cloud Providers** — optional cloud AI through Google Gemini, OpenAI GPT-4, Anthropic Claude, xAI Grok, SambaNova, Cerebras, OpenRouter, Groq, Mistral, Cohere, NVIDIA, and more — when you want cloud power alongside your local models
+- **82 Built-in MCP Tools** — Model Context Protocol tools for file management, browser automation, git operations, persistent memory, web search, code execution, and much more
+- **26 Cloud Providers** — optional cloud AI through Google Gemini, OpenAI GPT-4, Anthropic Claude, xAI Grok, SambaNova, Cerebras, OpenRouter, Groq, Mistral, Cohere, NVIDIA, Perplexity, DeepSeek, Hyperbolic, Moonshot, and more — when you want cloud power alongside your local models
 - **Agentic AI Loop** — multi-step autonomous task execution where the AI plans, calls tools, reviews results, and iterates up to 50+ steps to complete complex tasks
 
 ## Why Local AI Development Matters in 2026
@@ -254,7 +254,7 @@ Talk to your AI assistant hands-free using built-in Whisper-powered speech recog
 
 ### Hybrid Local + Cloud Architecture
 
-While guIDE is built for local-first AI development, it also supports **17 cloud AI providers** for developers who want access to the largest models (GPT-4, Claude 3.5, Gemini Pro) alongside their local models. Use local inference for daily coding, and switch to cloud models for complex architectural decisions or large codebase analysis when you need it.
+While guIDE is built for local-first AI development, it also supports **26 cloud AI providers** for developers who want access to the largest models (GPT-4, Claude 3.5, Gemini Pro) alongside their local models. Use local inference for daily coding, and switch to cloud models for complex architectural decisions or large codebase analysis when you need it.
 
 ## Supported AI Models
 
@@ -496,13 +496,13 @@ A developer who codes on weekends doesn't want a monthly bill for AI assistance.
 ## Frequently Asked Questions
 
 ### Can guIDE's local AI match Cursor's cloud AI quality?
-Modern open-source models like Qwen2.5-Coder-32B and DeepSeek R1 rival GPT-4 for code generation tasks. For the majority of day-to-day coding — writing functions, debugging, refactoring, generating tests — local models perform comparably to cloud models. For tasks that benefit from the very largest models, guIDE also supports 17 cloud providers as an option.
+Modern open-source models like Qwen2.5-Coder-32B and DeepSeek R1 rival GPT-4 for code generation tasks. For the majority of day-to-day coding — writing functions, debugging, refactoring, generating tests — local models perform comparably to cloud models. For tasks that benefit from the very largest models, guIDE also supports 26 cloud providers as an option.
 
 ### Is guIDE a fork of VS Code like Cursor?
 No. guIDE is built from scratch using Electron, React, and the Monaco editor engine (the same editing component VS Code uses). This gives guIDE the same excellent code editing experience without being tied to VS Code's extension architecture.
 
 ### What if my GPU isn't powerful enough?
-guIDE works on CPU too — just with slower generation speeds. A modern CPU can run small models (1B–3B parameters) at usable speeds. guIDE also supports 17 cloud providers if you want cloud AI performance without the subscription costs of dedicated AI IDEs.
+guIDE works on CPU too — just with slower generation speeds. A modern CPU can run small models (1B–3B parameters) at usable speeds. guIDE also supports 26 cloud providers if you want cloud AI performance without the subscription costs of dedicated AI IDEs.
 
 ### Can I switch from Cursor to guIDE easily?
 Yes. guIDE opens any project folder and supports all the same programming languages. Import your projects, download a model, and start coding. Your workflow will feel familiar since guIDE uses Monaco — the same editor engine as VS Code (which Cursor forks).
@@ -563,7 +563,7 @@ guIDE takes the opposite approach. Instead of cloud dependency, guIDE was built 
 - **69+ built-in tools** — file management, browser automation, git, code execution, web search, memory, and more
 - **Zero cloud dependency** — works fully offline, even air-gapped
 - **Free to use** — no subscriptions, with optional Pro $4.99/mo and Unlimited $9.99/mo for cloud AI
-- **Optional cloud AI** — 17 cloud providers available when you want them
+- **Optional cloud AI** — 26 cloud providers available when you want them
 
 ## Full Feature Comparison: guIDE vs Windsurf
 

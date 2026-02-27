@@ -563,14 +563,6 @@ function evaluateResponse(responseText, functionCalls, taskType, iteration, hasR
     return { verdict: 'ROLLBACK', reason: 'described_not_executed' };
   }
 
-  // ── STUCK GREETING: generic greeting response on an agentic (non-chat) task ──
-  // Tiny models overwhelmed by tool injection context fall back to their trained greeting.
-  // Detect the exact pattern and ROLLBACK so the retry can strip tool pressure.
-  const STUCK_GREETING_RX = /^(Hello!?\s+How\s+can\s+I\s+(assist|help)\s+(you\s+)?(today)?[!?.]*\s*|Hi!?\s+How\s+can\s+I\s+(assist|help)[!?.]*\s*)$/i;
-  if (taskType !== 'chat' && iteration === 1 && STUCK_GREETING_RX.test(text)) {
-    return { verdict: 'ROLLBACK', reason: 'stuck_greeting' };
-  }
-
   // ── DEFAULT: Accept ──
   return { verdict: 'COMMIT', reason: 'default' };
 }

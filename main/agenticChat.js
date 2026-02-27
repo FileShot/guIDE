@@ -1090,7 +1090,6 @@ function register(ctx) {
       let sessionJustRotated = false; // Flag to rebuild prompt after rotation
       let overflowResponseBudgetReduced = false; // Flag: already tried reducing response budget on first-turn overflow
       let forcedToolFunctions = null; // Set by PILLAR 3 refusal recovery to force grammar on next iteration
-      let forceChatModeForRetry = false; // Set on stuck_greeting ROLLBACK — strips tools and uses chat preamble for retry
       let consecutiveEmptyGrammarRetries = 0; // Track grammar failures for text-mode fallback
 
       // ── Execution State Tracking (ported from Pocket Guide) ──
@@ -1385,12 +1384,7 @@ function register(ctx) {
           : modelTier.tier === 'large' ? 5 : 2;
         const useNativeFunctions = (taskType !== 'chat') && iteration <= grammarIterLimit;
         let nativeFunctions = null;
-        if (forceChatModeForRetry) {
-          // stuck_greeting recovery: strip all tools, use plain text with chat preamble
-          nativeFunctions = null;
-          forcedToolFunctions = null;
-          forceChatModeForRetry = false; // One-shot
-        } else if (consecutiveEmptyGrammarRetries >= 1) {
+        if (consecutiveEmptyGrammarRetries >= 1) {
           // Grammar-to-text fallback: model can't produce grammar output, degrade gracefully.
           // Threshold lowered to 1 — the second native function call attempt can hang at the
           // C++ level and never return. One failure is enough to switch to text mode safely.
@@ -1709,16 +1703,7 @@ function register(ctx) {
           }
 
           // Escalating retry strategy
-          if (responseVerdict.reason === 'stuck_greeting') {
-            // Model outputted its trained greeting despite an agentic task.
-            // Retry with the simple chat preamble and NO tools — removes all tool pressure.
-            currentPrompt = {
-              systemContext: buildStaticPrompt('chat'),
-              userMessage: message.substring(0, 500),
-            };
-            forceChatModeForRetry = true;
-            console.log('[AI Chat] Stuck greeting detected — retrying in chat mode (tool-free)');
-          } else if (rollbackRetries === 1) {
+          if (rollbackRetries === 1) {
             // First retry: same prompt, slightly lower temperature for focus
             if (context?.params) context.params.temperature = Math.max((context.params.temperature || 0.7) - 0.2, 0.1);
           } else if (rollbackRetries === 2) {

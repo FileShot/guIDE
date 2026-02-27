@@ -2289,6 +2289,11 @@ function register(ctx) {
         // of each iteration's prompt (before tool results) instead of appended at the end.
         // This ensures the model sees ground truth FIRST, not as an afterthought.
 
+        // Normalize toolFeedback to end with \n\n so ChatPanel's trailingProse regex
+        // finds a clean paragraph boundary before model synthesis. Without this, the
+        // synthesis paragraph is consumed by the tool section stripper.
+        if (!toolFeedback.endsWith('\n\n')) toolFeedback = toolFeedback.trimEnd() + '\n\n';
+
         // Send progress update to UI
         if (mainWindow) {
           mainWindow.webContents.send('llm-token', toolFeedback);

@@ -54,6 +54,7 @@ class LLMEngine extends EventEmitter {
     this._initializingPromise = null; // Tracks in-flight initialize() for serialization (prevents native C++ double-op crash)
     this.gpuInfo = null;
     this.gpuPreference = 'auto'; // 'auto' = prefer GPU, 'cpu' = force CPU only
+    this.requireMinContextForGpu = false; // if true: discard GPU load when context < 4096 and retry CPU for more context
     this.reasoningEffort = 'medium'; // 'low', 'medium', 'high'
     this.thoughtTokenBudget = 2048; // Updated from ModelProfile after model load
 
@@ -221,7 +222,8 @@ class LLMEngine extends EventEmitter {
       // Uses node-llama-cpp's gpuLayers: "auto" — automatically detects available VRAM
       // and offloads the optimal number of layers. ONE load attempt, not 7+.
       // This is exactly how LM Studio achieves instant loads.
-      const gpuModes = this.gpuPreference === 'cpu' ? [false] : ['auto', false];
+      // gpuModes is a let — may be expanded with a partial layer fallback after nvidia-smi
+      let gpuModes = this.gpuPreference === 'cpu' ? [false] : ['auto', false];
 
       // Detect real dedicated VRAM via nvidia-smi BEFORE calling getLlama().
       // Problem: Vulkan on systems with GTT/shared memory reports dedicated VRAM + system RAM
@@ -245,6 +247,20 @@ class LLMEngine extends EventEmitter {
         }
       }
 
+      // If the model is too large for full GPU offload, insert a partial layer fallback
+      // between 'auto' and false so we get partial offload instead of pure CPU.
+      // LM Studio does the same. Without this, auto fails → 0 layers every time.
+      if (this.gpuPreference !== 'cpu' && nvidiaDedicatedVramBytes > 0) {
+        const usableVram = nvidiaDedicatedVramBytes * 0.75; // 75%: leaves 25% for KV cache
+        if (modelStats.size > usableVram) {
+          const fraction = usableVram / modelStats.size;
+          // 80 layers is a safe upper bound for any model up to 200B
+          const partialLayers = Math.max(1, Math.floor(80 * fraction));
+          console.log(`[LLM] Model (${(modelStats.size/(1024**3)).toFixed(1)}GB) exceeds usable VRAM (${(usableVram/(1024**3)).toFixed(1)}GB) — partial fallback: ${partialLayers} layers (~${(fraction*100).toFixed(0)}% offloaded)`);
+          gpuModes = ['auto', partialLayers, false];
+        }
+      }
+
       let gpuLayers = 0;
       let contextSize = 8192;
       let gpuMode = 'auto';
@@ -256,7 +272,7 @@ class LLMEngine extends EventEmitter {
 
         this.emit('status', {
           state: 'loading',
-          message: tryGpuMode === 'auto' ? 'Initializing GPU...' : 'Falling back to CPU...',
+          message: tryGpuMode === 'auto' ? 'Initializing GPU...' : (typeof tryGpuMode === 'number' ? `Trying partial GPU (${tryGpuMode} layers)...` : 'Falling back to CPU...'),
           progress: 0.05
         });
 
@@ -264,8 +280,10 @@ class LLMEngine extends EventEmitter {
         if (this.context) { try { await this.context.dispose(); } catch(e) {} this.context = null; }
 
         try {
-          // Reuse existing llama instance if same GPU mode (skip expensive CUDA init)
-          const canReuse = this.llamaInstance && this._lastGpuMode === tryGpuMode;
+          // Reuse existing llama instance if same GPU mode (skip expensive CUDA init).
+          // Numeric fallback modes reuse the 'auto' instance — same GPU backend, different gpuLayers.
+          const canReuse = this.llamaInstance &&
+            (this._lastGpuMode === tryGpuMode || (typeof tryGpuMode === 'number' && this._lastGpuMode === 'auto'));
           if (canReuse) {
             console.log(`[LLM] Reusing existing llama instance (gpu=${tryGpuMode})`);
           } else {
@@ -276,7 +294,9 @@ class LLMEngine extends EventEmitter {
             // (GTT/shared memory case), cap the usable budget to real dedicated VRAM only.
             // Otherwise gpuLayers:'auto' over-allocates onto non-existent memory and fails.
             this.llamaInstance = await this._withTimeout(getLlama({
-              gpu: tryGpuMode,
+              // Numeric modes still use gpu:'auto' for backend init — the layer count
+              // is passed to loadModel, not getLlama. Only false disables GPU entirely.
+              gpu: (tryGpuMode === false) ? false : 'auto',
               vramPadding: (totalVram) => {
                 // Use nvidia-smi value if Vulkan is reporting GTT-inflated total
                 const effectiveBudget = (nvidiaDedicatedVramBytes > 0 && nvidiaDedicatedVramBytes < totalVram * 0.7)
@@ -316,7 +336,7 @@ class LLMEngine extends EventEmitter {
           // internally). Do NOT convert to a file:// URL here — that breaks path.resolve.
           this.model = await this._withTimeout(this.llamaInstance.loadModel({
             modelPath: modelPath,
-            gpuLayers: tryGpuMode === 'auto' ? 'auto' : 0,
+            gpuLayers: tryGpuMode === 'auto' ? 'auto' : (typeof tryGpuMode === 'number' ? tryGpuMode : 0),
             defaultContextFlashAttention: true,
             useMmap: true,
             onLoadProgress: (progress) => {
@@ -328,6 +348,11 @@ class LLMEngine extends EventEmitter {
           // Read actual GPU layers from the loaded model
           try { gpuLayers = this.model.gpuLayers ?? 0; } catch (_) { gpuLayers = 0; }
           console.log(`[LLM] Model loaded: ${gpuLayers} GPU layers (mode: ${tryGpuMode})`);
+          // If auto returned 0 layers and we have a partial fallback waiting, skip to it
+          if (tryGpuMode === 'auto' && gpuLayers === 0 && gpuModes.some(m => typeof m === 'number')) {
+            console.log('[LLM] Auto returned 0 GPU layers — skipping to partial layer fallback');
+            continue;
+          }
         } catch (loadErr) {
           console.log(`[LLM] Model load (gpu=${tryGpuMode}) failed: ${loadErr.message?.substring(0, 120)}`);
           continue;
@@ -378,11 +403,11 @@ class LLMEngine extends EventEmitter {
           }
         }
 
-        // If context is critically small (< 4096), don't accept — fall through to CPU.
-        // 4096 is the absolute minimum for any useful agentic chat with tool definitions.
+        // If context is critically small (< 4096), optionally fall through to CPU.
+        // Controlled by requireMinContextForGpu setting (default: false = always keep GPU).
         const MIN_AGENTIC_CONTEXT = 4096;
-        if (success && contextSize < MIN_AGENTIC_CONTEXT && tryGpuMode !== false) {
-          console.log(`[LLM] GPU context too small (${contextSize} < ${MIN_AGENTIC_CONTEXT}) — retrying with CPU for larger context`);
+        if (this.requireMinContextForGpu && success && contextSize < MIN_AGENTIC_CONTEXT && tryGpuMode !== false) {
+          console.log(`[LLM] GPU context too small (${contextSize} < ${MIN_AGENTIC_CONTEXT}) — requireMinContextForGpu=true, retrying with CPU for larger context`);
           success = false;
           if (this.context) { try { await this.context.dispose(); } catch(e) {} this.context = null; }
         }
@@ -1507,6 +1532,11 @@ PERSISTENCE:
       this.gpuPreference = pref;
       console.log(`[LLM] GPU preference set to: ${pref}`);
     }
+  }
+
+  setRequireMinContextForGpu(val) {
+    this.requireMinContextForGpu = !!val;
+    console.log(`[LLM] requireMinContextForGpu set to: ${this.requireMinContextForGpu}`);
   }
 
   updateParams(params) {

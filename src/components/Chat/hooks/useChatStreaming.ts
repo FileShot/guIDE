@@ -35,6 +35,7 @@ export function useChatStreaming(): ChatStreamingState {
   const thinkingDirtyRef = useRef(false);
   const streamEpochRef = useRef(0);
   const activeEpochRef = useRef(0);
+  const iterationStartOffsetRef = useRef(0); // offset where current iteration's text starts in streamBufferRef
 
   useEffect(() => {
     const api = window.electronAPI;
@@ -156,19 +157,41 @@ export function useChatStreaming(): ChatStreamingState {
       scheduleThinkingUpdate();
     });
 
+    // Track where the current iteration's text starts in the accumulated buffer.
+    // When the backend sends llm-replace-last with just the current iteration's cleaned text,
+    // we prepend prior iterations' text so we don't wipe what the user was reading.
+    const cleanupIterationBegin = (api as any).onLlmIterationBegin?.(() => {
+      iterationStartOffsetRef.current = streamBufferRef.current.length;
+    });
+
     // Anti-hallucination: backend detected fake tool results
     const cleanupReplace = api.onLlmReplaceLast?.((cleanedText: string) => {
       if (streamEpochRef.current !== activeEpochRef.current) return;
-      streamBufferRef.current = cleanedText;
+      // Preserve text from prior iterations — only replace current iteration's portion
+      const prefix = streamBufferRef.current.slice(0, iterationStartOffsetRef.current);
+      streamBufferRef.current = prefix + cleanedText;
       // Jump display to buffer end — corrections show immediately, no typewriter delay
-      displayPosRef.current = cleanedText.length;
+      displayPosRef.current = streamBufferRef.current.length;
       scheduleStreamUpdate();
+    });
+
+    // ROLLBACK signal — backend is retrying after a bad response; clear only the current
+    // iteration's streamed tokens, preserving text from prior iterations.
+    const cleanupReset = (api as any).onLlmStreamReset?.(() => {
+      if (streamRafRef.current) cancelAnimationFrame(streamRafRef.current);
+      streamRafRef.current = null;
+      // Trim back to the start of the current iteration only — prior iterations' text stays visible
+      streamBufferRef.current = streamBufferRef.current.slice(0, iterationStartOffsetRef.current);
+      displayPosRef.current = iterationStartOffsetRef.current;
+      setStreamingText(streamBufferRef.current);
     });
 
     return () => {
       cleanupToken?.();
       cleanupThinking?.();
+      cleanupIterationBegin?.();
       cleanupReplace?.();
+      cleanupReset?.();
       if (streamRafRef.current) cancelAnimationFrame(streamRafRef.current);
       if (thinkingRafRef.current) cancelAnimationFrame(thinkingRafRef.current);
     };

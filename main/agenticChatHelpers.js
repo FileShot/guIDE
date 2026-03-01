@@ -199,14 +199,15 @@ function createIpcTokenBatcher(mainWindow, channel, canSend, opts = {}) {
   const flushIntervalMs = Number.isFinite(opts.flushIntervalMs) ? opts.flushIntervalMs : 25;
   const maxBufferChars = Number.isFinite(opts.maxBufferChars) ? opts.maxBufferChars : 2048;
   const flushOnNewline = opts.flushOnNewline !== false;
+  // charsPerFlush: when set, each flush tick emits at most this many characters,
+  // leaving the rest in the buffer for the next tick. Use this to pace fast cloud
+  // providers (e.g. Guide Cloud AI at 1000 tok/s) down to a readable ~15–20 tok/s.
+  const charsPerFlush = Number.isFinite(opts.charsPerFlush) && opts.charsPerFlush > 0 ? opts.charsPerFlush : null;
 
   let buffer = '';
   let timer = null;
 
-  const flush = () => {
-    if (!buffer) return;
-    const text = buffer;
-    buffer = '';
+  const sendRaw = (text) => {
     // Guard against Electron WebContents being destroyed (e.g. user closes app during generation).
     // mainWindow.isDestroyed() / webContents.isDestroyed() throw if called on a dead object,
     // so check both with a try/catch as final backstop.
@@ -217,6 +218,24 @@ function createIpcTokenBatcher(mainWindow, channel, canSend, opts = {}) {
     } catch (_) {
       // Ignore IPC send failures (window closed / destroyed)
     }
+  };
+
+  const flush = () => {
+    if (!buffer) return;
+    if (charsPerFlush && buffer.length > charsPerFlush) {
+      // Emit only charsPerFlush chars this tick; leave the rest for the next tick.
+      const chunk = buffer.slice(0, charsPerFlush);
+      buffer = buffer.slice(charsPerFlush);
+      sendRaw(chunk);
+      // Ensure a timer is running to drain the remaining buffer.
+      if (!timer) {
+        timer = setTimeout(() => { timer = null; flush(); }, flushIntervalMs);
+      }
+      return;
+    }
+    const text = buffer;
+    buffer = '';
+    sendRaw(text);
   };
 
   const scheduleFlush = () => {
@@ -230,11 +249,17 @@ function createIpcTokenBatcher(mainWindow, channel, canSend, opts = {}) {
   const push = (token) => {
     if (!token) return;
     buffer += token;
-    if (buffer.length >= maxBufferChars) {
+    // NOTE: Do NOT synchronously flush on buffer overflow when charsPerFlush is set.
+    // Overflow-triggered synchronous flushes bypass the timer interval and cause rapid
+    // back-to-back IPC sends when a fast API delivers many tokens at once — the pacing
+    // never gets a chance to control the rate. Use scheduleFlush() always so that the
+    // timer is the sole driver of how fast tokens reach the renderer.
+    if (flushOnNewline && token.includes('\n')) {
       flush();
       return;
     }
-    if (flushOnNewline && token.includes('\n')) {
+    if (!charsPerFlush && buffer.length >= maxBufferChars) {
+      // Non-paced batcher: overflow flush is fine, there is no rate limit to protect.
       flush();
       return;
     }
@@ -242,11 +267,23 @@ function createIpcTokenBatcher(mainWindow, channel, canSend, opts = {}) {
   };
 
   const dispose = () => {
+    if (charsPerFlush) {
+      // Paced batcher: do NOT cancel the timer or instant-dump the buffer.
+      // Let the existing timer continue draining at the charsPerFlush rate.
+      // Instant-dumping here bypasses pacing and causes a wall-of-text flash
+      // when a fast cloud API has buffered many tokens by response end.
+      // canSend() will block stale sends if a new request starts before drain completes.
+      return;
+    }
+    // Non-paced batcher: cancel timer and flush remaining buffer immediately as before.
     if (timer) {
       clearTimeout(timer);
       timer = null;
     }
-    flush();
+    if (buffer) {
+      sendRaw(buffer);
+      buffer = '';
+    }
   };
 
   return { push, flush, dispose };
@@ -442,39 +479,15 @@ function pruneCloudHistory(history, keepRecentCount = 6) {
   return pruned;
 }
 
-/**
- * Expanded refusal pattern detection.
- * Covers explicit refusals, passive refusals (describing instead of doing),
- * capability disclaimers, and deflections.
- */
-const EXPANDED_REFUSAL_PATTERNS = new RegExp([
-  // Explicit refusals
-  'I\\s+(?:can\'?t|cannot|won\'?t|will not|am unable|am not able|don\'?t have|do not have)',
-  '(?:I\'?m\\s+)?(?:unable|not able)\\s+to',
-  'beyond my (?:capabilities|ability|scope)',
-  'as an AI(?:\\s+(?:language\\s+)?model)?',
-  'I\'?m (?:just )?a (?:language|text|AI) model',
-  // Passive refusals (describing instead of doing)
-  'you\\s+(?:can|could|should|would need to)\\s+(?:use|try|open|visit|navigate|search|run|create)',
-  'here\'?s how (?:you|one) (?:can|could|would)',
-  'the steps? (?:would be|are|is)',
-  'to do this,? you would',
-  'I\'?ll (?:describe|explain|outline|walk you through)',
-  'let me (?:describe|explain|outline) (?:how|what)',
-  // Capability disclaimers
-  '(?:don\'?t|do not) have (?:access|the ability|internet|web|browser)',
-  '(?:can\'?t|cannot) (?:access|browse|search|navigate|connect|reach|open|visit)',
-  'no (?:internet|web|browser) access',
-  'not (?:equipped|designed|built|programmed) to',
-  'outside (?:of )?my (?:capabilities|scope|abilities)',
-  // Deflections — model offers to do something else instead
-  'instead,? (?:I can|let me|I\'?ll)\\s+(?:help|assist|provide|explain|describe)',
-  'I can (?:help|assist) you (?:with|by) (?:explaining|describing|providing)',
-].join('|'), 'i');
+// EXPANDED_REFUSAL_PATTERNS removed — keyword/regex refusal detection is incompatible
+// with the goal of letting the model decide behavior based on system prompt and context.
+// These patterns produced false positives on valid responses, triggered silent re-generations,
+// and wasted time while users waited. The system prompt handles tool usage guidance.
 
 /**
- * Deterministic response evaluation — pure code heuristics, no model intelligence needed.
- * Returns a verdict: COMMIT (accept result), ROLLBACK (retry), or SKIP (move on).
+ * Response evaluation — determines whether to COMMIT or ROLLBACK.
+ * Only retries on genuinely empty responses. All keyword/regex/heuristic
+ * detection removed — the model decides behavior based on the system prompt.
  *
  * @param {string} responseText - Model's generated text
  * @param {Array} functionCalls - Native function calls from grammar-constrained generation
@@ -486,84 +499,29 @@ function evaluateResponse(responseText, functionCalls, taskType, iteration, hasR
   const text = (responseText || '').trim();
   const hasFunctionCalls = Array.isArray(functionCalls) && functionCalls.length > 0;
 
-  // ── CHAT TASK: Accept any non-empty text ──
-  // BUG-016 fix: must come BEFORE hasFunctionCalls so chat tasks never commit
-  // hallucinated native tool calls (model produces function calls for "hi").
-  if (taskType === 'chat') {
-    if (text.length > 10) return { verdict: 'COMMIT', reason: 'chat_response' };
-    if (text.length > 0) return { verdict: 'COMMIT', reason: 'short_chat' };
-    return { verdict: 'ROLLBACK', reason: 'empty' };
-  }
-
-  // ── VALID TOOL CALL: Always accept ──
+  // Native function calls: always accept
   if (hasFunctionCalls) {
     return { verdict: 'COMMIT', reason: 'tool_call' };
   }
 
-  // ── TEXT PARSING: Check if text contains parseable tool calls ──
-  // (Legacy path — text may contain valid JSON tool blocks)
+  // Text contains parseable tool JSON blocks: accept
   const hasToolJson = /```(?:tool_call|tool|json)[^\n]*\n[\s\S]*?```/.test(text) ||
     /\{\s*"(?:tool|name)"\s*:\s*"[^"]+"/.test(text);
   if (hasToolJson) {
     return { verdict: 'COMMIT', reason: 'text_tool_call' };
   }
-  // BUG-036: Detect granite-3.3-critical-thinking intermediate reasoning JSON format.
-  // Pattern: {"claims": [...], "ambiguous_terms": [...], "assumptions": [...]}
-  // This is NOT a tool call — it's an internal analysis step. Treat as described_not_executed
-  // so the rollback retry injects an explicit "execute NOW" nudge.
-  if (!hasFunctionCalls && /^\s*\{/.test(text) && /"claims"\s*:/.test(text) && /"ambiguous_terms"\s*:/.test(text)) {
-    return { verdict: 'ROLLBACK', reason: 'described_not_executed' };
-  }
-  // ── EMPTY RESPONSE ──
+
+  // Empty response: retry — there is genuinely nothing to show the user
   if (text.length < 15) {
     return { verdict: 'ROLLBACK', reason: 'empty' };
   }
 
-  // ── REFUSAL DETECTION (agentic tasks, iterations 1-5) ──
-  // After iteration 5, the model may legitimately be explaining limitations
-  // encountered during execution (e.g., "I couldn't find X on that page").
-  // BUG-NEW-B: If real tools ran this iteration, skip refusal ROLLBACK — the model
-  // is summarizing what it found, not refusing to act.
-  if (EXPANDED_REFUSAL_PATTERNS.test(text) && iteration <= 5 && !hasRunTools) {
-    return { verdict: 'ROLLBACK', reason: 'refusal' };
-  }
-
-  // ── HALLUCINATION: Past-tense completion claims with NO tool calls ──
-  // Only catches clear cases: model says "I've done X" / "completed" / "finished"
-  // but never actually called any tools. Does NOT catch future-tense ("I'll do X")
-  // because the model may be about to call tools in the same response.
-  // BUG-NEW-B: If real tools ran this iteration, past-tense language is a legitimate
-  // summary ("I searched and found..."), not hallucination — skip the ROLLBACK.
-  const { hallucinatedActions } = detectActionHallucination(text);
-  if (hallucinatedActions && text.length > 50 && iteration <= 3 && !hasRunTools) {
-    return { verdict: 'ROLLBACK', reason: 'hallucination' };
-  }
-
-  // BUG-035: Completion-claim validator — catches small models (e.g. 1.7B) that claim
-  // "Done" or "file created" on iteration 1 with ZERO tool calls on code/general tasks.
-  // These are hallucinated completions. Force rollback so the retry prompt demands a real tool call.
-  if ((taskType === 'code' || taskType === 'general') && iteration === 1 && !hasFunctionCalls) {
-    const COMPLETION_CLAIM_RX = /\b(done|file[\s_-]?created|task[\s_-]?complet\w*|i\s+have\s+(created|written|saved|built|made|finished)|i'?ve\s+(created|written|saved|built|made|finished)|successfully\s+(created|written|built|saved|generated)|all\s+set|finished|completed)\b/i;
-    if (COMPLETION_CLAIM_RX.test(text) && text.length < 600) {
-      return { verdict: 'ROLLBACK', reason: 'described_not_executed' };
-    }
-  }
-
-  // ── SUBSTANTIVE TEXT (iteration > 3): model may be summarizing/concluding ──
-  if (text.length > 100 && iteration > 3) {
-    return { verdict: 'COMMIT', reason: 'substantive_text' };
-  }
-
-  // ── DESCRIBED BUT NOT EXECUTED (iteration 1-2 only) ──
-  // On the first couple iterations, if the model narrates what it would do
-  // instead of doing it, rollback so it tries again. After iteration 2,
-  // the nudge system handles this instead (model sees feedback).
-  const { describedActions } = detectActionHallucination(text);
-  if (describedActions && iteration <= 2 && !hasRunTools) {
-    return { verdict: 'ROLLBACK', reason: 'described_not_executed' };
-  }
-
-  // ── DEFAULT: Accept ──
+  // Everything else: accept.
+  // The model decided to respond with text. That is correct for general questions,
+  // summaries, greetings, and any case where no tool is needed.
+  // Refusal detection, hallucination detection, and described-not-executed heuristics
+  // have been removed — they were keyword/regex systems that silently discarded valid
+  // responses and wasted generation time. System prompt guides the model.
   return { verdict: 'COMMIT', reason: 'default' };
 }
 
@@ -594,9 +552,28 @@ function getModelTier(paramSize) {
  * @returns {string[]|null} Array of tool names to include, or null for all tools
  */
 function getProgressiveTools(taskType, iteration, recentTools, maxTools) {
-  // For large tool budgets, don't restrict — grammar handles the rest
-  if (maxTools >= 30) return null;
+  // FIX 5: Enforce the profile's tool count limit.
+  // Previously returned null (= all tools), flooding small-context models with thousands
+  // of schema tokens and causing context overflow even on trivial messages.
+  // Now returns a priority-ranked list sliced to maxTools so the schema budget stays bounded.
+  if (!maxTools) return null;
 
+  // Priority-ranked: most universally useful tools first.
+  // Tier examples: tiny(6) → top 6 only, small(12) → top 12, medium(20) → top 20, etc.
+  const priorityTools = [
+    'read_file', 'write_file', 'edit_file', 'list_directory', 'run_command',
+    'web_search', 'search_codebase', 'grep_search', 'find_files',
+    'browser_navigate', 'browser_snapshot', 'browser_click', 'browser_type',
+    'browser_scroll', 'browser_press_key', 'browser_select_option',
+    'browser_evaluate', 'browser_get_content', 'browser_screenshot',
+    'browser_back', 'browser_hover', 'browser_tabs', 'fetch_webpage',
+    'write_todos', 'update_todo', 'save_memory', 'get_memory',
+    'git_status', 'git_diff', 'git_commit',
+    'delete_file', 'rename_file', 'get_file_info', 'analyze_error',
+  ];
+  return priorityTools.slice(0, maxTools);
+
+  // --- dead code below: legacy state-machine filtering (disabled) ---
   const lastTool = recentTools.length > 0 ? recentTools[recentTools.length - 1] : null;
   const usedBrowser = recentTools.some(t => t && t.startsWith('browser_'));
   const usedFiles = recentTools.some(t => ['read_file', 'write_file', 'edit_file'].includes(t));
@@ -760,189 +737,43 @@ function getProgressiveTools(taskType, iteration, recentTools, maxTools) {
  * @param {Object} options - { isBrowserTask, nudgesRemaining, allToolResults }
  * @returns {null | { type: string, severity: string, recovery: { prompt: string, action: string } }}
  */
+/**
+ * Post-iteration failure classification.
+ * Stripped to loop detection only — all keyword/regex/heuristic detection removed.
+ * The model decides what to do based on the system prompt.
+ * The only case we stop the loop programmatically is genuine infinite repetition.
+ *
+ * @param {string} responseText
+ * @param {boolean} hasToolCalls
+ * @param {string} taskType
+ * @param {number} iteration
+ * @param {string} originalMessage
+ * @param {string} lastResponse
+ * @param {Object} options
+ * @returns {null | { type: string, severity: string, recovery: { prompt: string, action: string } }}
+ */
 function classifyResponseFailure(responseText, hasToolCalls, taskType, iteration, originalMessage, lastResponse, options = {}) {
   const text = (responseText || '').trim();
-  const { isBrowserTask, nudgesRemaining = 0, allToolResults = [] } = options;
 
   // Tool calls present — no failure
   if (hasToolCalls) return null;
 
-  // Chat task — text responses are always valid
-  if (taskType === 'chat') return null;
-
-  // ── 1. REFUSAL — model says it can't do something it can ──
-  // CRITICAL: if real tools already ran this session (allToolResults.length > 0),
-  // a text-only response is the FINAL ANSWER — not a refusal. Without this guard,
-  // the classifier flags valid summaries like "Summary of Latest AI News..." as refusals
-  // because the prose incidentally matches a pattern (e.g. "you can..."), triggering
-  // forced retries that REPLACE the good response with a weaker one. Same guard exists
-  // in evaluateResponse (!hasRunTools) — both must be in sync.
-  if (EXPANDED_REFUSAL_PATTERNS.test(text) && iteration < 10 && allToolResults.length === 0) {
-    const lower = (originalMessage || '').toLowerCase();
-    let forcedTools = null;
-    if (/\b(search|look\s*up|find|news|weather|current|latest|trending)\b/i.test(lower)) forcedTools = 'web_search';
-    else if (/\b(go\s*to|navigate|open|visit|browse|website|\.com|\.org|https?:)\b/i.test(lower)) forcedTools = 'browser_navigate';
-    else if (/\b(create|write|save|make|generate)\s*(a\s+)?file\b/i.test(lower)) forcedTools = 'write_file';
-    else if (/\b(read|show|open|cat|view)\s*(the\s+)?file\b/i.test(lower)) forcedTools = 'read_file';
-    else if (/\b(run|execute|install|npm|node|python|pip)\b/i.test(lower)) forcedTools = 'run_command';
-    else forcedTools = 'web_search';
-
-    return {
-      type: 'refusal',
-      severity: 'nudge',
-      recovery: {
-        action: 'force_tool',
-        forcedTools: forcedTools ? [forcedTools] : null,
-        prompt: `SYSTEM OVERRIDE: You have REAL, WORKING tools. Your previous response was a refusal — you DO have these capabilities. Complete the user's request by calling the ${forcedTools || 'appropriate'} tool NOW.\n\nUser request: ${originalMessage?.substring(0, 500)}`,
-      },
-    };
-  }
-
-  // ── 2. HALLUCINATION — model claims past-tense completion without tool calls ──
-  const { hallucinatedActions, describedActions } = detectActionHallucination(text);
-  if (hallucinatedActions && text.length > 50) {
-    return {
-      type: 'hallucination',
-      severity: 'nudge',
-      recovery: {
-        action: 'nudge',
-        prompt: `STOP. You claimed you already did things like "I navigated to" or "I created a file" — but you did NOT. You never called any tools. Nothing actually happened.\n\nYou have REAL tools. Output a REAL tool call NOW. Do NOT describe. Do NOT narrate. Output the tool call JSON block.`,
-      },
-    };
-  }
-
-  // ── 2b. WRONG-FORMAT TOOL CALL — model outputs tool calls as bash/shell instead of JSON ──
-  // Small models sometimes write: ```bash\nwrite_file(index.html, ...)\n``` or
-  // ```\nweb_search "query"\n``` instead of the required JSON block format.
-  // The model clearly intends to call a tool — it's just using the wrong syntax.
-  if (taskType !== 'chat' && nudgesRemaining > 0) {
-    const hasBashToolDesc = (() => {
-      // Match tool names as they'd appear in bash/shell syntax (followed by ( or space or quote)
-      const toolNameInBash = /\b(write_file|read_file|edit_file|run_command|web_search|browser_navigate|browser_click|browser_type|browser_snapshot|list_directory|find_files|get_project_structure|delete_file|move_file|create_directory|update_todo)\s*[\(\s"']/;
-      const bashBlockRegex = /```(\w*)[\n\r]([\s\S]*?)```/g;
-      let m;
-      while ((m = bashBlockRegex.exec(text)) !== null) {
-        const lang = m[1].toLowerCase();
-        if (['bash', 'sh', 'shell', ''].includes(lang) && toolNameInBash.test(m[2])) return true;
-      }
-      return false;
-    })();
-    if (hasBashToolDesc) {
-      return {
-        type: 'wrong_tool_format',
-        severity: 'nudge',
-        recovery: {
-          action: 'nudge',
-          prompt: `STOP. You wrote tool calls using bash/shell syntax inside a code block. That format does NOT execute any tool.\n\nTo call a tool you MUST output a JSON block in exactly this format:\n\`\`\`json\n{"tool": "read_file", "params": {"filePath": "src/app.js"}}\n\`\`\`\n\nCall the appropriate tool now using the JSON format above.`,
-        },
-      };
-    }
-  }
-
-  // ── 3. DESCRIBED BUT NOT EXECUTED — model narrates plan without doing it ──
-  if (describedActions && nudgesRemaining > 0) {
-    if (isBrowserTask) {
-      const urlMatch = originalMessage?.match(/(?:https?:\/\/[^\s]+|www\.[^\s]+)/i);
-      const url = urlMatch ? (urlMatch[0].startsWith('http') ? urlMatch[0] : `https://${urlMatch[0]}`) : null;
-      return {
-        type: 'described_not_executed_browser',
-        severity: 'nudge',
-        recovery: {
-          action: 'nudge',
-          prompt: url && iteration <= 2
-            ? `STOP. You did NOT call browser_navigate. Call it NOW:\n\n\`\`\`json\n{"tool": "browser_navigate", "params": {"url": "${url}"}}\n\`\`\`\n\nDo NOT describe anything. Just output the JSON tool call block above.`
-            : `You responded with text but did NOT call any tool. You MUST call a browser tool to continue. Look at the element refs from the page snapshot and call the correct browser tool (browser_click, browser_type, browser_navigate, etc.) with the ref number NOW.`,
-        },
-      };
-    }
-    return {
-      type: 'described_not_executed',
-      severity: 'nudge',
-      recovery: {
-        action: 'nudge',
-        prompt: `You described what you would do but did NOT actually call any tools. You have real tools available. Do NOT describe actions — EXECUTE them by outputting a tool call.\n\nNow call the appropriate tool to complete the user's request.`,
-      },
-    };
-  }
-
-  // ── 4. RAW CODE DUMP — model outputs file content as chat text ──
-  const { shouldNudge: isRawDump } = detectRawCodeDump(text);
-  if (isRawDump && nudgesRemaining > 0) {
-    return {
-      type: 'raw_code_dump',
-      severity: 'nudge',
-      recovery: {
-        action: 'nudge',
-        prompt: 'STOP. You just output a large block of code/content as raw text in the chat. The user CANNOT use this. To create or modify files, you MUST use the write_file or edit_file tool. Re-do this action properly using a tool call. Do NOT paste file content into the chat.',
-      },
-    };
-  }
-
-  // ── BUG-039: INCOHERENT / GIBBERISH OUTPUT — context-poison-induced token salad ──
-  // Must come BEFORE truncation: gibberish also triggers runaway abort + endsAbruptly,
-  // causing the classifier to wrongly return "truncation (severity: nudge)".
-  // Real truncation has coherent (though incomplete) sentences. Gibberish has extreme word
-  // repetition and near-zero unique vocabulary — detect that pattern and classify correctly.
-  // Also detect multilingual token salad: high non-ASCII density signals the model is
-  // emitting cross-language token patterns rather than coherent English responses.
-  //
-  // IMPORTANT: Filter common English stopwords before computing repetition ratio.
-  // Without this, normal creative writing (stories, essays) triggers false positives
-  // because words like "the", "and", "was", "in", "of" naturally repeat many times.
-  // Real gibberish/token-salad repeats CONTENT words, not just function words.
-  const _gStopwords = new Set(['the','and','was','is','are','were','be','been','being','have','has','had','do','does','did','will','would','could','should','may','might','shall','can','that','this','these','those','with','from','into','onto','upon','they','them','their','there','here','when','where','what','which','who','how','but','not','for','nor','yet','its','his','her','our','your','him','she','him','out','all','each','every','both','few','more','most','other','some','such','than','too','very','just','also','over','then','now','only','even','back','after','before','about','through','during','because','while','since','although','though','however','therefore','thus','hence','whether','either','neither','another','again','already','much','many','any','one','two','three','four','five','six','seven','eight','nine','ten']);
-  const _gAllWords = text.toLowerCase().replace(/[^a-z\s]/g, ' ').split(/\s+/).filter(w => w.length > 2);
-  const _gWords = _gAllWords.filter(w => !_gStopwords.has(w));
-  const _gNonASCIIRatio = (text.match(/[^\x00-\x7F]/g) || []).length / Math.max(text.length, 1);
-  if (_gWords.length >= 20) {
-    const _gFreq = {};
-    for (const w of _gWords) _gFreq[w] = (_gFreq[w] || 0) + 1;
-    const _gUnique = Object.keys(_gFreq).length;
-    const _gHighRepeat = Object.values(_gFreq).filter(c => c >= 3).length;
-    const _gRepRatio = (_gWords.length - _gUnique) / _gWords.length;
-    if ((_gRepRatio > 0.6 && _gHighRepeat > 10) || _gNonASCIIRatio > 0.03) {
-      return {
-        type: 'incoherent_output',
-        severity: 'stop',
-        recovery: {
-          action: 'clear_context',
-          prompt: 'The model produced incoherent output (context poisoning). Context has been cleared.',
-        },
-      };
-    }
-  }
-
-  // ── 5. TRUNCATION — response cut off mid-code ──
-  const { hasUnclosedCodeBlock, endsAbruptly } = detectTruncation(text);
-  if (endsAbruptly && nudgesRemaining > 0) {
-    return {
-      type: 'truncation',
-      severity: 'nudge',
-      recovery: {
-        action: 'nudge',
-        prompt: getTruncationNudgeMessage(text, hasUnclosedCodeBlock),
-      },
-    };
-  }
-
-  // ── 6. REPETITION — near-duplicate of previous response ──
+  // Repetition: model is in an infinite loop — stop it.
+  // This is structural loop detection, not content-quality judgment.
   if (lastResponse && text.length > 100 && iteration > 2) {
     if (isNearDuplicate(lastResponse, text, 0.80)) {
       return {
         type: 'repetition',
         severity: 'stop',
-        recovery: {
-          action: 'stop',
-          prompt: '',
-        },
+        recovery: { action: 'stop', prompt: '' },
       };
     }
   }
 
-  // ── 7. INCOMPLETE PLAN — todos still pending but model stopped ──
-  // (Checked by caller since it needs access to mcpToolServer._todos)
-
-  // No failure detected
+  // No failure — let the response through.
+  // Removed: refusal detection, hallucination detection, described-not-executed detection,
+  // wrong-format detection, raw code dump detection, truncation detection, gibberish detection.
+  // All were keyword/regex classifiers that produced false positives on valid responses.
   return null;
 }
 
@@ -1036,7 +867,6 @@ module.exports = {
   pruneVerboseHistory,
   pruneCloudHistory,
   isNearDuplicate,
-  EXPANDED_REFUSAL_PATTERNS,
   evaluateResponse,
   getModelTier,
   getProgressiveTools,

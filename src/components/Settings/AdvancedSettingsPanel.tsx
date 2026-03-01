@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Save, RotateCcw, ChevronDown, ChevronRight } from 'lucide-react';
+import { Save, RotateCcw, ChevronDown, ChevronRight, Zap, Scale, Brain } from 'lucide-react';
 
 interface SettingsState {
   // LLM / Inference
@@ -12,9 +12,12 @@ interface SettingsState {
   repeatPenalty: number;
   seed: number;
   maxAgenticIterations: number;
+  thinkingBudget: number;
+  reasoningEffort: 'low' | 'medium' | 'high';
   // Hardware
   gpuPreference: 'auto' | 'cpu';
   gpuLayers: number;
+  requireMinContextForGpu: boolean;
   // Editor
   fontSize: number;
   fontFamily: string;
@@ -46,8 +49,11 @@ const DEFAULTS: SettingsState = {
   repeatPenalty: 1.1,
   seed: -1,
   maxAgenticIterations: 25,
+  thinkingBudget: 0,      // 0 = auto (model-scaled), -1 = unlimited, >0 = exact cap
+  reasoningEffort: 'medium',
   gpuPreference: 'auto',
   gpuLayers: 6,
+  requireMinContextForGpu: false,
   fontSize: 14,
   fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
   tabSize: 2,
@@ -69,7 +75,7 @@ const DEFAULTS: SettingsState = {
 const CLOUD_PROVIDERS = [
   { id: 'none', label: 'Local Model (default)' },
   { id: 'groq', label: 'Groq (Free, Ultra-Fast)', models: ['llama-3.3-70b-versatile', 'meta-llama/llama-4-maverick-17b-128e-instruct', 'meta-llama/llama-4-scout-17b-16e-instruct', 'moonshotai/kimi-k2-instruct', 'openai/gpt-oss-120b', 'qwen/qwen3-32b', 'llama-3.1-8b-instant'] },
-  { id: 'cerebras', label: 'Cerebras (Free, Ultra-Fast)', models: ['gpt-oss-120b', 'qwen-3-235b-a22b-instruct-2507', 'llama3.1-8b'] },
+  { id: 'cerebras', label: 'Cerebras (Free, Ultra-Fast)', models: ['llama3.1-8b', 'gpt-oss-120b'] },
   { id: 'google', label: 'Google Gemini', models: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash', 'gemini-2.0-flash-lite'] },
   { id: 'openai', label: 'OpenAI', models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'o1', 'o1-mini', 'o3-mini'] },
   { id: 'anthropic', label: 'Anthropic', models: ['claude-sonnet-4-20250514', 'claude-3-5-sonnet-20241022', 'claude-3-5-haiku-20241022'] },
@@ -257,6 +263,12 @@ export const AdvancedSettingsPanel: React.FC = () => {
     setSettings(prev => ({ ...prev, [key]: value }));
     setDirty(true);
     setSaved(false);
+    // Live-apply thinking/reasoning settings immediately (don’t wait for Save)
+    if (key === 'thinkingBudget') {
+      (window as any).electronAPI?.llmSetThinkingBudget?.(value);
+    } else if (key === 'reasoningEffort') {
+      (window as any).electronAPI?.llmSetReasoningEffort?.(value);
+    }
   }, []);
 
   const save = useCallback(async () => {
@@ -375,7 +387,7 @@ export const AdvancedSettingsPanel: React.FC = () => {
         </Section>
 
         {/* ── LLM / Inference ──────────────────── */}
-        <Section title="LLM / Inference" defaultOpen={true}>
+        <Section title="LLM / Inference" defaultOpen={false}>
           <SliderField label="Temperature" value={settings.temperature} min={0} max={2} step={0.05} onChange={v => update('temperature', v)} hint="Lower = more focused, higher = more creative" />
           <SliderField label="Max Tokens" value={settings.maxTokens} min={256} max={8192} step={256} onChange={v => update('maxTokens', v)} hint="Maximum tokens per generation" />
           <div>
@@ -386,6 +398,82 @@ export const AdvancedSettingsPanel: React.FC = () => {
           <SliderField label="Top-K" value={settings.topK} min={1} max={100} step={1} onChange={v => update('topK', v)} />
           <SliderField label="Repeat Penalty" value={settings.repeatPenalty} min={1} max={2} step={0.05} onChange={v => update('repeatPenalty', v)} />
           <SliderField label="Seed" value={settings.seed} min={-1} max={99999} step={1} onChange={v => update('seed', v)} hint="-1 for random" />
+
+          {/* ─— Thinking & Reasoning (live-applied) —─ */}
+          <div style={{ borderTop: '1px solid var(--theme-sidebar-border)', paddingTop: '10px' }}>
+            <div className="text-[10px] mb-2 uppercase tracking-wider" style={{ color: 'var(--theme-foreground-muted)', opacity: 0.7 }}>Thinking &amp; Reasoning (live)</div>
+
+            {/* Reasoning Effort */}
+            <div className="mb-3">
+              <label className="text-[11px] block mb-1" style={{ color: 'var(--theme-foreground-muted)' }}>Reasoning Effort</label>
+              <div className="flex gap-1">
+                {(['low', 'medium', 'high'] as const).map(level => (
+                  <button key={level}
+                    className="flex-1 px-2 py-1 text-[10px] rounded border transition-colors"
+                    style={{
+                      backgroundColor: settings.reasoningEffort === level ? 'var(--theme-accent)' : 'var(--theme-sidebar)',
+                      borderColor: settings.reasoningEffort === level ? 'var(--theme-accent)' : 'var(--theme-sidebar-border)',
+                      color: settings.reasoningEffort === level ? '#fff' : 'var(--theme-foreground-muted)',
+                    }}
+                    onClick={() => update('reasoningEffort', level)}
+                  >
+                    <span className="flex items-center justify-center gap-0.5">
+                      {level === 'low' ? <Zap size={10} /> : level === 'medium' ? <Scale size={10} /> : <Brain size={10} />}
+                      {level === 'low' ? 'Low' : level === 'medium' ? 'Med' : 'High'}
+                    </span>
+                  </button>
+                ))}
+              </div>
+              <div className="text-[10px] mt-0.5" style={{ color: 'var(--theme-foreground-muted)', opacity: 0.6 }}>Controls thinking depth. Low = fast, High = thorough.</div>
+            </div>
+
+            {/* Thinking Budget: slider + number input + ∞ No Cap */}
+            <div>
+              <div className="flex justify-between items-center mb-1">
+                <label className="text-[11px]" style={{ color: 'var(--theme-foreground-muted)' }}>
+                  Thinking Budget:&nbsp;
+                  <span style={{ color: 'var(--theme-foreground)', fontWeight: 500 }}>
+                    {settings.thinkingBudget === 0 ? 'Auto' : settings.thinkingBudget === -1 ? 'Unlimited' : `${settings.thinkingBudget.toLocaleString()} tokens`}
+                  </span>
+                </label>
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number"
+                    value={settings.thinkingBudget === -1 ? '' : settings.thinkingBudget}
+                    min={0} max={32768} step={128}
+                    placeholder={settings.thinkingBudget === -1 ? '∞' : '0 = auto'}
+                    onChange={e => {
+                      const v = parseInt(e.target.value);
+                      if (!isNaN(v)) update('thinkingBudget', Math.max(0, Math.min(32768, v)));
+                    }}
+                    className="w-[72px] text-right text-[11px] px-1 py-0.5 rounded"
+                    style={{ backgroundColor: 'var(--theme-input-bg)', color: 'var(--theme-foreground)', border: '1px solid var(--theme-sidebar-border)' }}
+                  />
+                  <button
+                    className="text-[9px] px-1.5 py-0.5 rounded border transition-colors"
+                    style={{
+                      backgroundColor: settings.thinkingBudget === -1 ? 'var(--theme-accent)' : 'var(--theme-sidebar)',
+                      borderColor: settings.thinkingBudget === -1 ? 'var(--theme-accent)' : 'var(--theme-sidebar-border)',
+                      color: settings.thinkingBudget === -1 ? '#fff' : 'var(--theme-foreground-muted)',
+                    }}
+                    onClick={() => update('thinkingBudget', settings.thinkingBudget === -1 ? 0 : -1)}
+                    title="Unlimited (no cap)"
+                  >∞</button>
+                </div>
+              </div>
+              <input
+                type="range" min={0} max={32768} step={128}
+                value={settings.thinkingBudget === -1 ? 32768 : settings.thinkingBudget}
+                onChange={e => update('thinkingBudget', parseInt(e.target.value))}
+                className="w-full h-1 rounded-lg appearance-none cursor-pointer accent-[var(--theme-accent)]"
+                style={{ backgroundColor: 'var(--theme-sidebar-border)' }}
+              />
+              <div className="flex justify-between text-[10px] mt-0.5" style={{ color: 'var(--theme-foreground-muted)', opacity: 0.6 }}>
+                <span>0 = Auto</span><span>8K</span><span>16K</span><span>32K</span>
+              </div>
+              <div className="text-[10px] mt-0.5" style={{ color: 'var(--theme-foreground-muted)', opacity: 0.6 }}>Type an exact value in the box or drag the slider. Both sync.</div>
+            </div>
+          </div>
         </Section>
 
         {/* ── Agentic Behavior ─────────────────── */}
@@ -473,6 +561,12 @@ export const AdvancedSettingsPanel: React.FC = () => {
             <SliderField label="GPU Layers" value={settings.gpuLayers} min={0} max={64} step={1} onChange={v => update('gpuLayers', v)} hint="Layers offloaded to GPU. More = faster but uses more VRAM." />
             <div className="text-[10px] mt-0.5" style={{ color: '#fbbf24', opacity: 0.8 }}>&#9888; Requires model reload to apply</div>
           </div>
+          <ToggleField
+            label="Require Min Context for GPU"
+            value={settings.requireMinContextForGpu}
+            onChange={v => update('requireMinContextForGpu', v)}
+            hint="When ON: if GPU offload yields < 4096 ctx tokens, discard and retry on CPU for larger context. Default OFF — GPU is always kept."
+          />
         </Section>
 
         {/* ── Editor ───────────────────────────── */}

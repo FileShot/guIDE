@@ -286,6 +286,11 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     root.style.setProperty('--theme-scrollbar', c.scrollbar);
     root.style.setProperty('--theme-scrollbar-hover', c.scrollbarHover);
     root.style.setProperty('--theme-chat-bubble', c.chatBubble);
+    // Sync native Electron title bar color with active theme
+    try {
+      const symbolColor = theme.type === 'dark' ? '#cccccc' : '#1a1a1a';
+      (window as any).electronAPI?.setTitleBarOverlay?.({ color: c.titleBar, symbolColor, height: 40 });
+    } catch { /* ignore in browser/dev */ }
   }, [theme]);
 
   return (

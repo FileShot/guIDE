@@ -263,6 +263,31 @@ function parseToolCalls(text) {
     return { tool: toolName, params };
   };
 
+  // Method 0: <tool_call>...</tool_call> XML tag format
+  // Some models emit this format in text-mode fallback (e.g. Qwen3 native chat wrapper).
+  // Must run first — before fenced-block search — because the XML tags are unambiguous boundaries
+  // and avoid the brace-counter string-state issues that Method 2 has with HTML content.
+  const xmlToolCallRegex = /<tool_call>\s*([\s\S]*?)\s*<\/tool_call>/g;
+  let xmlMatch;
+  while ((xmlMatch = xmlToolCallRegex.exec(cleanedText)) !== null) {
+    const innerContent = xmlMatch[1].trim();
+    try {
+      let parsed;
+      try { parsed = JSON.parse(sanitizeJson(innerContent)); } catch {
+        try { parsed = JSON.parse(sanitizeJson(fixQuoting(innerContent))); } catch {
+          parsed = JSON.parse(sanitizeJson(fixBackticks(fixQuoting(innerContent))));
+        }
+      }
+      const normalized = normalizeToolCall(parsed);
+      if (normalized) {
+        console.log('[MCP] Found tool call in <tool_call> XML:', normalized.tool);
+        toolCalls.push(normalized);
+      }
+    } catch (e) {
+      console.log('[MCP] Failed to parse <tool_call> XML content:', e.message);
+    }
+  }
+
   // Match ```tool, ```json, or ```tool_call blocks
   const regex = /```(?:tool_call|tool|json)[^\n]*\n([\s\S]*?)```/g;
   let match;
@@ -697,7 +722,10 @@ async function processResponse(responseText, options = {}) {
   // Small models often hallucinate paths like "$project_dir/package.json",
   // "/project/project-name/src", "/home/user/project/...", etc.
   // Strip these to relative paths so file operations work.
-  const TEMPLATE_PATH_RE = /^(?:\$\w+\/|\/project\/[^/]*\/|\/home\/[^/]*\/[^/]*\/|\/workspace\/|~\/[^/]*\/|[A-Z]:\\[^\\]*\\)/;
+  // NOTE: Windows absolute paths (C:\Users\...) are intentionally NOT stripped here.
+  // _listDirectory and other tools call path.isAbsolute() and handle them correctly.
+  // Stripping Windows paths breaks valid user paths like C:\Users\brend\my-python-app.
+  const TEMPLATE_PATH_RE = /^(?:\$\w+\/|\/project\/[^/]*\/|\/home\/[^/]*\/[^/]*\/|\/workspace\/|~\/[^/]*\/)/;
   for (const call of toolCalls) {
     if (!call?.params) continue;
     for (const key of ['filePath', 'path', 'file_path', 'dirPath', 'directory']) {

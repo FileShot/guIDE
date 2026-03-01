@@ -44,7 +44,7 @@ class CloudLLMService extends EventEmitter {
       lepton: '',
     };
     this.activeProvider = null;
-    this.activeModel = 'gpt-oss-120b';  // Default model
+    this.activeModel = 'llama3.1-8b';  // Default (Cerebras); real default for new users is groq/llama-3.3-70b-versatile set in WelcomeScreen
     this._openRouterModelsCache = null;
     this._openRouterModelsFetchedAt = 0;
     // Track rate-limited providers with cooldown timestamps
@@ -61,9 +61,9 @@ class CloudLLMService extends EventEmitter {
     this._providerRPMPerKey = {}; // { provider: number }
     // Default RPM per-key estimates for free tiers
     this._defaultRPMPerKey = {
-      groq: 30,       // Confirmed: free tier = 30 RPM/key
-      cerebras: 30,   // 30 RPM/key — only gpt-oss-120b is used (GLM removed; lower limit)
-      sambanova: 1,   // 20 RPD ≈ trivial
+      groq: 30,       // Confirmed: free tier = 30 RPM/key (bundled keys all 403 currently)
+      cerebras: 30,   // 30 RPM/key; gpt-oss-120b confirmed working
+      sambanova: 10,  // Free tier ~10 RPM; was set to 1 which caused 50s pacer waits
       google: 15,     // Gemini free tier varies
       openrouter: 20, // OpenRouter free models
       openai: 3,      // Free GPT-4o-mini
@@ -578,9 +578,8 @@ class CloudLLMService extends EventEmitter {
   _getProviderModels(provider) {
     const models = {
       graysoft: [
-        { id: 'gpt-oss-120b', name: 'GPT-OSS 120B (Reasoning)' },
-        { id: 'qwen-3-235b-a22b-instruct-2507', name: 'Qwen 3 235B MoE (Large)' },
-        { id: 'llama3.1-8b', name: 'Llama 3.1 8B (Lightweight)' },
+        { id: 'llama3.1-8b', name: 'Llama 3.1 8B' },
+        { id: 'gpt-oss-120b', name: 'GPT-OSS 120B (Reasoning — slower)' },
       ],
       openai: [
         { id: 'gpt-4.1', name: 'GPT-4.1 (Newest)' },
@@ -608,9 +607,6 @@ class CloudLLMService extends EventEmitter {
       ],
       openrouter: [
         { id: 'meta-llama/llama-3.3-70b-instruct:free', name: 'Llama 3.3 70B (Free)' },
-        { id: 'qwen/qwen3-235b-a22b:free', name: 'Qwen3 235B (Free)' },
-        { id: 'deepseek/deepseek-r1:free', name: 'DeepSeek R1 (Free)' },
-        { id: 'google/gemini-2.0-flash-exp:free', name: 'Gemini 2.0 Flash (Free)' },
         { id: 'mistralai/mistral-small-3.1-24b-instruct:free', name: 'Mistral Small 3.1 (Free)' },
       ],
       apifreellm: [
@@ -629,18 +625,15 @@ class CloudLLMService extends EventEmitter {
       ],
       cerebras: [
         { id: 'gpt-oss-120b', name: 'GPT-OSS 120B (Free, Default, 30 RPM/key)' },
-        { id: 'qwen-3-235b-a22b-instruct-2507', name: 'Qwen 3 235B MoE (Free)' },
+        { id: 'llama3.1-8b', name: 'Llama 3.1 8B (Free, 30 RPM/key)' },
       ],
       sambanova: [
-        { id: 'DeepSeek-V3.2', name: 'DeepSeek V3.2 (Free, Newest)' },
+        { id: 'Meta-Llama-3.3-70B-Instruct', name: 'Llama 3.3 70B (Free, Default)' },
         { id: 'DeepSeek-V3.1', name: 'DeepSeek V3.1 (Free)' },
         { id: 'DeepSeek-R1-0528', name: 'DeepSeek R1 Reasoning (Free)' },
-        { id: 'Meta-Llama-3.3-70B-Instruct', name: 'Llama 3.3 70B (Free)' },
         { id: 'Llama-4-Maverick-17B-128E-Instruct', name: 'Llama 4 Maverick 17B (Free)' },
-        { id: 'Qwen3-235B', name: 'Qwen 3 235B (Free)' },
         { id: 'Qwen3-32B', name: 'Qwen 3 32B (Free)' },
         { id: 'gpt-oss-120b', name: 'GPT-OSS 120B (Free)' },
-        { id: 'MiniMax-M2.5', name: 'MiniMax M2.5 (Free)' },
       ],
       together: [
         { id: 'meta-llama/Llama-3.3-70B-Instruct-Turbo', name: 'Llama 3.3 70B Turbo' },
@@ -917,9 +910,7 @@ class CloudLLMService extends EventEmitter {
       } else {
         providerOnCooldown = true;
         const waitSec = Math.ceil((this._rateLimitedUntil[provider] - now) / 1000);
-        console.log(`[CloudLLM] ${provider} on cooldown for ${waitSec}s, skipping to fallback`);
-        const _cooldownLabel = (this._isBundledProvider(provider) && !this.isUsingOwnKey(provider)) ? 'guIDE Cloud AI' : this._getProviderLabel(provider);
-        if (onToken) onToken(`\n*${_cooldownLabel} on cooldown (${waitSec}s remaining), trying alternatives...*\n`);
+        console.log(`[CloudLLM] ${provider} on cooldown for ${waitSec}s, switching seamlessly to next provider`);
         // Fall through to fallback chain — skip pacing and generation
       }
     }
@@ -948,7 +939,10 @@ class CloudLLMService extends EventEmitter {
         try {
           return await this._executeGeneration(provider, model, systemPrompt, prompt, options, onToken, conversationHistory, onThinkingToken, images, attemptKey);
         } catch (err) {
-          if (err.message && (err.message.includes('429') || err.message.includes('401') || err.message.includes('413') || err.message.toLowerCase().includes('rate limit') || err.message.toLowerCase().includes('unauthorized') || err.message.toLowerCase().includes('too large') || err.message.toLowerCase().includes('tokens per minute'))) {
+          const is429 = err.message && (err.message.includes('429') || err.message.includes('401') || err.message.includes('413') || err.message.toLowerCase().includes('rate limit') || err.message.toLowerCase().includes('unauthorized') || err.message.toLowerCase().includes('too large') || err.message.toLowerCase().includes('tokens per minute'));
+          const is403 = !is429 && err.message && (err.message.includes('403') || err.message.toLowerCase().includes('forbidden'));
+          const is5xx = !is429 && !is403 && err.message && (err.message.includes('500') || err.message.includes('502') || err.message.includes('503') || err.message.includes('ECONNRESET') || err.message.toLowerCase().includes('timeout'));
+          if (is429) {
             // Record rate limit event for adaptive pacing
             this._recent429Timestamps.push(Date.now());
             // Cooldown the specific key that was just used
@@ -963,10 +957,15 @@ class CloudLLMService extends EventEmitter {
             this._rateLimitedUntil[provider] = Date.now() + 60000;
             console.log(`[CloudLLM] 429 on ${provider} (all pool keys exhausted), cooldown for 60s`);
             const _rlLabel = (this._isBundledProvider(provider) && !this.isUsingOwnKey(provider)) ? 'guIDE Cloud AI' : this._getProviderLabel(provider);
-            if (onToken) onToken(`\n*${_rlLabel} rate limited, trying alternatives...*\n`);
             if (noFallback) {
               throw new Error(`${_rlLabel} rate limited. Please wait a minute or try a different model.`);
             }
+            break; // Fall through to provider fallback chain
+          } else if (is403 || is5xx) {
+            // 403 Forbidden or transient 5xx — mark provider on cooldown, fall through to fallback chain
+            const cooldownMs = is403 ? 300000 : 60000; // 5 min for auth errors, 1 min for transient
+            this._rateLimitedUntil[provider] = Date.now() + cooldownMs;
+            console.log(`[CloudLLM] ${err.message.substring(0, 80)} on ${provider}, cooldown ${cooldownMs / 1000}s, falling to fallback chain`);
             break; // Fall through to provider fallback chain
           } else {
             throw err;
@@ -988,7 +987,8 @@ class CloudLLMService extends EventEmitter {
       }
     }
 
-    // Then try other bundled providers in priority order — Cerebras → SambaNova → OpenRouter → Groq → Google last (worst rate limits)
+    // Fallback priority: 70B non-thinking providers first (SambaNova, OpenRouter, Groq), Cerebras 8B last resort.
+    // Groq is last — all 7 bundled keys return 403 (account-level block). Keep in pool for when keys are replaced.
     const PREFERRED_FALLBACK_MODEL = {
       cerebras:   'gpt-oss-120b',
       sambanova:  'Meta-Llama-3.3-70B-Instruct',
@@ -996,7 +996,7 @@ class CloudLLMService extends EventEmitter {
       groq:       'llama-3.3-70b-versatile',
       google:     'gemini-2.5-flash',
     };
-    const otherProviders = ['cerebras', 'sambanova', 'openrouter', 'groq', 'google', 'nvidia', 'cohere', 'mistral', 'huggingface', 'cloudflare', 'together', 'fireworks']
+    const otherProviders = ['sambanova', 'cerebras', 'google', 'nvidia', 'cohere', 'mistral', 'huggingface', 'cloudflare', 'together', 'fireworks', 'openrouter', 'groq']
       .filter(p => p !== provider && this.apiKeys[p] && (!this._rateLimitedUntil[p] || this._rateLimitedUntil[p] <= Date.now()));
     for (const p of otherProviders) {
       const pModel = PREFERRED_FALLBACK_MODEL[p] || this._getProviderModels(p)[0]?.id;
@@ -1011,14 +1011,7 @@ class CloudLLMService extends EventEmitter {
       if (fbProvider !== 'google' && this._rateLimitedUntil[fbProvider] && this._rateLimitedUntil[fbProvider] > Date.now()) continue;
 
       console.log(`[CloudLLM] Falling back to ${fbProvider}/${fbModel}`);
-      // Only show fallback message when switching to a DIFFERENT provider (not other Gemini models)
-      const isDifferentProvider = fbProvider !== provider;
-      if (onToken && isDifferentProvider) {
-        const _fbLabel = (this._isBundledProvider(fbProvider) && !this.isUsingOwnKey(fbProvider)) ? 'guIDE Cloud AI' : this._getProviderLabel(fbProvider);
-        onToken(`\n\n*Switching to ${_fbLabel}...*\n\n`);
-      }
-
-      // No delay between fallbacks — rotate instantly for zero-latency retry
+      // No delay between fallbacks — rotate instantly for zero-latency seamless retry
       await new Promise(r => setTimeout(r, 0));
 
       try {
@@ -1031,8 +1024,14 @@ class CloudLLMService extends EventEmitter {
           console.log(`[CloudLLM] Fallback ${fbProvider} also rate limited (cooldown 60s), trying next...`);
           continue;
         }
-        // Transient errors (500, 503, network) — log and try next fallback instead of aborting
-        if (fbErr.message && (fbErr.message.includes('500') || fbErr.message.includes('503') || fbErr.message.includes('timeout') || fbErr.message.includes('ECONNRESET'))) {
+        // 403 Forbidden — auth/access error, mark provider unavailable for 5 minutes
+        if (fbErr.message && (fbErr.message.includes('403') || fbErr.message.toLowerCase().includes('forbidden'))) {
+          this._rateLimitedUntil[fbProvider] = Date.now() + 300000;
+          console.log(`[CloudLLM] Fallback ${fbProvider} 403 forbidden, cooldown 5min, trying next...`);
+          continue;
+        }
+        // Transient errors (500, 502, 503, network) — log and try next fallback instead of aborting
+        if (fbErr.message && (fbErr.message.includes('500') || fbErr.message.includes('502') || fbErr.message.includes('503') || fbErr.message.includes('timeout') || fbErr.message.includes('ECONNRESET'))) {
           console.log(`[CloudLLM] Fallback ${fbProvider} transient error: ${fbErr.message.substring(0, 100)}, trying next...`);
           continue;
         }
@@ -1110,9 +1109,8 @@ class CloudLLMService extends EventEmitter {
       'meta-llama/llama-4-scout-17b-16e-instruct': 131072,
       'moonshotai/kimi-k2-instruct': 131072,
       'openai/gpt-oss-120b': 32768, 'qwen/qwen3-32b': 32768,
-      // Cerebras (only 3 models available as of Feb 2026)
-      'gpt-oss-120b': 32768,
-      'qwen-3-235b-a22b-instruct-2507': 65536, 'llama3.1-8b': 8192,
+      // Cerebras (2 working models as of Feb 2026; qwen-3-235b/zai-glm-4.7 return 404 on inference)
+      'gpt-oss-120b': 32768, 'llama3.1-8b': 8192,
       // SambaNova
       'DeepSeek-V3.2': 65536, 'DeepSeek-V3.1': 65536, 'Meta-Llama-3.3-70B-Instruct': 8192,
       'DeepSeek-R1-0528': 65536, 'Qwen3-235B': 32768, 'Qwen3-32B': 32768,

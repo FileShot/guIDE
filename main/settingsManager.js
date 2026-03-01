@@ -85,6 +85,7 @@ function registerSettingsHandlers(ctx) {
     // contextSize and gpuLayers require a model reload — we do NOT apply those here.
     const appliedToEngine = !!(llmEngine && llmEngine.isReady);
     if (llmEngine) {
+      if (typeof settings.requireMinContextForGpu === 'boolean') llmEngine.setRequireMinContextForGpu(settings.requireMinContextForGpu);
       if (typeof settings.temperature === 'number')   llmEngine.defaultParams.temperature  = settings.temperature;
       if (typeof settings.maxTokens    === 'number')  llmEngine.defaultParams.maxTokens    = settings.maxTokens;
       if (typeof settings.topP         === 'number')  llmEngine.defaultParams.topP         = settings.topP;

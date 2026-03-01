@@ -295,7 +295,7 @@ class MCPToolServer {
     this._toolDefsCache = [
       {
         name: 'web_search',
-        description: 'Search the web for information using DuckDuckGo. Use for documentation, error solutions, API references.',
+        description: 'Search the web for information using DuckDuckGo. Use when the answer may have changed since your training — anything that varies over time. Also use for documentation and error solutions when the current version matters.',
         parameters: {
           query: { type: 'string', description: 'Search query', required: true },
           maxResults: { type: 'number', description: 'Max results (default 5)', required: false },
@@ -319,7 +319,7 @@ class MCPToolServer {
       },
       {
         name: 'write_file',
-        description: 'Write or create a file in the project.',
+        description: 'Write or create a file in the project. Always use this to save file content — never output file content as raw text in the chat. Format: {"tool":"write_file","params":{"filePath":"src/app.js","content":"..."}}',
         parameters: {
           filePath: { type: 'string', description: 'File path', required: true },
           content: { type: 'string', description: 'File content', required: true },
@@ -344,7 +344,7 @@ class MCPToolServer {
       },
       {
         name: 'list_directory',
-        description: 'List files and directories at a path. Use "." to list the project root.',
+        description: 'List files and directories at a path. Call this before naming or assuming any files exist — you have no knowledge of what files are in the project until you do. Use "." to list the project root.',
         parameters: {
           dirPath: { type: 'string', description: 'Directory path — use "." for project root', required: true },
           recursive: { type: 'boolean', description: 'Recursive listing', required: false },
@@ -1464,7 +1464,11 @@ class MCPToolServer {
   }
 
   async _listDirectory(dirPath, recursive = false) {
-    const fullPath = path.isAbsolute(dirPath) ? dirPath : path.join(this.projectPath || '', dirPath);
+    // FIX 3: Default to project root when dirPath is absent.
+    // When a model calls list_directory with no path argument, dirPath is undefined.
+    // path.isAbsolute(undefined) throws TypeError: must be type string.
+    const resolvedDir = dirPath || this.projectPath || '.';
+    const fullPath = path.isAbsolute(resolvedDir) ? resolvedDir : path.join(this.projectPath || '', resolvedDir);
     try {
       const entries = await fs.readdir(fullPath, { withFileTypes: true });
       const items = entries
@@ -2216,7 +2220,7 @@ class MCPToolServer {
     hint += '- **write_file**(filePath, content) — Create/overwrite a file. USE THIS for code, HTML, scripts.\n';
     hint += '- **read_file**(filePath, startLine?, endLine?) — Read file contents.\n';
     hint += '- **edit_file**(filePath, oldText, newText) — Replace text in existing file.\n';
-    hint += '- **list_directory**(dirPath) — List files in directory.\n';
+    hint += '- **list_directory**(dirPath) — List files in directory. Call this FIRST — you do not know what files exist until you do.\n';
     hint += '- **run_command**(command) — Run a terminal/shell command.\n';
     hint += '\n';
 
@@ -2246,7 +2250,7 @@ class MCPToolServer {
       hint += '- **browser_evaluate**(expression) — Run JS on page.\n';
       hint += '\n';
       hint += '### Web & Memory\n';
-      hint += '- **web_search**(query) — Search the internet.\n';
+      hint += '- **web_search**(query) — Search the internet for live data (prices, news, weather, current versions). You have real internet access. Never refuse a live data query — always call this.\n';
       hint += '- **fetch_webpage**(url) — Get page text/JSON directly.\n';
       hint += '- **save_memory**(key, value) — Persist info across sessions.\n';
       hint += '\n### Examples\n';

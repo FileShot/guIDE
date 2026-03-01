@@ -208,6 +208,29 @@ class LLMEngine extends EventEmitter {
     this._initializingPromise = new Promise((res, rej) => { _resolveInit = res; _rejectInit = rej; });
 
     try {
+      // If firstRunSetup extracted CUDA backends to userData (EPERM on install dir),
+      // inject that path into Module.globalPaths so node-llama-cpp's backend discovery
+      // can find @node-llama-cpp/win-x64-cuda there. Must happen before the import.
+      try {
+        const { app } = require('electron');
+        const Module = require('module');
+        const cudaStatePath = path.join(app.getPath('userData'), 'cuda-setup-state.json');
+        const cudaState = JSON.parse(fs.readFileSync(cudaStatePath, 'utf8'));
+        if (cudaState?.userDataModulesPath && !Module.globalPaths.includes(cudaState.userDataModulesPath)) {
+          // IMPORTANT: Do NOT call Module._initPaths() after the push.
+          // _initPaths() rebuilds the globalPaths array from NODE_PATH env var, replacing
+          // the array reference entirely — wiping any push done beforehand.
+          // Correct approach: mutate NODE_PATH first, then _initPaths() picks it up.
+          const sep = process.platform === 'win32' ? ';' : ':';
+          process.env.NODE_PATH = process.env.NODE_PATH
+            ? `${process.env.NODE_PATH}${sep}${cudaState.userDataModulesPath}`
+            : cudaState.userDataModulesPath;
+          Module._initPaths(); // rebuilds globalPaths from updated NODE_PATH
+          console.log('[LLM] Injected userData CUDA modules path:', cudaState.userDataModulesPath);
+          console.log('[LLM] Module.globalPaths now includes userData path:', Module.globalPaths.includes(cudaState.userDataModulesPath));
+        }
+      } catch { /* state file absent or non-CUDA system — safe to ignore */ }
+
       const { getLlama, LlamaChat, InputLookupTokenPredictor } = await import(getNodeLlamaCppPath());
 
       // Dispose previous model if loaded
@@ -223,13 +246,15 @@ class LLMEngine extends EventEmitter {
       // and offloads the optimal number of layers. ONE load attempt, not 7+.
       // This is exactly how LM Studio achieves instant loads.
       // gpuModes is a let — may be expanded with a partial layer fallback after nvidia-smi
-      let gpuModes = this.gpuPreference === 'cpu' ? [false] : ['auto', false];
+      let gpuModes = this.gpuPreference === 'cpu' ? [false] : ['cuda', 'auto', false];
 
       // Detect real dedicated VRAM via nvidia-smi BEFORE calling getLlama().
       // Problem: Vulkan on systems with GTT/shared memory reports dedicated VRAM + system RAM
       // as the total (e.g. 4GB GPU + 16GB RAM = ~20GB reported). gpuLayers:'auto' then tries
       // to fill that non-existent 20GB → allocation fails. nvidia-smi always returns only
       // physical dedicated VRAM. We use this to clamp the effective budget in vramPadding.
+      // GPU backend order: try CUDA first (fast NVIDIA path), fall back to 'auto' (Vulkan on
+      // Windows), then CPU. 'auto' left in the chain so non-NVIDIA systems still get GPU.
       let nvidiaDedicatedVramBytes = 0;
       if (this.gpuPreference !== 'cpu') {
         try {
@@ -257,7 +282,7 @@ class LLMEngine extends EventEmitter {
           // 80 layers is a safe upper bound for any model up to 200B
           const partialLayers = Math.max(1, Math.floor(80 * fraction));
           console.log(`[LLM] Model (${(modelStats.size/(1024**3)).toFixed(1)}GB) exceeds usable VRAM (${(usableVram/(1024**3)).toFixed(1)}GB) — partial fallback: ${partialLayers} layers (~${(fraction*100).toFixed(0)}% offloaded)`);
-          gpuModes = ['auto', partialLayers, false];
+          gpuModes = ['cuda', 'auto', partialLayers, false];
         }
       }
 
@@ -283,7 +308,7 @@ class LLMEngine extends EventEmitter {
           // Reuse existing llama instance if same GPU mode (skip expensive CUDA init).
           // Numeric fallback modes reuse the 'auto' instance — same GPU backend, different gpuLayers.
           const canReuse = this.llamaInstance &&
-            (this._lastGpuMode === tryGpuMode || (typeof tryGpuMode === 'number' && this._lastGpuMode === 'auto'));
+            (this._lastGpuMode === tryGpuMode || (typeof tryGpuMode === 'number' && (this._lastGpuMode === 'auto' || this._lastGpuMode === 'cuda')));
           if (canReuse) {
             console.log(`[LLM] Reusing existing llama instance (gpu=${tryGpuMode})`);
           } else {
@@ -294,16 +319,23 @@ class LLMEngine extends EventEmitter {
             // (GTT/shared memory case), cap the usable budget to real dedicated VRAM only.
             // Otherwise gpuLayers:'auto' over-allocates onto non-existent memory and fails.
             this.llamaInstance = await this._withTimeout(getLlama({
-              // Numeric modes still use gpu:'auto' for backend init — the layer count
-              // is passed to loadModel, not getLlama. Only false disables GPU entirely.
-              gpu: (tryGpuMode === false) ? false : 'auto',
+              // String modes ('cuda', 'auto') directly set the backend. Numeric partial-layer
+              // modes reuse the previously initialized backend instance (see canReuse above).
+              // false = CPU only. Order: cuda → auto (Vulkan on Windows) → cpu.
+              gpu: (tryGpuMode === false) ? false : (typeof tryGpuMode === 'string' ? tryGpuMode : (this._lastGpuMode || 'auto')),
               vramPadding: (totalVram) => {
                 // Use nvidia-smi value if Vulkan is reporting GTT-inflated total
                 const effectiveBudget = (nvidiaDedicatedVramBytes > 0 && nvidiaDedicatedVramBytes < totalVram * 0.7)
                   ? nvidiaDedicatedVramBytes
                   : totalVram;
-                // Reserve 15% for KV cache/context — min 800MB, never leave less than 800MB
-                const usableForLayers = Math.min(effectiveBudget * 0.85, effectiveBudget - 800 * 1024 * 1024);
+                // usableForLayers = effectiveBudget so padding = totalVram - realVram.
+                // On GTT-inflated systems (Vulkan reports 19.74GB, real VRAM = 4.0GB):
+                //   padding = 19.74 - 4.0 = 15.74GB
+                //   library binary search works within real 4.0GB budget
+                //   4B model (2.33GB) leaves ~1.67GB → finds ~18K–26K context
+                // On normal machines: effectiveBudget = totalVram → padding = 0 → 800MB floor
+                //   unchanged from previous behavior.
+                const usableForLayers = effectiveBudget;
                 const padding = totalVram - usableForLayers;
                 console.log(`[LLM] vramPadding: Vulkan=${(totalVram/(1024**3)).toFixed(1)}GB effective=${(effectiveBudget/(1024**3)).toFixed(1)}GB usable=${(usableForLayers/(1024**3)).toFixed(1)}GB padding=${(padding/(1024**3)).toFixed(1)}GB`);
                 return Math.max(padding, 800 * 1024 * 1024);
@@ -336,7 +368,7 @@ class LLMEngine extends EventEmitter {
           // internally). Do NOT convert to a file:// URL here — that breaks path.resolve.
           this.model = await this._withTimeout(this.llamaInstance.loadModel({
             modelPath: modelPath,
-            gpuLayers: tryGpuMode === 'auto' ? 'auto' : (typeof tryGpuMode === 'number' ? tryGpuMode : 0),
+            gpuLayers: (tryGpuMode === 'auto' || tryGpuMode === 'cuda') ? 'auto' : (typeof tryGpuMode === 'number' ? tryGpuMode : 0),
             defaultContextFlashAttention: true,
             useMmap: true,
             onLoadProgress: (progress) => {
@@ -348,9 +380,12 @@ class LLMEngine extends EventEmitter {
           // Read actual GPU layers from the loaded model
           try { gpuLayers = this.model.gpuLayers ?? 0; } catch (_) { gpuLayers = 0; }
           console.log(`[LLM] Model loaded: ${gpuLayers} GPU layers (mode: ${tryGpuMode})`);
-          // If auto returned 0 layers and we have a partial fallback waiting, skip to it
-          if (tryGpuMode === 'auto' && gpuLayers === 0 && gpuModes.some(m => typeof m === 'number')) {
-            console.log('[LLM] Auto returned 0 GPU layers — skipping to partial layer fallback');
+          // If auto returned fewer layers than the explicit partial fallback would provide, skip to it.
+          // Previously only skipped when auto=0 — but auto can return a small nonzero count (e.g. 6)
+          // that is still well below what a computed partial offload gives (e.g. 14).
+          const _partialFallback = gpuModes.find(m => typeof m === 'number');
+          if (tryGpuMode === 'auto' && _partialFallback !== undefined && gpuLayers < _partialFallback) {
+            console.log(`[LLM] Auto returned ${gpuLayers} GPU layers (< partial fallback ${_partialFallback}) — trying explicit partial offload`);
             continue;
           }
         } catch (loadErr) {
@@ -364,31 +399,86 @@ class LLMEngine extends EventEmitter {
         console.log(`[LLM] Model train context size: ${nativeContext}`);
 
         const cpuThreads = Math.max(1, os.cpus().length - 2);
-        const totalRAM = os.totalmem() / (1024 ** 3);
-        const defaultMaxCtx = totalRAM >= 32 ? 32768 : totalRAM >= 16 ? 16384 : 8192;
+        // Model-size-aware context ceiling based on KV cache cost vs available RAM.
+        // The old bracket (8/16/32k based on RAM tiers) ignored model size entirely:
+        // a 0.6B model has a tiny KV cache — 128k context costs ~160MB on the smallest model,
+        // while the same context on a 30B model costs ~6GB. Same ceiling for both was wrong.
+        const _modelSizeGB = modelStats.size / (1024 ** 3);
+        const _kvPerTokenGB = _modelSizeGB < 1   ? 0.00004
+                            : _modelSizeGB < 5   ? 0.00006
+                            : _modelSizeGB < 10  ? 0.00008
+                            : _modelSizeGB < 20  ? 0.00012
+                            : _modelSizeGB < 40  ? 0.00020
+                            :                      0.00025;
+        const _freeRAMGB = os.freemem() / (1024 ** 3);
+        // Available for KV cache: free RAM minus estimated model CPU footprint, minus 2GB OS headroom
+        const _kvcacheHeadroom = Math.max(_freeRAMGB - Math.max(_modelSizeGB * 0.6, 1) - 2, 1);
+        const _maxCtxFromRAM = Math.floor(_kvcacheHeadroom / _kvPerTokenGB);
+        const defaultMaxCtx = Math.min(_maxCtxFromRAM, 131072); // absolute ceiling: 128k
         const maxContext = userContextSize || Math.min(nativeContext || defaultMaxCtx, defaultMaxCtx);
         // Let node-llama-cpp auto-select batchSize based on available VRAM.
         // Forcing batchSize=4096 caused compute buffers to exceed VRAM on partial offload.
 
         this.emit('status', { state: 'loading', message: 'Creating context...', progress: 0.7 });
 
+        // === DIAGNOSTIC: context size inputs — logged every model load ===
+        // This block never changes behavior. It only logs values so we can
+        // understand why the binary search settles where it does.
+        try {
+          const _diagVram = await this.llamaInstance.getVramState();
+          const _diagGpuLayers = this.model.gpuLayers ?? 0;
+          console.log(`[LLM] DIAG gpuMode=${tryGpuMode} gpuLayers=${_diagGpuLayers} modelSize=${_modelSizeGB.toFixed(2)}GB nativeCtx=${nativeContext}`);
+          console.log(`[LLM] DIAG vram: total=${(_diagVram.total/(1024**3)).toFixed(2)}GB free=${(_diagVram.free/(1024**3)).toFixed(2)}GB`);
+          console.log(`[LLM] DIAG ram: freeOS=${_freeRAMGB.toFixed(2)}GB kvcacheHeadroom=${_kvcacheHeadroom.toFixed(2)}GB kvPerTok=${_kvPerTokenGB} maxCtxFromRAM=${_maxCtxFromRAM} maxContext=${maxContext}`);
+          // Ask the library for its own VRAM estimate at several context sizes
+          // so we can see exactly what the binary search is comparing against vram.free
+          try {
+            for (const _sz of [maxContext, 32768, 16384, 8192, 4096]) {
+              if (_sz > maxContext) continue;
+              const _e = this.model.fileInsights?.estimateContextResourceRequirements?.({
+                contextSize: _sz,
+                modelGpuLayers: _diagGpuLayers,
+                flashAttention: true,
+              });
+              if (_e) {
+                const fits = _e.gpuVram <= _diagVram.free;
+                console.log(`[LLM] DIAG estimate ctx=${_sz}: gpuVram=${(_e.gpuVram/(1024**3)).toFixed(2)}GB cpuRam=${(_e.cpuRam/(1024**3)).toFixed(2)}GB fits=${fits}`);
+              }
+            }
+          } catch (_diagEstErr) {
+            console.log(`[LLM] DIAG estimate failed: ${_diagEstErr.message}`);
+          }
+        } catch (_diagErr) {
+          console.log(`[LLM] DIAG failed: ${_diagErr.message}`);
+        }
+        // === END DIAGNOSTIC ===
+
         for (const tryFlash of [true, false]) {
           try {
+            const isCpuMode = tryGpuMode === false;
             const contextOpts = {
+              // GPU modes: use { min, max } range — lets node-llama-cpp binary-search
+              // within real available VRAM. Conservative but safe for VRAM-constrained GPUs.
+              // CPU mode: use fixed target + ignoreMemorySafetyChecks — skips the conservative
+              // pre-estimate (which doesn't apply to RAM) and finds the real maximum via
+              // failedCreationRemedy halving. On CPU, RAM is the limit, not VRAM.
               contextSize: userContextSize
                 ? userContextSize
-                : { min: 2048, max: maxContext },
+                : isCpuMode
+                  ? maxContext
+                  : { min: 2048, max: maxContext },
+              ignoreMemorySafetyChecks: !userContextSize && isCpuMode,
               threads: cpuThreads,
               flashAttention: tryFlash,
               failedCreationRemedy: {
-                retries: 6,
-                autoContextSizeShrink: 0.16,
+                retries: 8,              // 0.5 shrink × 8 retries: 128k→64k→32k→16k→8k→4k→2k→1k — covers all hardware
+                autoContextSizeShrink: 0.5,
               },
             };
 
             this.context = await this._withTimeout(
               this.model.createContext(contextOpts),
-              15000, // 15s — context creation is fast, VRAM allocation is near-instant
+              isCpuMode ? 60000 : 15000, // CPU with large context needs more time
               'Context creation'
             );
             contextSize = this.context.contextSize;
@@ -520,14 +610,33 @@ class LLMEngine extends EventEmitter {
     const profile = getModelProfile(family, paramSize);
     const thinkMode = profile.thinkTokens?.mode || 'budget';
     if (thinkMode === 'none') {
-      this.thoughtTokenBudget = 0;
+      // Some tiers (e.g. qwen/small) cover both thinking and non-thinking models.
+      // _thinkBudgetWhenActive is set on those tiers as the budget to use when a
+      // thinking-capable variant is loaded. Detect by filename pattern — hardware-agnostic.
+      const modelName = (this.currentModelPath || '').toLowerCase();
+      const isThinkingVariant = profile._thinkBudgetWhenActive !== undefined && (
+        modelName.includes('thinking') ||
+        modelName.includes('r1-distill') ||
+        modelName.includes('qwen3') ||
+        modelName.includes('-think') ||
+        modelName.includes('qwq')
+      );
+      this.thoughtTokenBudget = isThinkingVariant ? profile._thinkBudgetWhenActive : 0;
     } else if (thinkMode === 'unlimited') {
       this.thoughtTokenBudget = -1;
     } else {
       this.thoughtTokenBudget = profile.thinkTokens?.budget ?? 2048;
     }
 
-    return samplingParams;
+    return {
+      ...samplingParams,
+      // Apply the profile's maxResponseTokens as maxTokens for generation.
+      // Previously this value was computed in the profile but never actually passed
+      // to the generation call — defaultParams.maxTokens (4096) always won.
+      // Now large/xlarge models get their configured caps (8192 / 16384).
+      // This is hardware-agnostic: profile tiers already account for model size.
+      maxTokens: profile.context.maxResponseTokens ?? this.defaultParams.maxTokens,
+    };
   }
 
   /**
@@ -855,6 +964,7 @@ PERSISTENCE:
     const GEN_TIMEOUT_MS = this.generationTimeoutMs;
     const genTimeoutTimer = setTimeout(() => {
       console.log(`[LLM] Generation timeout (${GEN_TIMEOUT_MS / 1000}s) — aborting to prevent hang`);
+      this._lastAbortReason = 'timeout';
       this.cancelGeneration('timeout');
     }, GEN_TIMEOUT_MS);
     
@@ -1209,6 +1319,7 @@ PERSISTENCE:
         model: this.modelInfo?.name || 'unknown',
         tokensUsed: sanitized.length / 4,
         contextUsed: this.modelInfo?.contextSize || 0,
+        stopReason: result.metadata?.stopReason || 'eogToken',
       };
     } catch (error) {
       // Clear generation safety timeout on error path
@@ -1252,19 +1363,16 @@ PERSISTENCE:
           return { text: partialText || '[Generation timed out — retrying]', rawText: rawResponse || '', model: this.modelInfo?.name, tokensUsed: 0 };
         }
 
-        // On abort: always preserve the user message in history.
-        // If there's a partial response, sanitize it before storing in chatHistory
-        // to prevent turn indicator garbage from reinforcing bad patterns.
-        if (fullResponse) {
-          const sanitizedPartial = this._sanitizeResponse(fullResponse);
-          this.chatHistory.push({ type: 'user', text: userMessage });
-          this.chatHistory.push({ type: 'model', response: [sanitizedPartial] });
-        } else {
-          // No partial response — re-add the user message we popped above
-          // so the conversation retains what the user asked
-          this.chatHistory.push({ type: 'user', text: userMessage });
-          this.chatHistory.push({ type: 'model', response: ['[Generation cancelled]'] });
-        }
+        // On abort: always preserve the user message in history, but for quality aborts
+        // (repetition/runaway/template) use a CLEAN placeholder — NOT the garbage partial.
+        // Storing repeated/runaway text in chatHistory teaches the model to reproduce it
+        // on the next turn, causing the "same wrong response every time" loop.
+        const isQualityAbort = reason === 'repetition' || reason === 'runaway' || reason === 'template';
+        const historyModelEntry = isQualityAbort
+          ? '[Response generated]'  // clean placeholder so next generation starts from clean context
+          : (fullResponse ? this._sanitizeResponse(fullResponse) : '[Generation cancelled]');
+        this.chatHistory.push({ type: 'user', text: userMessage });
+        this.chatHistory.push({ type: 'model', response: [historyModelEntry] });
         const sanitized = this._sanitizeResponse(fullResponse);
         const suffix = reason === 'repetition'
           ? '\n[Generation cancelled: repetitive output detected]'
@@ -1640,6 +1748,7 @@ PERSISTENCE:
     const GEN_TIMEOUT_MS = this.generationTimeoutMs;
     const genTimeoutTimer = setTimeout(() => {
       console.log(`[LLM] Function-calling generation timeout — aborting`);
+      this._lastAbortReason = 'timeout';
       this.cancelGeneration('timeout');
     }, GEN_TIMEOUT_MS);
 

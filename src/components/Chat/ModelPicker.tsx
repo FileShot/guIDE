@@ -603,8 +603,8 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({
                           }`}
                           onClick={() => {
                             cancelAndResetStream();
-                            setCloudProvider('cerebras');
-                            setCloudModel('gpt-oss-120b');
+                            setCloudProvider('sambanova');
+                            setCloudModel('Meta-Llama-3.3-70B-Instruct');
                             onClose();
                             addSystemMessage('Switched to **guIDE Cloud AI**');
                           }}

@@ -81,6 +81,55 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({
     };
   }, [sessionId]);
 
+  // Keep a ref to sessionId so the debug-menu-action handler always reads the latest value
+  const sessionIdRef = useRef<number | null>(null);
+  useEffect(() => { sessionIdRef.current = sessionId; }, [sessionId]);
+
+  // Listen for debug menu actions dispatched from the app menu via Layout.tsx
+  useEffect(() => {
+    const handler = async (e: Event) => {
+      const action = (e as CustomEvent).detail as string;
+      const api = window.electronAPI;
+      const sid = sessionIdRef.current;
+      switch (action) {
+        case 'start-debugging':
+          setStartFromMenuPending(true);
+          setStartFromMenuTimestamp(Date.now());
+          break;
+        case 'restart-debugging':
+          if (sid && api?.debugStop) await api.debugStop(sid);
+          setSessionState('stopped');
+          setSessionId(null);
+          setStartFromMenuPending(true);
+          setStartFromMenuTimestamp(Date.now());
+          break;
+        case 'stop-debugging':
+          if (sid && api?.debugStop) { await api.debugStop(sid); setSessionState('stopped'); setSessionId(null); }
+          break;
+        case 'continue-debugging':
+          if (sid && api?.debugContinue) await api.debugContinue(sid);
+          break;
+        case 'step-over':
+          if (sid && api?.debugStepOver) await api.debugStepOver(sid);
+          break;
+        case 'step-into':
+          if (sid && api?.debugStepInto) await api.debugStepInto(sid);
+          break;
+        case 'step-out':
+          if (sid && api?.debugStepOut) await api.debugStepOut(sid);
+          break;
+        case 'pause-debugging':
+          if (sid && api?.debugPause) await api.debugPause(sid);
+          break;
+        case 'remove-all-breakpoints':
+          _setBreakpoints(new Map());
+          break;
+      }
+    };
+    window.addEventListener('debug-menu-action', handler);
+    return () => window.removeEventListener('debug-menu-action', handler);
+  }, []);
+
   const addOutput = useCallback((text: string) => {
     setDebugOutput(prev => {
       const next = [...prev, text];
@@ -154,6 +203,9 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({
     }
   }, [selectedFrame, sessionState]);
 
+  const [startFromMenuPending, setStartFromMenuPending] = useState(false);
+  const [startFromMenuTimestamp, setStartFromMenuTimestamp] = useState(0);
+
   const startDebug = async () => {
     const api = window.electronAPI;
     if (!api?.debugStart) return;
@@ -193,6 +245,15 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({
     setSessionState('stopped');
     setSessionId(null);
   };
+
+  // Trigger startDebug when requested from menu (uses fresh state via this effect)
+  useEffect(() => {
+    if (startFromMenuPending) {
+      setStartFromMenuPending(false);
+      startDebug();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startFromMenuPending, startFromMenuTimestamp]);
 
   const debugAction = async (action: 'continue' | 'stepOver' | 'stepInto' | 'stepOut' | 'pause') => {
     if (!sessionId) return;

@@ -121,7 +121,7 @@ const FAMILY_PROFILES = {
       // Community benchmarks show Qwen3-0.6B ties #1 in tool calling (0.880)
       // 0.6B thinking loops after ~1 pass — tight budget prevents waste
       // Thinking enabled only for actual thinking-variant models via isThinkingVariant override.
-      sampling: { temperature: 0.45, topP: 0.85, topK: 20, repeatPenalty: 1.10 },
+      sampling: { temperature: 0.45, topP: 0.85, topK: 20, repeatPenalty: 1.10, lastTokensPenaltyCount: 512 },
       context: { effectiveContextSize: 32768, maxResponseTokens: 4096 },
       prompt: { style: 'compact', toolPromptStyle: 'compact', fewShotExamples: 1 },
       thinkTokens: { mode: 'none' },
@@ -152,11 +152,15 @@ const FAMILY_PROFILES = {
       context: { effectiveContextSize: 32768, maxResponseTokens: 8192 },
       prompt: { style: 'full', toolPromptStyle: 'full' },
       generation: { grammarConstrained: false, maxToolsPerTurn: 25 },
+      // Thinking enabled for Qwen3-14B etc when isThinkingVariant detects them
+      _thinkBudgetWhenActive: 2048,
     },
     xlarge: {
       context: { effectiveContextSize: 65536, maxResponseTokens: 16384 },
       prompt: { style: 'full', toolPromptStyle: 'full' },
       generation: { grammarConstrained: false, maxToolsPerTurn: 50 },
+      // Thinking enabled for Qwen3-32B+ etc; generous budget, maxResponseTokens gives plenty of room
+      _thinkBudgetWhenActive: 4096,
     },
   },
 
@@ -179,7 +183,7 @@ const FAMILY_PROFILES = {
     },
     tiny: {
       // Llama-3.2-1B: basic capability, tight sampling needed
-      sampling: { temperature: 0.35, topP: 0.80, topK: 15, repeatPenalty: 1.15 },
+      sampling: { temperature: 0.35, topP: 0.80, topK: 15, repeatPenalty: 1.15, lastTokensPenaltyCount: 512 },
       context: { effectiveContextSize: 32768, maxResponseTokens: 4096 },
       prompt: { style: 'compact', toolPromptStyle: 'compact', fewShotExamples: 2 },
       thinkTokens: { mode: 'none' }, // Llama 3.2 is not a thinking model
@@ -232,7 +236,7 @@ const FAMILY_PROFILES = {
     },
     tiny: {
       // No known Phi tiny models, but future-proof
-      sampling: { temperature: 0.30, topP: 0.75, topK: 15, repeatPenalty: 1.25 },
+      sampling: { temperature: 0.30, topP: 0.75, topK: 15, repeatPenalty: 1.25, lastTokensPenaltyCount: 512 },
       context: { effectiveContextSize: 32768, maxResponseTokens: 4096 },
       prompt: { style: 'compact', toolPromptStyle: 'compact' },
       thinkTokens: { mode: 'budget', budget: 128 },
@@ -286,7 +290,7 @@ const FAMILY_PROFILES = {
       thinkTokens: { mode: 'budget', budget: 1024 },
     },
     tiny: {
-      sampling: { temperature: 0.35, topP: 0.80, topK: 15, repeatPenalty: 1.18 },
+      sampling: { temperature: 0.35, topP: 0.80, topK: 15, repeatPenalty: 1.18, lastTokensPenaltyCount: 512 },
       context: { effectiveContextSize: 32768, maxResponseTokens: 4096 },
       prompt: { style: 'compact', toolPromptStyle: 'compact', fewShotExamples: 1 },
       thinkTokens: { mode: 'budget', budget: 128 },
@@ -333,7 +337,7 @@ const FAMILY_PROFILES = {
     tiny: {
       // DeepSeek-R1-Distill-Qwen-1.5B
       // R1-1.5B thinks excessively — tight budget prevents looping
-      sampling: { temperature: 0.45, topP: 0.85, topK: 20, repeatPenalty: 1.12 },
+      sampling: { temperature: 0.45, topP: 0.85, topK: 20, repeatPenalty: 1.12, lastTokensPenaltyCount: 512 },
       context: { effectiveContextSize: 32768, maxResponseTokens: 4096 },
       prompt: { style: 'compact', toolPromptStyle: 'compact' },
       thinkTokens: { mode: 'budget', budget: 128 },
@@ -527,7 +531,7 @@ const FAMILY_PROFILES = {
     },
     tiny: {
       // LFM2.5-1.2B — tied #1 tool calling on CPU
-      sampling: { temperature: 0.40, topP: 0.85, topK: 20, repeatPenalty: 1.12 },
+      sampling: { temperature: 0.40, topP: 0.85, topK: 20, repeatPenalty: 1.12, lastTokensPenaltyCount: 512 },
       context: { effectiveContextSize: 32768, maxResponseTokens: 4096 },
       prompt: { style: 'compact', toolPromptStyle: 'compact', fewShotExamples: 1 },
       generation: { maxToolsPerTurn: 6 },
@@ -610,7 +614,7 @@ const FAMILY_PROFILES = {
     },
     tiny: {
       // EXAONE 4.0 1.2B
-      sampling: { temperature: 0.40, topP: 0.85, topK: 20, repeatPenalty: 1.12 },
+      sampling: { temperature: 0.40, topP: 0.85, topK: 20, repeatPenalty: 1.12, lastTokensPenaltyCount: 512 },
       context: { effectiveContextSize: 32768, maxResponseTokens: 4096 },
       prompt: { style: 'compact', toolPromptStyle: 'compact', fewShotExamples: 1 },
       generation: { maxToolsPerTurn: 6 },

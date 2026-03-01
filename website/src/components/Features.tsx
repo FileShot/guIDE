@@ -36,7 +36,7 @@ const tabs = [
       {
         icon: <Terminal size={22} />,
         title: '82 Native Tools',
-        description: 'File management, browser automation, git operations, memory, and web search — all built in.',,
+        description: 'File management, browser automation, git operations, memory, and web search — all built in.',
       },
       {
         icon: <Globe size={22} />,
@@ -78,7 +78,7 @@ const tabs = [
       {
         icon: <Zap size={22} />,
         title: '26 Cloud Providers',
-        description: 'OpenAI, Anthropic, Gemini, xAI, Groq, Mistral, Cohere, DeepSeek, Perplexity, and more — use any or go fully offline.',,
+        description: 'OpenAI, Anthropic, Gemini, xAI, Groq, Mistral, Cohere, DeepSeek, Perplexity, and more — use any or go fully offline.',
       },
       {
         icon: <Monitor size={22} />,

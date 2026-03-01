@@ -126,8 +126,8 @@ class LicenseManager {
     try {
       const data = this._readSigned(this.licenseFile);
       if (data && data.machineId === this.getMachineFingerprint()) {
-        // Full license (key-based or account-based)
-        if ((data.key || data.authMethod === 'account') && data.activatedAt) {
+        // Full license (key-based, account-based, or paid OAuth)
+        if ((data.key || data.authMethod === 'account' || data.authMethod === 'oauth') && data.activatedAt) {
           this.licenseData = data;
           const daysSinceValidation = (Date.now() - (data.lastValidated || 0)) / (1000 * 60 * 60 * 24);
           if (daysSinceValidation < REVALIDATION_DAYS) {
@@ -207,6 +207,7 @@ class LicenseManager {
         this._saveLicense({
           key: result.licenseKey || null, machineId, activatedAt: Date.now(), lastValidated: Date.now(),
           email: result.email, plan: result.plan || 'standard', expiresAt: result.expiresAt || null, authMethod: 'oauth',
+          sessionToken: result.token || result.sessionToken || null,
         });
         this.isActivated = true;
         return { success: true, message: 'OAuth sign-in successful!', license: this._sanitizeLicense(this.licenseData) };

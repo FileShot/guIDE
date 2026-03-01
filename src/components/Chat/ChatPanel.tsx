@@ -3,12 +3,12 @@ import { Virtuoso, VirtuosoHandle } from 'react-virtuoso';
 import { splitInlineToolCalls, parseToolCall, extractToolResults, stripTrailingPartialToolCall } from '@/utils/chatContentParser';
 import {
   X, Cpu, Globe, Code, Bug, FileCode, Terminal, Plus,
-  ChevronDown, Trash2, Settings as SettingsIcon, Loader2,
+  ChevronDown, Trash2, Key, Loader2,
   Sparkles, Brain, Mic, MicOff, Volume2, VolumeX, Cloud,
   Paperclip, ArrowUp, Square, Shield, Zap, Clock, Check,
   Image as ImageIcon, Download, XCircle, PlayCircle, AlertTriangle, Eye,
 } from 'lucide-react';
-import type { LLMStatusEvent, AvailableModel, AIChatContext } from '@/types/electron';
+import type { LLMStatusEvent, AvailableModel, AIChatContext, MCPToolResult } from '@/types/electron';
 import { ModelPicker } from './ModelPicker';
 import { AudioWaveAnimation, ThinkingBlock, CollapsibleToolBlock, ToolCallGroup, CodeBlock, MermaidDiagram, ApiKeyInput, InlineMarkdownText } from './ChatWidgets';
 import { useChatSettings } from './hooks/useChatSettings';
@@ -16,7 +16,6 @@ import { useChatStreaming } from './hooks/useChatStreaming';
 import { useVoiceInput } from './hooks/useVoiceInput';
 import { useTTS } from './hooks/useTTS';
 import { useChatSessions } from './hooks/useChatSessions';
-import { ChatSettingsPanel } from './ChatSettingsPanel';
 import { TodoPanel, TodoItem } from './TodoPanel';
 import { toast } from '@/components/Layout/Toast';
 
@@ -43,7 +42,9 @@ interface ChatMessage {
   thinkingText?: string;
   images?: { name: string; data: string; mimeType: string }[];
   isError?: boolean;
+  isQuotaMessage?: boolean;
   checkpointId?: string;
+  toolsUsed?: MCPToolResult[];
 }
 
 interface AttachedImage {
@@ -143,9 +144,10 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   // ── Extracted hooks ──
   const settings = useChatSettings();
   const { temperature, maxTokens, contextSize, topP, topK, repeatPenalty, seed,
-    reasoningEffort, thinkingBudget, maxIterations, gpuPreference, useWebSearch, useRAG,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    reasoningEffort: _reasoningEffort, thinkingBudget: _thinkingBudget, maxIterations, gpuPreference: _gpuPreference, useWebSearch, useRAG: _useRAG,
     ttsEnabled, autoMode, planMode, cloudProvider, cloudModel,
-    setUseWebSearch, setUseRAG, setTtsEnabled, setAutoMode, setPlanMode,
+    setUseWebSearch: _setUseWebSearch, setUseRAG: _setUseRAG, setTtsEnabled, setAutoMode, setPlanMode,
     setCloudProvider, setCloudModel,
   } = settings;
 
@@ -727,7 +729,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
 
       // Include recent conversation history for BOTH local and cloud.
       // Local models otherwise "forget" after llmResetSession() / model switches.
-      const recentMessages = messages.slice(-20).filter(m => m.role === 'user' || m.role === 'assistant');
+      const recentMessages = messages.slice(-20).filter(m => (m.role === 'user' || m.role === 'assistant') && !m.isQuotaMessage && !m.isError);
       context.conversationHistory = recentMessages.map(m => ({
         role: m.role,
         content: m.content,
@@ -804,6 +806,22 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
         return;
       }
 
+      // Handle Guide Cloud AI free-tier quota exceeded
+      if (!result.success && (result.error === '__QUOTA_EXCEEDED__' || (result as any).isQuotaError)) {
+        setMessages(prev => [...prev, {
+          id: `msg-quota-${Date.now()}`,
+          role: 'assistant',
+          isQuotaMessage: true,
+          content: "**Daily Guide Cloud AI limit reached** — You've used your 20 free messages for today.\n\nSign in for more free messages, upgrade to Pro for 500/day, or switch to a local model for unlimited offline use.",
+          timestamp: Date.now(),
+        }]);
+        setIsGenerating(false);
+        setStreamingText('');
+        setThinkingSegments([]);
+        setAgenticProgress(null);
+        return;
+      }
+
       // If the backend signals this request was superseded by a newer queued message,
       // skip adding a response bubble entirely — including any partially rendered thinking.
       // The superseding request will produce the real response.
@@ -832,6 +850,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
         model: result.model,
         webSearchUsed: useWebSearch,
         thinkingText: thinkingSegmentsRef.current.filter(s => s.trim()).join('\n\n---THINKING_SEGMENT---\n\n') || undefined,
+        toolsUsed: result.toolResults && result.toolResults.length > 0 ? result.toolResults : undefined,
       };
 
       setMessages(prev => [...prev, assistantMsg]);
@@ -1626,7 +1645,30 @@ ${e.message}`,
     return elements;
   };
 
-  const renderMessage = (msg: ChatMessage) => renderContentParts(msg.content);
+  const renderMessage = (msg: ChatMessage): React.ReactNode[] => {
+    const parts = renderContentParts(msg.content);
+    if (msg.toolsUsed && msg.toolsUsed.length > 0) {
+      // Only add tool group if content parsing didn't already find inline tool calls
+      const hasToolGroup = parts.some((p: any) => p?.key === 'tcg-all');
+      if (!hasToolGroup) {
+        const toolGroup = (
+          <ToolCallGroup key="msg-tools" count={msg.toolsUsed.length}>
+            {msg.toolsUsed.map((tu, i) => (
+              <CollapsibleToolBlock
+                key={`msg-tu-${i}`}
+                label={getToolLabel(tu, tu.result?.success !== false ? 'ok' : 'fail')}
+                icon={tu.result?.success !== false ? '✓' : '✗'}
+              >
+                <div className="text-[11px] text-[#858585]">Completed</div>
+              </CollapsibleToolBlock>
+            ))}
+          </ToolCallGroup>
+        );
+        return [toolGroup, ...parts];
+      }
+    }
+    return parts;
+  };
 
   // For streaming: split on complete code blocks, render completed ones with full styling,
   // and leave the trailing incomplete block as plain text
@@ -1866,7 +1908,7 @@ ${e.message}`,
   return (
     <div className="h-full flex flex-col bg-[#252526] overflow-hidden relative">
       {/* Header — pr-[140px] reserves space for Electron window controls (min/max/close) */}
-      <div className="h-[35px] flex items-center px-3 pr-[140px] border-b border-[#1e1e1e] flex-shrink-0">
+      <div className="h-[30px] flex items-center px-3 pr-[140px] border-b border-[#1e1e1e] flex-shrink-0">
         <Sparkles size={14} className="text-[#007acc] mr-2 flex-shrink-0" />
         <span className="text-[12px] font-semibold text-[#cccccc] whitespace-nowrap brand-font">gu<span className="text-[#007acc]">IDE</span> <span className="font-sans font-semibold">AI</span></span>
         <div className="flex-1 min-w-0" />
@@ -1885,11 +1927,11 @@ ${e.message}`,
           <button
             className="p-1 text-[#858585] hover:text-white rounded hover:bg-[#3c3c3c]"
             onClick={() => setShowSettings(!showSettings)}
-            title="Settings"
-            aria-label="Settings"
+            title="API Keys &amp; License"
+            aria-label="API Keys and License"
             aria-expanded={showSettings}
           >
-            <SettingsIcon size={12} />
+            <Key size={12} />
           </button>
           <button
             className={`p-1 rounded hover:bg-[#3c3c3c] ${showDevConsole ? 'text-[#dcdcaa]' : 'text-[#858585] hover:text-white'}`}
@@ -1966,25 +2008,6 @@ ${e.message}`,
           }]);
         }}
       />
-      {/* Settings panel */}
-      {showSettings && (
-        <ChatSettingsPanel
-          temperature={temperature} setTemperature={settings.setTemperature}
-          reasoningEffort={reasoningEffort} setReasoningEffort={settings.setReasoningEffort}
-          thinkingBudget={thinkingBudget} setThinkingBudget={settings.setThinkingBudget}
-          maxTokens={maxTokens} setMaxTokens={settings.setMaxTokens}
-          contextSize={contextSize} setContextSize={settings.setContextSize}
-          topP={topP} setTopP={settings.setTopP}
-          topK={topK} setTopK={settings.setTopK}
-          repeatPenalty={repeatPenalty} setRepeatPenalty={settings.setRepeatPenalty}
-          seed={seed} setSeed={settings.setSeed}
-          maxIterations={maxIterations} setMaxIterations={settings.setMaxIterations}
-          gpuPreference={gpuPreference} setGpuPreference={settings.setGpuPreference}
-          resetToDefaults={settings.resetToDefaults}
-          useWebSearch={useWebSearch} setUseWebSearch={setUseWebSearch}
-        />
-      )}
-
       {/* Session history panel */}
       {showHistory && (
         <div className="px-3 py-2 border-b border-[#1e1e1e] flex-shrink-0 max-h-[200px] overflow-auto chat-dropdown-panel">
@@ -2482,7 +2505,68 @@ ${e.message}`,
                     return <ThinkingBlock text={combined} segmentCount={segments.length} />;
                   })()}
                   {msg.role === 'assistant' ? (
+                    msg.isQuotaMessage ? (
+                      <div className="space-y-3">
+                        <div className="text-[13px]" style={{ color: 'var(--theme-foreground-muted)' }}>
+                          <span style={{ color: 'var(--theme-foreground)', fontWeight: 500 }}>Daily limit reached</span>
+                          {' \u2014 You\'ve used your 20 free Guide Cloud AI messages for today.'}
+                        </div>
+                        <div className="flex flex-col gap-2">
+                          {licenseStatus?.email ? (
+                            // User is signed in but hit quota — show upgrade CTA, not sign-in
+                            <button
+                              className="flex items-center gap-2 px-3 py-2 rounded-lg text-[12px] font-medium transition-all w-full"
+                              style={{ backgroundColor: 'var(--theme-bg-secondary)', color: 'var(--theme-foreground)', border: '1px solid var(--theme-border)' }}
+                              onMouseEnter={(e) => (e.currentTarget as HTMLElement).style.borderColor = 'var(--theme-accent)'}
+                              onMouseLeave={(e) => (e.currentTarget as HTMLElement).style.borderColor = 'var(--theme-border)'}
+                              onClick={() => window.electronAPI?.openExternal?.('https://graysoft.dev/account')}
+                            >
+                              <span style={{ fontSize: 13 }}>⬆</span>
+                              <span>Upgrade your plan — graysoft.dev/account</span>
+                            </button>
+                          ) : (
+                            // User is not signed in — show Google sign-in
+                            <button
+                              className="flex items-center gap-2 px-3 py-2 rounded-lg text-[12px] font-medium transition-all w-full"
+                              style={{ backgroundColor: 'var(--theme-bg-secondary)', color: 'var(--theme-foreground)', border: '1px solid var(--theme-border)' }}
+                              onMouseEnter={(e) => (e.currentTarget as HTMLElement).style.borderColor = 'var(--theme-accent)'}
+                              onMouseLeave={(e) => (e.currentTarget as HTMLElement).style.borderColor = 'var(--theme-border)'}
+                              onClick={async () => {
+                                try {
+                                  const res = await window.electronAPI?.licenseOAuthSignIn?.('google');
+                                  if (res?.success || (res as any)?.authenticated) {
+                                    const status = await window.electronAPI?.licenseGetStatus?.();
+                                    if (status) setLicenseStatus(status);
+                                    setMessages(prev => prev.filter(m => !m.isQuotaMessage));
+                                  }
+                                } catch {}
+                              }}
+                            >
+                              <svg viewBox="0 0 18 18" width="14" height="14" style={{ flexShrink: 0 }}>
+                                <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z"/>
+                                <path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/>
+                                <path fill="#FBBC05" d="M3.964 10.707A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.707V4.961H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.039l3.007-2.332z"/>
+                                <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.961L3.964 7.293C4.672 5.163 6.656 3.58 9 3.58z"/>
+                              </svg>
+                              <span>Sign in with Google — get more free messages</span>
+                            </button>
+                          )}
+                          <div className="text-[11px] text-center" style={{ color: 'var(--theme-foreground-muted)' }}>
+                            Or{' '}
+                            <button
+                              className="underline cursor-pointer"
+                              style={{ color: 'var(--theme-accent)', background: 'none', border: 'none', padding: 0, font: 'inherit' }}
+                              onClick={() => window.dispatchEvent(new CustomEvent('app-action', { detail: { action: 'open-settings' } }))}
+                            >
+                              add a local model
+                            </button>
+                            {' '}for unlimited offline use — quota resets midnight.
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
                     <div className="space-y-1">{renderMessage(msg)}</div>
+                    )
                   ) : (
                     <>
                       {msg.images && msg.images.length > 0 && (

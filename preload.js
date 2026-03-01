@@ -89,6 +89,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onLlmToken: (callback) => _on('llm-token', callback),
   onLlmThinkingToken: (callback) => _on('llm-thinking-token', callback),
   onLlmReplaceLast: (callback) => _on('llm-replace-last', callback),
+  onLlmStreamReset: (callback) => _on('llm-stream-reset', callback),
+  onLlmIterationBegin: (callback) => _on('llm-iteration-begin', callback),
   onDevLog: (callback) => _on('dev-log', callback),
 
   // ── Model Management ──
@@ -453,6 +455,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onUpdateAvailable: (callback) => _on('update-available', callback),
   onUpdateDownloaded: (callback) => _on('update-downloaded', callback),
   installUpdate: () => ipcRenderer.invoke('install-update'),
+
+  // ── Title Bar Theming ──
+  setTitleBarOverlay: (opts) => ipcRenderer.invoke('set-titlebar-overlay', opts),
 
   // ── Cleanup (prefer cleanup functions returned by on* methods) ──
   removeAllListeners: (channel) => ipcRenderer.removeAllListeners(channel), // deprecated

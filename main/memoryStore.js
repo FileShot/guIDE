@@ -128,17 +128,11 @@ class MemoryStore {
       }
     }
 
-    // Recent conversation summary (last 10 turns)
-    const recentConvos = this.conversations.slice(-10);
-    if (recentConvos.length > 0) {
-      prompt += '\n## Recent Conversation Context\n';
-      for (const turn of recentConvos) {
-        const roleLabel = turn.role === 'user' ? 'User' : 'Assistant';
-        // Keep it brief
-        const preview = turn.content.substring(0, 200);
-        prompt += `${roleLabel}: ${preview}${turn.content.length > 200 ? '...' : ''}\n`;
-      }
-    }
+    // NOTE: Past conversation turns are intentionally NOT injected here.
+    // conversations[] persists across sessions on disk. Injecting previous-session
+    // turns into a new session's system prompt caused the model to appear to
+    // "remember" things from prior sessions. Current-session messages are already
+    // in the messages[] array sent to the LLM — no injection needed.
 
     return prompt;
   }

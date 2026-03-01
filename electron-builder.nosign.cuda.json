@@ -13,8 +13,6 @@
     "scripts/**/*",
     "node_modules/**/*",
     "!node_modules/.cache",
-    "!node_modules/@node-llama-cpp/win-x64-cuda/**",
-    "!node_modules/@node-llama-cpp/win-x64-cuda-ext/**",
     "LICENSE"
   ],
   "mac": {
@@ -26,7 +24,7 @@
         "arch": ["x64", "arm64"]
       }
     ],
-    "artifactName": "guIDE-${version}-${arch}.${ext}"
+    "artifactName": "guIDE-CUDA-${version}-${arch}.${ext}"
   },
   "win": {
     "icon": "icon.ico",
@@ -56,7 +54,7 @@
     "license": "LICENSE",
     "displayLanguageSelector": false,
     "runAfterFinish": true,
-    "artifactName": "guIDE-Setup-${version}.${ext}"
+    "artifactName": "guIDE-CUDA-Setup-${version}.${ext}"
   },
   "linux": {
     "icon": "build/icon.png",
@@ -67,7 +65,7 @@
       }
     ],
     "category": "Development",
-    "artifactName": "guIDE-${version}-${arch}.${ext}"
+    "artifactName": "guIDE-CUDA-${version}-${arch}.${ext}"
   },
   "asar": true,
   "publish": {

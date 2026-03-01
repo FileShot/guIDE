@@ -147,6 +147,10 @@ const imageGen = new ImageGenerationService();
 const localImageEngine = new LocalImageEngine();
 const gitManager = new GitManager();
 const licenseManager = new LicenseManager();
+// Restore persisted license state from disk immediately — without this call,
+// isActivated stays false until the renderer explicitly calls licenseGetStatus,
+// which reads only in-memory state (always null at process start).
+licenseManager.loadLicense();
 // Wire LicenseManager so cloudLLM can retrieve session token for server proxy routing
 cloudLLM.setLicenseManager(licenseManager);
 const debugService = new DebugService();
@@ -247,6 +251,15 @@ registerAgenticChat(ctx);
 // Renderer calls this when user clicks "Restart to Install" in the update banner
 ipcMain.handle('install-update', () => {
   autoUpdater.quitAndInstall(false, true);
+});
+
+// ─── Title Bar Theming IPC ───────────────────────────────────────────
+// Called by ThemeProvider whenever the theme changes — syncs the native
+// Windows titlebar button color to match the active theme's titleBar color.
+ipcMain.handle('set-titlebar-overlay', (_evt, opts) => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    try { mainWindow.setTitleBarOverlay(opts); } catch (e) { /* unsupported platform */ }
+  }
 });
 
 // Deferred handlers — register after window shows (faster cold startup)
@@ -412,6 +425,9 @@ async function initializeServices() {
     const config = _readConfig();
     if (config.userSettings?.gpuPreference) {
       llmEngine.setGPUPreference(config.userSettings.gpuPreference);
+    }
+    if (typeof config.userSettings?.requireMinContextForGpu === 'boolean') {
+      llmEngine.setRequireMinContextForGpu(config.userSettings.requireMinContextForGpu);
     }
   } catch (_) {}
 

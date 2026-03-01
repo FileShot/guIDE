@@ -187,7 +187,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({
   return (
     <div className="h-[24px] flex items-center justify-between px-2 text-[12px] select-none flex-shrink-0 overflow-hidden" style={{ backgroundColor: 'var(--theme-status-bar)', borderTop: '1px solid var(--theme-border)', color: 'var(--theme-status-bar-fg)' }}>
       {/* Left */}
-      <div className="flex items-center gap-3 flex-shrink-0">
+      <div className="flex items-center gap-2 flex-shrink-0">
         {/* Git branch */}
         <div className="flex items-center gap-1 cursor-pointer hover:bg-[#ffffff10] px-1 rounded">
           <GitBranch size={12} />
@@ -208,7 +208,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({
       </div>
 
       {/* Right */}
-      <div className="flex items-center gap-2 min-w-0 overflow-hidden">
+      <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
         {/* RAG indexing */}
         {ragStatus.isIndexing && (
           <div className="flex items-center gap-1 animate-pulse text-[#dcdcaa]">

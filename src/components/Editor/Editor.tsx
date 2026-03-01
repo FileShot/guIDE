@@ -1,5 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect, forwardRef, useImperativeHandle } from 'react';
-import { X, Circle, Undo2, Check, Search, Play, Code2, Eye, Columns, Globe, MoreHorizontal, Wifi } from 'lucide-react';
+import { X, Circle, Undo2, Check, Search, Play, Code2, Eye, Columns, Globe, MoreHorizontal, Wifi, Settings2 } from 'lucide-react';
+import { AdvancedSettingsPanel } from '../Settings/AdvancedSettingsPanel';
 import { MonacoEditor } from './MonacoEditor';
 import { DiffViewer } from './DiffViewer';
 import { SearchReplace } from './SearchReplace';
@@ -28,6 +29,9 @@ export interface EditorHandle {
   getCurrentContent: () => string | undefined;
   openBrowserTab: (url?: string) => void;
   closeBrowserTab: () => void;
+  triggerEditorAction: (actionId: string) => void;
+  openSettingsTab: () => void;
+  runCurrentFile: () => void;
 }
 
 interface EditorProps {
@@ -52,6 +56,7 @@ interface EditorTab {
   isBinary?: boolean;
   isBrowser?: boolean;
   browserUrl?: string;
+  isSettings?: boolean;
   // For AI diff/undo
   pendingChange?: {
     originalContent: string;
@@ -154,6 +159,8 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(({
   tabsRef.current = tabs;
   const activeTabRef = useRef(activeTab);
   activeTabRef.current = activeTab;
+  // runCurrentFile is defined later in the component; use a ref so useImperativeHandle can call it without a forward-reference dep
+  const runCurrentFileRef = useRef<() => void>(() => {});
 
   const toggleLiveServer = useCallback(async () => {
     const api = window.electronAPI;
@@ -379,6 +386,32 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(({
         closeTab(browserTab.id);
       }
     },
+
+    triggerEditorAction: (actionId: string) => {
+      editorInstanceRef.current?.trigger('keyboard', actionId, null);
+    },
+
+    openSettingsTab: () => {
+      const existing = tabsRef.current.find(t => t.isSettings);
+      if (existing) {
+        setActiveTabId(existing.id);
+        return;
+      }
+      const newTab: EditorTab = {
+        id: 'settings-tab',
+        filePath: '__settings__',
+        fileName: 'Settings',
+        content: '',
+        originalContent: '',
+        isDirty: false,
+        language: 'plaintext',
+        isSettings: true,
+      };
+      setTabs(prev => [...prev, newTab]);
+      setActiveTabId(newTab.id);
+    },
+
+    runCurrentFile: () => { runCurrentFileRef.current(); },
   }), [onFileChange, onLanguageChange, closeTab]);
 
   // Handle content change from Monaco
@@ -576,6 +609,8 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(({
       console.error('Failed to run file:', e);
     }
   }, [activeTab, toggleHtmlPreview]);
+  // Keep ref in sync so useImperativeHandle can access the latest runCurrentFile
+  runCurrentFileRef.current = runCurrentFile;
 
   // F5 to run file
   useEffect(() => {
@@ -637,13 +672,13 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(({
     <div className={`flex flex-col bg-[#1e1e1e] ${className}`}>
       {/* Tab Bar */}
       {tabs.length > 0 && (
-        <div className="h-[35px] bg-[#252526] flex items-center flex-shrink-0">
+        <div className="h-[30px] bg-[#252526] flex items-center flex-shrink-0">
           {/* Scrollable tabs area */}
           <div className="flex-1 min-w-0 flex items-center overflow-x-auto overflow-y-hidden scrollbar-thin h-full">
             {tabs.map(tab => (
               <div
                 key={tab.id}
-                className={`flex items-center gap-1.5 px-3 h-[35px] cursor-pointer border-r border-[#252526] flex-shrink-0 group text-[13px] ${
+                className={`flex items-center gap-1.5 px-3 h-[30px] cursor-pointer border-r border-[#252526] flex-shrink-0 group text-[12px] ${
                   tab.id === activeTabId
                     ? 'bg-[#1e1e1e] text-white border-t-2 border-t-[#007acc]'
                     : 'bg-[#2d2d2d] text-[#969696] hover:bg-[#2d2d2d]/80 border-t-2 border-t-transparent'
@@ -659,8 +694,8 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(({
                 }}
                 title={tab.filePath}
               >
-                <span className="text-[14px] flex-shrink-0">{tab.isBrowser ? <Globe size={14} className="text-[#007acc]" /> : getFileIcon(tab.fileName)}</span>
-                <span className="truncate text-[13px]">{tab.fileName}</span>
+                <span className="text-[13px] flex-shrink-0">{tab.isSettings ? <Settings2 size={13} className="text-[#007acc]" /> : tab.isBrowser ? <Globe size={13} className="text-[#007acc]" /> : getFileIcon(tab.fileName)}</span>
+                <span className="truncate text-[12px]">{tab.fileName}</span>
                 {tab.isDirty && (
                   <Circle size={8} fill="currentColor" className="text-[#c5c5c5] flex-shrink-0" />
                 )}
@@ -783,7 +818,11 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(({
         {/* Main Editor Pane */}
         <div className={`flex-1 min-h-0 ${splitTabId ? 'border-r border-[#333]' : ''}`}>
           {activeTab ? (
-            activeTab.isBrowser ? (
+            activeTab.isSettings ? (
+              <div className="flex-1 h-full overflow-auto" style={{ backgroundColor: 'var(--theme-sidebar)' }}>
+                <AdvancedSettingsPanel />
+              </div>
+            ) : activeTab.isBrowser ? (
               <BrowserPanel
                 key="browser-tab-panel"
                 onClose={() => closeTab(activeTab.id)}

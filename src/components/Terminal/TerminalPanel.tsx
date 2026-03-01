@@ -334,7 +334,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({ cwd, onClose }) =>
   return (
     <div className="h-full flex flex-col bg-[#1e1e1e]">
       {/* Tab bar */}
-      <div className="h-[35px] bg-[#252526] flex items-center border-b border-[#1e1e1e] flex-shrink-0">
+      <div className="h-[30px] bg-[#252526] flex items-center border-b border-[#1e1e1e] flex-shrink-0">
         {/* Panel tabs */}
         <div className="flex items-center h-full">
           {(['terminal', 'problems', 'output'] as const).map((tab, i) => (

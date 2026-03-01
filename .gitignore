@@ -91,3 +91,8 @@ test-results-*.txt
 vitest-results.txt
 build-output*.txt
 builder-output*.txt
+
+# NES ROMs (copyright, not to be committed)
+*.nes
+website/public/jsnes.min.js
+website/public/runner.nes

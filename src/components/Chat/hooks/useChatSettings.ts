@@ -65,24 +65,37 @@ export function useChatSettings(): ChatSettings & ChatSettingsActions {
   const [autoMode, setAutoMode] = useState(false);
   const [planMode, setPlanMode] = useState(false);
   const [cloudProvider, setCloudProvider] = useState<string | null>(() => {
-    try { return localStorage.getItem('guide-cloud-provider') || 'cerebras'; } catch { return 'cerebras'; }
+    try { return localStorage.getItem('guide-cloud-provider') || null; } catch { return null; }
   });
   const [cloudModel, setCloudModel] = useState<string | null>(() => {
-    try { return localStorage.getItem('guide-cloud-model') || 'gpt-oss-120b'; } catch { return 'gpt-oss-120b'; }
+    try { return localStorage.getItem('guide-cloud-model') || null; } catch { return null; }
   });
 
-  // One-time migration: migrate removed models (zai-glm-4.7 was removed) back to gpt-oss-120b.
+  // One-time migration v7: groq bundled keys all return 403 — switch default to SambaNova
+  // (Meta-Llama-3.3-70B-Instruct, returns HTTP 200, 70B non-thinking).
   useEffect(() => {
     try {
-      const migrated = localStorage.getItem('guide-cloud-default-model-migrated-v3');
+      const migrated = localStorage.getItem('guide-cloud-default-model-migrated-v7');
       if (migrated === 'true') return;
       const storedProvider = localStorage.getItem('guide-cloud-provider') || 'cerebras';
       const storedModel = localStorage.getItem('guide-cloud-model');
-      if (storedProvider === 'cerebras' && (!storedModel || storedModel === 'zai-glm-4.7' || storedModel === 'glm-4-9b')) {
-        localStorage.setItem('guide-cloud-model', 'gpt-oss-120b');
-        setCloudModel('gpt-oss-120b');
+      if (
+        storedProvider === 'cerebras' ||
+        storedProvider === 'groq' ||
+        storedModel === 'llama3.1-70b' ||
+        storedModel === 'llama3.1-8b' ||
+        storedModel === 'zai-glm-4.7' ||
+        storedModel === 'glm-4-9b' ||
+        storedModel === 'gpt-oss-120b' ||
+        storedModel === 'llama-3.3-70b-versatile' ||
+        !storedModel
+      ) {
+        localStorage.setItem('guide-cloud-provider', 'sambanova');
+        localStorage.setItem('guide-cloud-model', 'Meta-Llama-3.3-70B-Instruct');
+        setCloudProvider('sambanova');
+        setCloudModel('Meta-Llama-3.3-70B-Instruct');
       }
-      localStorage.setItem('guide-cloud-default-model-migrated-v3', 'true');
+      localStorage.setItem('guide-cloud-default-model-migrated-v7', 'true');
     } catch {
       // ignore
     }

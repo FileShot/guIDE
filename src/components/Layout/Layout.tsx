@@ -18,6 +18,7 @@ import { CommandPalette } from './CommandPalette';
 import { MenuBar } from './MenuBar';
 import { ToastContainer, toast } from './Toast';
 import { WelcomeGuide } from './WelcomeGuide';
+import { WelcomeScreen } from './WelcomeScreen';
 import { TodoTreePanel } from '../Sidebar/TodoTreePanel';
 import { RestClientPanel } from '../RestClient/RestClientPanel';
 import { useTheme, themes } from './ThemeProvider';
@@ -294,14 +295,54 @@ export const Layout: React.FC = () => {
         break;
       case 'new-terminal': setTerminalVisible(true); break;
       case 'about':
-        window.electronAPI?.showMessageBox({
-          type: 'info', title: 'About guIDE',
-          message: 'guIDE v2.0.0 — AI-Powered Offline IDE',
-          detail: 'Copyright © 2025-2026 Brendan Gray\nGitHub: github.com/FileShot\n\nLocal LLM • RAG • MCP Tools • Browser Automation\nWeb Search • Git • Memory Context • Cloud APIs\n\nYour code, your models, your machine.\nNo cloud required.\n\nThis software is source-available. Redistribution,\nrebranding, or resale is prohibited without written\npermission from the author.',
-        });
+        (window.electronAPI?.getAppVersion?.() || Promise.resolve('1.5.0')).then((ver: string) => {
+          window.electronAPI?.showMessageBox({
+            type: 'info', title: 'About guIDE',
+            message: `guIDE v${ver} — AI-Powered Offline IDE`,
+            detail: 'Copyright \u00a9 2025-2026 Brendan Gray\nGitHub: github.com/FileShot\n\nLocal LLM \u2022 RAG \u2022 MCP Tools \u2022 Browser Automation\nWeb Search \u2022 Git \u2022 Memory Context \u2022 Cloud APIs\n\nYour code, your models, your machine.\nNo cloud required.\n\nThis software is source-available. Redistribution,\nrebranding, or resale is prohibited without written\npermission from the author.',
+          });
+        }).catch(() => {});
         break;
       case 'welcome-guide': setShowWelcomeGuide(true); notifyBrowserOverlay(true); break;
       case 'toggle-devtools': break; // handled by Electron
+      // ── Edit / Selection → Monaco editor action triggers ──
+      case 'expand-selection': editorRef.current?.triggerEditorAction('editor.action.smartSelect.expand'); break;
+      case 'shrink-selection': editorRef.current?.triggerEditorAction('editor.action.smartSelect.shrink'); break;
+      case 'copy-line-up': editorRef.current?.triggerEditorAction('editor.action.copyLinesUpAction'); break;
+      case 'copy-line-down': editorRef.current?.triggerEditorAction('editor.action.copyLinesDownAction'); break;
+      case 'move-line-up': editorRef.current?.triggerEditorAction('editor.action.moveLinesUpAction'); break;
+      case 'move-line-down': editorRef.current?.triggerEditorAction('editor.action.moveLinesDownAction'); break;
+      case 'add-cursor-above': editorRef.current?.triggerEditorAction('editor.action.insertCursorAbove'); break;
+      case 'add-cursor-below': editorRef.current?.triggerEditorAction('editor.action.insertCursorBelow'); break;
+      case 'cursors-line-ends': editorRef.current?.triggerEditorAction('editor.action.insertCursorAtEndOfEachLineSelected'); break;
+      case 'duplicate-selection': editorRef.current?.triggerEditorAction('editor.action.duplicateSelection'); break;
+      case 'add-next-occurrence': editorRef.current?.triggerEditorAction('editor.action.addSelectionToNextFindMatch'); break;
+      case 'add-prev-occurrence': editorRef.current?.triggerEditorAction('editor.action.addSelectionToPreviousFindMatch'); break;
+      case 'select-all-occurrences': editorRef.current?.triggerEditorAction('editor.action.selectHighlights'); break;
+      case 'column-selection-mode': editorRef.current?.triggerEditorAction('editor.action.toggleColumnSelection'); break;
+      case 'toggle-comment': editorRef.current?.triggerEditorAction('editor.action.commentLine'); break;
+      case 'toggle-block-comment': editorRef.current?.triggerEditorAction('editor.action.blockComment'); break;
+      case 'format-document': editorRef.current?.triggerEditorAction('editor.action.formatDocument'); break;
+      case 'replace': editorRef.current?.triggerEditorAction('editor.action.startFindReplaceAction'); break;
+      // ── Run / Debug menu ──
+      case 'run-file': editorRef.current?.runCurrentFile(); break;
+      case 'start-debugging':
+        setSidebarView('debug'); setSidebarVisible(true);
+        setTimeout(() => window.dispatchEvent(new CustomEvent('debug-menu-action', { detail: 'start-debugging' })), 200);
+        break;
+      case 'stop-debugging': window.dispatchEvent(new CustomEvent('debug-menu-action', { detail: 'stop-debugging' })); break;
+      case 'restart-debugging': window.dispatchEvent(new CustomEvent('debug-menu-action', { detail: 'restart-debugging' })); break;
+      case 'continue-debugging': window.dispatchEvent(new CustomEvent('debug-menu-action', { detail: 'continue-debugging' })); break;
+      case 'step-over': window.dispatchEvent(new CustomEvent('debug-menu-action', { detail: 'step-over' })); break;
+      case 'step-into': window.dispatchEvent(new CustomEvent('debug-menu-action', { detail: 'step-into' })); break;
+      case 'step-out': window.dispatchEvent(new CustomEvent('debug-menu-action', { detail: 'step-out' })); break;
+      case 'pause-debugging': window.dispatchEvent(new CustomEvent('debug-menu-action', { detail: 'pause-debugging' })); break;
+      case 'toggle-debug': setSidebarView('debug'); setSidebarVisible(true); break;
+      case 'remove-all-breakpoints': window.dispatchEvent(new CustomEvent('debug-menu-action', { detail: 'remove-all-breakpoints' })); break;
+      case 'enable-all-breakpoints': window.dispatchEvent(new CustomEvent('debug-menu-action', { detail: 'enable-all-breakpoints' })); break;
+      case 'disable-all-breakpoints': window.dispatchEvent(new CustomEvent('debug-menu-action', { detail: 'disable-all-breakpoints' })); break;
+      // ── Settings → open as viewport tab ──
+      case 'open-settings': editorRef.current?.openSettingsTab(); break;
     }
   }, [handleOpenFolderDialog]);
 
@@ -515,24 +556,24 @@ export const Layout: React.FC = () => {
           <button
             className="w-[48px] h-[48px] flex items-center justify-center transition-colors"
             style={{
-              color: sidebarView === 'settings' && sidebarVisible ? 'var(--theme-accent)' : 'var(--theme-foreground-muted)',
-              backgroundColor: sidebarView === 'settings' && sidebarVisible ? 'color-mix(in srgb, var(--theme-accent) 12%, transparent)' : 'transparent',
+              color: 'var(--theme-foreground-muted)',
               borderRadius: '8px',
             }}
-            onClick={() => {
-              if (sidebarView === 'settings' && sidebarVisible) setSidebarVisible(false);
-              else { setSidebarView('settings'); setSidebarVisible(true); }
-            }}
-            title="Advanced Settings"
+            onClick={() => editorRef.current?.openSettingsTab()}
+            title="Advanced Settings (Ctrl+,)"
             aria-label="Advanced Settings"
           >
             <Settings size={22} />
           </button>
         </div>
 
+        {!rootPath ? (
+          <WelcomeScreen onOpenFolder={handleOpenFolderDialog} onNewProject={() => setShowNewProject(true)} />
+        ) : (
+          <>
         {/* Sidebar — always mounted so panels stay alive; width animates open/close */}
         <div className="flex flex-col flex-shrink-0 overflow-hidden" style={{ width: sidebarVisible ? sidebarWidth : 0, backgroundColor: 'var(--theme-sidebar)', borderRight: sidebarVisible ? '1px solid var(--theme-sidebar-border)' : 'none', transition: 'width 200ms cubic-bezier(0.4,0,0.2,1)' }}>
-              <div className="h-[35px] flex items-center px-4 text-[12px] font-medium flex-shrink-0" style={{ color: 'var(--theme-foreground-muted)', borderBottom: '1px solid var(--theme-sidebar-border)' }}>
+              <div className="h-[30px] flex items-center px-4 text-[11px] font-semibold uppercase tracking-wider flex-shrink-0" style={{ color: 'var(--theme-foreground-subtle)', borderBottom: '1px solid var(--theme-sidebar-border)' }}>
                 {sidebarView === 'explorer' && 'Explorer'}
                 {sidebarView === 'search' && 'Search'}
                 {sidebarView === 'git' && 'Source Control'}
@@ -677,6 +718,8 @@ export const Layout: React.FC = () => {
                 onClose={() => setChatVisible(false)}
               />
             </div>
+          </>
+        )}
           </>
         )}
       </div>

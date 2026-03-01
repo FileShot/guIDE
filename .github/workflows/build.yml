@@ -70,7 +70,7 @@ jobs:
       - name: Convert icon for Linux
         run: convert icon.ico[0] build/icon.png || (mkdir -p build && cp icon.ico build/icon.png)
 
-      - name: Build Linux AppImage
+      - name: Build Linux AppImage (Standard)
         run: npx electron-builder --linux --x64 --config electron-builder.nosign.json
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -80,6 +80,74 @@ jobs:
         with:
           name: linux-appimage
           path: dist-electron/guIDE-*.AppImage
+          retention-days: 30
+
+  build-linux-cuda:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build renderer
+        run: npm run build:renderer
+
+      - name: Convert icon for Linux
+        run: convert icon.ico[0] build/icon.png || (mkdir -p build && cp icon.ico build/icon.png)
+
+      - name: Build Linux AppImage (CUDA)
+        run: npx electron-builder --linux --x64 --config electron-builder.nosign.cuda.json
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Linux CUDA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-appimage-cuda
+          path: dist-electron/guIDE-CUDA-*.AppImage
+          retention-days: 30
+
+  build-windows-cuda:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build renderer
+        run: npm run build:renderer
+
+      - name: Build Windows installer (CUDA)
+        run: npx electron-builder --win --x64 --config electron-builder.nosign.cuda.json
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - name: Upload Windows CUDA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer-cuda
+          path: dist-electron/guIDE-CUDA-Setup-*.exe
           retention-days: 30
 
   build-mac:
@@ -121,7 +189,7 @@ jobs:
           retention-days: 30
 
   release:
-    needs: [build-windows, build-linux, build-mac]
+    needs: [build-windows, build-windows-cuda, build-linux, build-linux-cuda, build-mac]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
@@ -138,7 +206,9 @@ jobs:
         with:
           files: |
             artifacts/windows-installer/*
+            artifacts/windows-installer-cuda/*
             artifacts/linux-appimage/*
+            artifacts/linux-appimage-cuda/*
             artifacts/mac-dmg/*
           draft: false
           prerelease: false

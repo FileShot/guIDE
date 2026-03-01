@@ -32,7 +32,6 @@
     "icon": "icon.ico",
     "publisherName": "GraySoft LLC",
     "signingHashAlgorithms": ["sha256"],
-    "certificateFile": "code-signing.pfx",
     "target": [
       {
         "target": "nsis",

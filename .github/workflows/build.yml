@@ -29,16 +29,13 @@ jobs:
       - name: Build renderer
         run: npm run build:renderer
 
-      - name: Decode signing certificate
-        if: ${{ secrets.WIN_CSC_BASE64 != '' }}
-        run: |
-          [System.IO.File]::WriteAllBytes("$env:GITHUB_WORKSPACE\code-signing.pfx", [System.Convert]::FromBase64String("${{ secrets.WIN_CSC_BASE64 }}"))
-
       - name: Build Windows installer
         run: npx electron-builder --win --x64 --config electron-builder.nosign.json
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4

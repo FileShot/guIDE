@@ -167,8 +167,24 @@ export function useChatStreaming(): ChatStreamingState {
     // Anti-hallucination: backend detected fake tool results
     const cleanupReplace = api.onLlmReplaceLast?.((cleanedText: string) => {
       if (streamEpochRef.current !== activeEpochRef.current) return;
-      // Preserve text from prior iterations — only replace current iteration's portion
       const prefix = streamBufferRef.current.slice(0, iterationStartOffsetRef.current);
+      // When cleanedText is empty (tool-call iteration wipe), the streamed planning text
+      // would vanish abruptly from the main chat. Promote it to a thinking segment so it
+      // transitions visually rather than disappearing — prevents the jarring flash/blank effect.
+      if (!cleanedText) {
+        const iterationText = streamBufferRef.current.slice(iterationStartOffsetRef.current).trim();
+        if (iterationText.length > 10) {
+          // Avoid duplication: backend may have already sent this text as llm-thinking-token.
+          // Only push if last thinking segment doesn't already start with the same content.
+          const lastSeg = thinkingSegmentsRef.current[thinkingSegmentsRef.current.length - 1] || '';
+          const firstChunk = iterationText.substring(0, 80);
+          if (!lastSeg.includes(firstChunk)) {
+            thinkingSegmentsRef.current.push(iterationText);
+            scheduleThinkingUpdate();
+          }
+        }
+      }
+      // Preserve text from prior iterations — only replace current iteration's portion
       streamBufferRef.current = prefix + cleanedText;
       // Jump display to buffer end — corrections show immediately, no typewriter delay
       displayPosRef.current = streamBufferRef.current.length;

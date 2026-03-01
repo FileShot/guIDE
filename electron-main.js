@@ -29,7 +29,9 @@ app.commandLine.appendSwitch('disable-gpu-vsync'); // Reduce input latency
 
 // ── V8 Performance Flags ──
 // Enable V8 code caching for faster require() on subsequent launches
-app.commandLine.appendSwitch('js-flags', '--optimize-for-size --max-old-space-size=4096');
+// NOTE: --optimize-for-size is intentionally absent — it shrinks compiled machine code
+// at the cost of execution speed, which is the wrong trade-off for a dev tool.
+app.commandLine.appendSwitch('js-flags', '--max-old-space-size=4096');
 
 // ─── Single Instance Lock ─────────────────────────────────────────────
 // Prevent multiple instances from competing for config files, model files,

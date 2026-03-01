@@ -2456,22 +2456,43 @@ ${e.message}`,
                               <div className="text-[11px] text-[#858585]">Completed</div>
                             </CollapsibleToolBlock>
                           ))}
-                          {executingTools.map((toolData, i) => (
-                            <CollapsibleToolBlock key={`exec-${i}`} label={getToolLabel(toolData, 'running')} icon="⟳">
-                              <div>
-                                <div className="flex items-center gap-2 mb-2">
-                                  <Loader2 size={12} className="animate-spin text-[#007acc]" />
-                                  <span className="text-[11px] text-[#858585]">Executing...</span>
+                          {executingTools.map((toolData, i) => {
+                            const isCodeWriteTool = ['write_file', 'create_file', 'edit_file', 'append_to_file'].includes(toolData.tool);
+                            const codeContent = toolData.params?.content as string | undefined;
+                            const filePath = ((toolData.params?.filePath || toolData.params?.fileName || '') as string);
+                            const ext = filePath.includes('.') ? filePath.split('.').pop()?.toLowerCase() || '' : '';
+                            const langMap: Record<string, string> = {
+                              ts: 'typescript', tsx: 'tsx', js: 'javascript', jsx: 'jsx',
+                              py: 'python', rs: 'rust', go: 'go', java: 'java', cs: 'csharp',
+                              cpp: 'cpp', c: 'c', html: 'html', css: 'css', json: 'json',
+                              yaml: 'yaml', yml: 'yaml', md: 'markdown', sh: 'bash',
+                              bat: 'batch', txt: 'text', xml: 'xml', sql: 'sql',
+                            };
+                            const language = langMap[ext] || ext || 'code';
+                            return (
+                              <CollapsibleToolBlock key={`exec-${i}`} label={getToolLabel(toolData, 'running')} icon="⟳">
+                                <div>
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <Loader2 size={12} className="animate-spin text-[#007acc]" />
+                                    <span className="text-[11px] text-[#858585]">Executing...</span>
+                                  </div>
+                                  {isCodeWriteTool && codeContent ? (
+                                    <CodeBlock
+                                      code={codeContent}
+                                      language={language}
+                                      onApply={() => {}}
+                                      isToolCall={true}
+                                    />
+                                  ) : toolData.params && Object.keys(toolData.params).length > 0 ? (
+                                    <>
+                                      <div className="text-[10px] text-[#858585] mb-1 font-medium tracking-wide">PARAMETERS</div>
+                                      <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2">{JSON.stringify(toolData.params, null, 2)}</pre>
+                                    </>
+                                  ) : null}
                                 </div>
-                                {toolData.params && Object.keys(toolData.params).length > 0 && (
-                                  <>
-                                    <div className="text-[10px] text-[#858585] mb-1 font-medium tracking-wide">PARAMETERS</div>
-                                    <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2">{JSON.stringify(toolData.params, null, 2)}</pre>
-                                  </>
-                                )}
-                              </div>
-                            </CollapsibleToolBlock>
-                          ))}
+                              </CollapsibleToolBlock>
+                            );
+                          })}
                         </ToolCallGroup>
                       </div>
                     )}

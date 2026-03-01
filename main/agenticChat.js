@@ -785,7 +785,10 @@ function register(ctx) {
       const hwContextSize = modelStatus.modelInfo?.contextSize || 32768;
 
       // Helper functions (defined early — needed for budget calculation)
-      const estimateTokens = (text) => Math.ceil((text || '').length / 4);
+      // /3.5 gives ~14% more conservative token estimate than /4 — real LLM tokenizers
+      // produce 3–3.5 chars/token for code and JSON (shorter than English prose).
+      // This prevents buildStaticPrompt + buildDynamicContext from overcommitting budget.
+      const estimateTokens = (text) => Math.ceil((text || '').length / 3.5);
       
       // ── ModelProfile-driven budgeting ──
       // The ModelProfile registry provides effective context size, response reserve %,
@@ -931,11 +934,13 @@ function register(ctx) {
       // Dynamic context: memory, RAG, file, error — changes between iterations.
       // Injected into user message instead of system context to avoid KV cache invalidation.
       // Chat mode: skip ALL dynamic context to maximize conversation space.
-      const buildDynamicContext = (taskTypeOverride) => {
+      // budgetOverride: optional cap for dynamic context tokens — used by overflow retry
+      // to shed memory/RAG/file context while preserving tools and preamble.
+      const buildDynamicContext = (taskTypeOverride, budgetOverride) => {
         const effectiveTaskType = taskTypeOverride || taskType;
         // Chat mode: no dynamic context injection — keep the full context for conversation
         if (effectiveTaskType === 'chat') return '';
-        let tokenBudget = Math.floor(maxPromptTokens * 0.4); // Reserve budget for dynamic context
+        let tokenBudget = budgetOverride !== undefined ? budgetOverride : Math.floor(maxPromptTokens * 0.4); // default: 40% of prompt budget
         let prompt = '';
         
         const appendIfBudget = (text, label) => {
@@ -1469,9 +1474,20 @@ function register(ctx) {
               try { await llmEngine.resetSession(true); } catch (_) {}
               sessionJustRotated = true;
               const rotatedBase = buildStaticPrompt();
+              // Fix C: use 10% of prompt budget for dynamic context on retry — drops memory/RAG/file
+              // context but keeps tools and preamble fully intact. Prevents repeat overflow on
+              // small-context models without touching the model's tool access.
+              // Fix D: if partial content was generated before the overflow, inject it so the model
+              // continues from where it left off rather than restarting the response from scratch.
+              const _firstTurnPartial = fullResponseText.trim().length > 0
+                ? fullResponseText.substring(Math.max(0, fullResponseText.length - 1500))
+                : '';
+              const _firstTurnHint = _firstTurnPartial
+                ? `\n\nYou were generating a response and the context was reset due to size constraints. Here is the end of what you wrote:\n---\n${_firstTurnPartial}\n---\nContinue directly from where you left off without repeating what you already wrote.`
+                : '';
               currentPrompt = {
                 systemContext: rotatedBase,
-                userMessage: buildDynamicContext() + '\n' + message
+                userMessage: buildDynamicContext(undefined, Math.floor(maxPromptTokens * 0.10)) + '\n' + message + _firstTurnHint
               };
               continue;
             }
@@ -1570,9 +1586,17 @@ function register(ctx) {
               }
               
               const rotatedBase = buildStaticPrompt();
+              // Fix D: include the end of what was generated so far so the model continues
+              // seamlessly rather than restarting the response after context rotation.
+              const _rotationPartial = fullResponseText.trim().length > 0
+                ? fullResponseText.substring(Math.max(0, fullResponseText.length - 1500))
+                : '';
+              const _rotationHint = _rotationPartial
+                ? `\n\nYou were generating a response and context was rotated. Here is the end of what you wrote:\n---\n${_rotationPartial}\n---\nContinue directly from where you left off without repeating what you already wrote.`
+                : `\nContext was rotated. The current user request is: ${message.substring(0, 300)}${message.length > 300 ? '...' : ''}`;
               currentPrompt = {
                 systemContext: rotatedBase,
-                userMessage: buildDynamicContext() + '\n' + convSummary + `\nContext was rotated. The current user request is: ${message.substring(0, 300)}${message.length > 300 ? '...' : ''}`
+                userMessage: buildDynamicContext() + '\n' + convSummary + _rotationHint
               };
               sessionJustRotated = true;
               lastConvSummary = convSummary;
@@ -1937,17 +1961,25 @@ function register(ctx) {
         }
         
         // ── Strip code-fence artifacts from displayed text ──
-        // Re-enabled with per-iteration offset tracking (llm-iteration-begin + iterationStartOffsetRef).
-        // The frontend prepends prior iterations' text so only the current iteration's portion is replaced.
+        // Route any conversational planning text to the thinking panel, then wipe the
+        // main chat iteration slot clean. This prevents raw JSON tool calls from flashing
+        // in the chat bubble and matches the cloud path behavior.
         if (toolResults.hasToolCalls && toolResults.results.length > 0 && mainWindow) {
-          let cleaned = responseText;
-          cleaned = cleaned.replace(/```(?:tool_call|tool|json)[^\n]*\n[\s\S]*?```/g, '');
-          cleaned = cleaned.replace(/<tool_call>[\s\S]*?<\/tool_call>/g, '');
-          cleaned = cleaned.replace(/\{\s*"(?:tool|name)"\s*:\s*"[^"]+"\s*,\s*"(?:params|arguments)"[\s\S]*?\}\s*\}/g, '');
-          cleaned = cleaned.replace(/\n{3,}/g, '\n\n').trim();
-          if (cleaned !== responseText) {
-            mainWindow.webContents.send('llm-replace-last', cleaned);
+          // Extract planning text — everything the model wrote before the first tool call indicator
+          const toolIndicators = ['{"tool":', '```tool_call', '```json\n{"tool"', '<tool_call>'];
+          let splitIdx = responseText.length;
+          for (const indicator of toolIndicators) {
+            const idx = responseText.indexOf(indicator);
+            if (idx >= 0 && idx < splitIdx) splitIdx = idx;
           }
+          const planningText = responseText.substring(0, splitIdx).trim();
+          if (planningText) {
+            // Planning text belongs in the thinking panel, not the main chat bubble
+            mainWindow.webContents.send('llm-thinking-token', planningText);
+          }
+          // Wipe this iteration's streamed content from main chat — the final answer
+          // streams clean in the last iteration that produces no tool calls.
+          mainWindow.webContents.send('llm-replace-last', '');
         }
         
         if (!toolResults.hasToolCalls || toolResults.results.length === 0) {

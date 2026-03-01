@@ -8,6 +8,15 @@ const nextConfig = {
   },
   async headers() {
     return [
+      // Allow the 404 game page to be embedded in same-origin iframes
+      // (not-found.tsx renders the game in an iframe; DENY would block it)
+      {
+        source: '/404-game.html',
+        headers: [
+          { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+          { key: 'Content-Security-Policy', value: "frame-ancestors 'self'" },
+        ],
+      },
       {
         source: '/(.*)',
         headers: [

@@ -376,13 +376,38 @@ export const Layout: React.FC = () => {
   return (
     <div className="flex flex-col h-screen overflow-hidden" style={{ backgroundColor: 'var(--theme-bg)', color: 'var(--theme-foreground)' }}>
       {/* Title Bar with Menu */}
-      <div className="h-[40px] flex items-center select-none flex-shrink-0 relative z-50 pt-[2px]"
+      <div className="h-[34px] flex items-center select-none flex-shrink-0 relative z-50"
            style={{ backgroundColor: 'var(--theme-title-bar)', WebkitAppRegion: 'drag' } as any}>
         <div className="flex items-center text-[12px]" style={{ color: 'var(--theme-foreground)', opacity: 0.8, WebkitAppRegion: 'no-drag' } as any}>
           <span className="px-2 flex items-center" title="guIDE by Brendan Gray">
             <img src="zzz.png" alt="guIDE" className="w-5 h-5" style={{ filter: 'brightness(1.2)' }} />
           </span>
           <MenuBar onAction={handleMenuAction} />
+        </div>
+        {/* Centered VS Code-style project search bar */}
+        <div
+          className="absolute left-1/2 -translate-x-1/2 flex items-center"
+          style={{ WebkitAppRegion: 'no-drag' } as any}
+        >
+          <button
+            className="flex items-center gap-2 h-[22px] rounded transition-all px-3 hover:opacity-100"
+            style={{
+              backgroundColor: 'var(--theme-input-bg, rgba(255,255,255,0.06))',
+              border: '1px solid var(--theme-border, rgba(255,255,255,0.10))',
+              color: 'var(--theme-foreground-muted)',
+              width: 'clamp(220px, 30vw, 440px)',
+              opacity: 0.75,
+            }}
+            onClick={() => handleMenuAction('command-palette')}
+            title="Search files, commands, and more (Ctrl+P)"
+            aria-label="Open command palette"
+          >
+            <Search size={11} className="flex-shrink-0 opacity-60" />
+            <span className="truncate flex-1 text-left text-[11px]">
+              {rootPath ? rootPath.split(/[\/\\]/).pop() : 'Search files by name...'}
+            </span>
+            <kbd className="text-[10px] opacity-35 flex-shrink-0 ml-1 font-sans">Ctrl+P</kbd>
+          </button>
         </div>
         <div className="flex-1" />
         {/* VS Code–style layout toggle buttons */}
@@ -572,7 +597,7 @@ export const Layout: React.FC = () => {
         ) : (
           <>
         {/* Sidebar — always mounted so panels stay alive; width animates open/close */}
-        <div className="flex flex-col flex-shrink-0 overflow-hidden" style={{ width: sidebarVisible ? sidebarWidth : 0, backgroundColor: 'var(--theme-sidebar)', borderRight: sidebarVisible ? '1px solid var(--theme-sidebar-border)' : 'none', transition: 'width 200ms cubic-bezier(0.4,0,0.2,1)' }}>
+        <div className="flex flex-col flex-shrink-0 overflow-hidden" style={{ width: sidebarVisible ? sidebarWidth : 0, backgroundColor: 'var(--theme-sidebar)', borderRight: sidebarVisible ? '1px solid var(--theme-sidebar-border)' : 'none', transition: 'width 200ms cubic-bezier(0.4,0,0.2,1)', boxShadow: sidebarVisible ? '2px 0 8px rgba(0,0,0,0.28)' : 'none' }}>
               <div className="h-[30px] flex items-center px-4 text-[11px] font-semibold uppercase tracking-wider flex-shrink-0" style={{ color: 'var(--theme-foreground-subtle)', borderBottom: '1px solid var(--theme-sidebar-border)' }}>
                 {sidebarView === 'explorer' && 'Explorer'}
                 {sidebarView === 'search' && 'Search'}
@@ -705,7 +730,7 @@ export const Layout: React.FC = () => {
         {chatVisible && (
           <>
             <div className="w-[4px] cursor-col-resize bg-transparent hover:bg-[#007acc] active:bg-[#007acc] transition-colors flex-shrink-0" onMouseDown={() => startResize('chat')} />
-            <div className="flex-shrink-0 border-l border-[#252526] overflow-hidden" style={{ width: chatWidth }}>
+            <div className="flex-shrink-0 border-l border-[#252526] overflow-hidden" style={{ width: chatWidth, boxShadow: '-2px 0 8px rgba(0,0,0,0.28)' }}>
               <ChatPanel
                 rootPath={rootPath}
                 currentFile={currentFile}

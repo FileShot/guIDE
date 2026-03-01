@@ -244,16 +244,18 @@ export const StatusBar: React.FC<StatusBarProps> = ({
           </div>
         )}
 
+        {/* Editor info group separator */}
+        <div className="w-px h-3 flex-shrink-0 mx-0.5" style={{ backgroundColor: 'rgba(255,255,255,0.10)' }} />
         {/* Cursor position */}
         <div className="cursor-pointer hover:bg-[#ffffff10] px-1 rounded flex-shrink-0 whitespace-nowrap">
           Ln {cursorPosition.line}, Col {cursorPosition.column}
         </div>
-
         {/* Language */}
         <div className="cursor-pointer hover:bg-[#ffffff10] px-1 rounded capitalize flex-shrink-0">
           {language}
         </div>
-
+        {/* AI status group separator */}
+        <div className="w-px h-3 flex-shrink-0 mx-0.5" style={{ backgroundColor: 'rgba(255,255,255,0.10)' }} />
         {/* LLM Status */}
         <div className="flex items-center gap-1 cursor-pointer hover:bg-[#ffffff10] px-1 rounded min-w-0 flex-shrink"
              title={llmStatus.modelInfo ? `${llmStatus.modelInfo.name}\nContext: ${llmStatus.modelInfo.contextSize || '?'} tokens\nGPU Layers: ${llmStatus.modelInfo.gpuLayers || '?'}\nBackend: ${llmStatus.modelInfo.gpuBackend || '?'}${llmStatus.modelInfo.flashAttention ? '\nFlash Attention: ON' : ''}` : llmStatus.message}>
@@ -266,6 +268,8 @@ export const StatusBar: React.FC<StatusBarProps> = ({
           )}
         </div>
 
+        {/* Actions group separator */}
+        <div className="w-px h-3 flex-shrink-0 mx-0.5" style={{ backgroundColor: 'rgba(255,255,255,0.10)' }} />
         {/* Voice Command */}
         {onAction && (
           <VoiceCommandButton onAction={onAction} onChatMessage={onChatMessage} />

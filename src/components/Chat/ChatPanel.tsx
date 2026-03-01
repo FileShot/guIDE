@@ -2992,6 +2992,8 @@ ${e.message}`,
                 <Zap size={10} className={autoMode ? 'text-[#ffd700]' : ''} />
                 <span className="hidden sm:inline">Auto</span>
               </button>
+              {/* Auto/Plan separator */}
+              <div className="w-px h-3.5 flex-shrink-0 mx-0.5" style={{ backgroundColor: 'rgba(255,255,255,0.12)' }} />
               {/* Plan Mode toggle — inline */}
               <button
                 className={`flex items-center gap-0.5 text-[11px] px-1 py-0.5 rounded transition-colors ${
@@ -3007,6 +3009,8 @@ ${e.message}`,
                 <FileCode size={10} className={planMode ? 'text-white' : ''} />
                 <span className="hidden sm:inline">Plan</span>
               </button>
+              {/* Plan/Model separator */}
+              <div className="w-px h-3.5 flex-shrink-0 mx-0.5" style={{ backgroundColor: 'rgba(255,255,255,0.12)' }} />
               {/* Model picker — inline */}
               <button
                 className="flex items-center gap-1 text-[11px] text-[#858585] hover:text-[#cccccc] px-1 py-0.5 rounded hover:bg-[#4c4c4c] transition-colors chat-dropdown-panel max-w-[120px]"

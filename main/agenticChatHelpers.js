@@ -267,15 +267,13 @@ function createIpcTokenBatcher(mainWindow, channel, canSend, opts = {}) {
   };
 
   const dispose = () => {
-    if (charsPerFlush) {
-      // Paced batcher: do NOT cancel the timer or instant-dump the buffer.
-      // Let the existing timer continue draining at the charsPerFlush rate.
-      // Instant-dumping here bypasses pacing and causes a wall-of-text flash
-      // when a fast cloud API has buffered many tokens by response end.
-      // canSend() will block stale sends if a new request starts before drain completes.
-      return;
-    }
-    // Non-paced batcher: cancel timer and flush remaining buffer immediately as before.
+    // Always cancel the timer and flush any remaining buffer immediately.
+    // For paced batchers (charsPerFlush > 0), pacing is for smooth live display
+    // DURING streaming. At dispose() time streaming is complete — leaving chars
+    // stranded in the buffer means the aiChat() IPC resolve races ahead of the
+    // remaining tokens, causing the frontend to commit a truncated message
+    // (e.g. "Hell" instead of "Hello. How can I help you?").
+    // Flushing immediately here ensures all tokens arrive BEFORE the IPC resolve.
     if (timer) {
       clearTimeout(timer);
       timer = null;

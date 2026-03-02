@@ -295,10 +295,7 @@ function register(ctx) {
           context.cloudProvider = autoSelect.provider;
           context.cloudModel = autoSelect.model;
           console.log(`[Auto Mode] Selected: ${autoSelect.provider} / ${autoSelect.model}`);
-          // Notify the UI which model was auto-selected
-          if (mainWindow) {
-            mainWindow.webContents.send('llm-token', `*Auto Mode selected: ${cloudLLM._getProviderLabel(autoSelect.provider)} / ${autoSelect.model}*\n\n`);
-          }
+          // Model selection is intentionally not shown in chat — auto mode is meant to be seamless
         } else {
           console.log('[Auto Mode] No cloud providers available, falling back to local model');
           if (mainWindow) {

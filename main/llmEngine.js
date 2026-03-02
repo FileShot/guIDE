@@ -257,19 +257,25 @@ class LLMEngine extends EventEmitter {
       // Windows), then CPU. 'auto' left in the chain so non-NVIDIA systems still get GPU.
       let nvidiaDedicatedVramBytes = 0;
       if (this.gpuPreference !== 'cpu') {
-        try {
-          const { execSync } = require('child_process');
-          const nvOut = execSync('nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits', {
-            timeout: 3000, encoding: 'utf8', windowsHide: true,
-          });
-          const mib = parseFloat(nvOut.trim());
-          if (mib > 0) {
-            nvidiaDedicatedVramBytes = mib * 1024 * 1024; // MiB → bytes
-            console.log(`[LLM] nvidia-smi dedicated VRAM: ${(nvidiaDedicatedVramBytes / (1024 ** 3)).toFixed(1)}GB`);
+        // Cache nvidia-smi result — only probe once per session. Avoids a 100–300ms sync
+        // block (or 3s timeout on non-NVIDIA systems) on every model load/switch.
+        if (this._cachedNvidiaDedicatedVramBytes === undefined) {
+          this._cachedNvidiaDedicatedVramBytes = 0; // default: unknown / non-NVIDIA
+          try {
+            const { execSync } = require('child_process');
+            const nvOut = execSync('nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits', {
+              timeout: 3000, encoding: 'utf8', windowsHide: true,
+            });
+            const mib = parseFloat(nvOut.trim());
+            if (mib > 0) {
+              this._cachedNvidiaDedicatedVramBytes = mib * 1024 * 1024; // MiB → bytes
+              console.log(`[LLM] nvidia-smi dedicated VRAM: ${(this._cachedNvidiaDedicatedVramBytes / (1024 ** 3)).toFixed(1)}GB (cached for session)`);
+            }
+          } catch (_) {
+            console.log('[LLM] nvidia-smi unavailable — Vulkan total VRAM used as-is for padding');
           }
-        } catch (_) {
-          console.log('[LLM] nvidia-smi unavailable — Vulkan total VRAM used as-is for padding');
         }
+        nvidiaDedicatedVramBytes = this._cachedNvidiaDedicatedVramBytes;
       }
 
       // If the model is too large for full GPU offload, insert a partial layer fallback

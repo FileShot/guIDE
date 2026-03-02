@@ -1,9 +1,9 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { Menu, X } from 'lucide-react';
+import { Menu, X, UserCircle } from 'lucide-react';
 
 const navLinks = [
   { href: '/download', label: 'Download' },
@@ -16,11 +16,26 @@ const pocketLink = { href: 'https://pocket.graysoft.dev', label: 'Pocket', exter
 export default function Header() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [user, setUser] = useState<{ name: string; email: string } | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20);
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+  // Check auth state on mount
+  useEffect(() => {
+    fetch('/api/auth/me', { credentials: 'include' })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.success && data.user) {
+          setUser({ name: data.user.name || data.user.email, email: data.user.email });
+        }
+      })
+      .catch(() => {/* not logged in */})
+      .finally(() => setAuthChecked(true));
   }, []);
 
   return (
@@ -66,19 +81,37 @@ export default function Header() {
             </svg>
           </a>
         </nav>
+
+        {/* Desktop Auth â€” only render after auth check to prevent flash */}
         <div className="hidden md:flex items-center gap-3">
-          <Link
-            href="/login"
-            className="text-sm text-neutral-400 hover:text-white transition-colors"
-          >
-            Sign In
-          </Link>
-          <Link
-            href="/register"
-            className="text-sm px-4 py-2 bg-accent hover:bg-accent-light text-white rounded-lg font-medium transition-all hover:shadow-[0_0_20px_rgba(0,122,204,0.25)]"
-          >
-            Get Started
-          </Link>
+          {authChecked && (
+            user ? (
+              /* Logged in: show Account button */
+              <Link
+                href="/account"
+                className="flex items-center gap-2 text-sm px-4 py-2 bg-white/[0.06] hover:bg-white/[0.10] border border-white/10 text-white rounded-lg font-medium transition-all"
+              >
+                <UserCircle size={15} className="text-accent" />
+                Account
+              </Link>
+            ) : (
+              /* Logged out */
+              <>
+                <Link
+                  href="/login"
+                  className="text-sm text-neutral-400 hover:text-white transition-colors"
+                >
+                  Sign In
+                </Link>
+                <Link
+                  href="/register"
+                  className="text-sm px-4 py-2 bg-accent hover:bg-accent-light text-white rounded-lg font-medium transition-all hover:shadow-[0_0_20px_rgba(0,122,204,0.25)]"
+                >
+                  Get Started
+                </Link>
+              </>
+            )
+          )}
         </div>
 
         {/* Mobile Toggle */}
@@ -116,20 +149,35 @@ export default function Header() {
               <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent/15 text-accent border border-accent/20">WEB</span>
             </a>
             <div className="border-t border-white/5 my-2" />
-            <Link
-              href="/login"
-              onClick={() => setMobileOpen(false)}
-              className="text-sm text-neutral-400 hover:text-white py-2.5 transition-colors"
-            >
-              Sign In
-            </Link>
-            <Link
-              href="/register"
-              onClick={() => setMobileOpen(false)}
-              className="text-sm px-4 py-2.5 bg-accent hover:bg-accent-light text-white rounded-lg font-medium text-center transition-colors mt-1"
-            >
-              Get Started
-            </Link>
+            {authChecked && (
+              user ? (
+                <Link
+                  href="/account"
+                  onClick={() => setMobileOpen(false)}
+                  className="flex items-center gap-2 text-sm text-white py-2.5 transition-colors"
+                >
+                  <UserCircle size={15} className="text-accent" />
+                  Account
+                </Link>
+              ) : (
+                <>
+                  <Link
+                    href="/login"
+                    onClick={() => setMobileOpen(false)}
+                    className="text-sm text-neutral-400 hover:text-white py-2.5 transition-colors"
+                  >
+                    Sign In
+                  </Link>
+                  <Link
+                    href="/register"
+                    onClick={() => setMobileOpen(false)}
+                    className="text-sm px-4 py-2.5 bg-accent hover:bg-accent-light text-white rounded-lg font-medium text-center transition-colors mt-1"
+                  >
+                    Get Started
+                  </Link>
+                </>
+              )
+            )}
           </nav>
         </div>
       )}

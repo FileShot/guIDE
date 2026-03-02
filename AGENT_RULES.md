@@ -210,5 +210,3 @@ Things explicitly requested that have not yet been implemented:
 1. **NSIS Installer full branding**: Remove ALL default Windows installer chrome, brand everything to guIDE. Beyond the current dark theme — full custom UI. Requested 3+ times. **Status: Pending.**
 
 ---
-
-*See `PENDING_FIXES.md` for all outstanding bugs, fix status, and session handoff state.*

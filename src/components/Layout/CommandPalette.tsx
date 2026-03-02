@@ -90,7 +90,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ rootPath, onClos
   }, [items, selectedIndex, onClose]);
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-center pt-[15%]" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex justify-center pt-[34px]" onClick={onClose}>
       <div
         className="w-[600px] max-h-[400px] bg-[#252526]/85 glass-strong border border-[#454545]/60 rounded-md shadow-2xl flex flex-col overflow-hidden"
         onClick={e => e.stopPropagation()}

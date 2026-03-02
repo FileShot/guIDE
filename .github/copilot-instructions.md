@@ -394,6 +394,30 @@ These rules apply whenever running an iterative optimization loop on model promp
 - If every test passes on the first run with no code changes, that is a WARNING that the tests are too easy, not a success.
 - Changes must be correct for ALL users, ALL prompts, ALL hardware — not correct for the test inputs used during development.
 
+### NEVER use keyword/regex classifiers or artificial output filters — BANNED
+This applies to ALL products in this workspace, including Pocket guIDE (agent.js) and the IDE pipeline.
+
+**What is BANNED:**
+- Regex patterns that classify user intent by matching specific phrasings in the user's message (the same pattern as `detectTaskType()` which was removed from `agenticChat.js` on 2026-02-25)
+- Adding new patterns to existing keyword/regex classifiers because a specific test prompt failed on that exact phrasing
+- Artificial post-processing strips that target specific words or phrases in model output because a test revealed that phrase (e.g., adding "search" to a verb whitelist because one test produced "We must search the web.")
+- Hard-gating on specific user-message phrasings to block a tool call (e.g., adding `i\s+need\s+something\s+that` to block write_file)
+
+**What IS allowed:**
+- System prompt instructions that tell the model how to behave in GENERAL TERMS — not listing specific phrasings to keyword-match
+- Making an existing guard condition MORE GENERAL (e.g., removing a whitelist so it matches ANY verb instead of specific listed verbs)
+- Pre-existing output strips that were present before the failing test was discovered
+- Hard blocks on tool calls when the block logic is categorically correct and general (not triggered by spotting a specific phrase in one test)
+
+**Why this rule exists:**
+Keyword matchers are unreliable for production use across thousands of users with varying phrasing, typos, multi-part messages, and non-English input. When a test reveals a phrasing gap, the failure is in the SYSTEM PROMPT or GENERAL guard logic — not a missing keyword. The correct fix is always a system prompt improvement or a more general condition. Adding specific phrases because a test failed teaches to the test and breaks for all the adjacent phrasings that weren't tested.
+
+**The correct fix workflow when a test reveals wrong model behavior:**
+1. Identify WHAT the model is doing wrong (creating a file when it shouldn't, not calling a tool, etc.)
+2. Identify WHY from the system prompt — what guidance is missing or unclear?
+3. Fix the system prompt with a GENERAL principle that covers the whole class of problem
+4. Never add a keyword/phrase to a regex to paper over one instance
+
 ### ALWAYS document every change in CHANGES_LOG.md
 - EVERY code change made during a session MUST be logged in `C:\Users\brend\IDE\pipeline-clone\CHANGES_LOG.md`.
 - Log format: date, file changed, line numbers affected, what was removed, what was added, why.

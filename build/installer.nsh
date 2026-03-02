@@ -94,7 +94,7 @@ Click Next to continue."
 ; ═══════════════════════════════════════════════════════════════════════
 ;  DIRECTORY PAGE
 ; ═══════════════════════════════════════════════════════════════════════
-!define MUI_DIRECTORYPAGE_TEXT_TOP "guIDE will be installed in the following folder. Click Browse to choose a different location.$\r$\n$\r$\nIMPORTANT: guIDE bundles CUDA GPU-acceleration libraries and a full AI inference engine (~600 MB). Installation takes 5–10 minutes. The progress bar WILL appear frozen for several minutes while the CUDA libraries are extracted — this is normal and the installer has NOT crashed. Please be patient and do not close the installer."
+!define MUI_DIRECTORYPAGE_TEXT_TOP "guIDE will be installed in the following folder. Click Browse to choose a different location.$\r$\n$\r$\nguIDE is ready to use immediately with built-in guIDE Cloud AI. Installation completes in under a minute.$\r$\n$\r$\nOn first launch, guIDE will detect your NVIDIA GPU and download GPU acceleration (~560 MB) in the background — you can use cloud AI immediately while this happens."
 !define MUI_DIRECTORYPAGE_TEXT_DESTINATION "Installation Folder"
 
 ; ═══════════════════════════════════════════════════════════════════════
@@ -112,9 +112,10 @@ Click Next to continue."
 !define MUI_FINISHPAGE_TITLE_3LINES
 !define MUI_FINISHPAGE_TEXT "\
 guIDE has been installed successfully.$\r$\n$\r$\n\
-On first launch, guIDE will detect your hardware and recommend the best \
-local AI model for your system.$\r$\n$\r$\n\
-Visit graysoft.dev/models to browse and download GGUF models.$\r$\n$\r$\n\
+guIDE Cloud AI is built in and ready immediately — no setup required.$\r$\n$\r$\n\
+On first launch, guIDE detects your NVIDIA GPU and downloads GPU acceleration \
+(~560 MB) silently in the background.$\r$\n$\r$\n\
+Visit graysoft.dev/models to browse and download local GGUF models.$\r$\n$\r$\n\
 Enjoy coding with AI — no rate limits, no subscriptions."
 
 !define MUI_FINISHPAGE_RUN_TEXT "Launch guIDE now"
@@ -250,19 +251,12 @@ Enjoy coding with AI — no rate limits, no subscriptions."
   DetailPrint "  ║          guIDE — Installation in Progress            ║"
   DetailPrint "  ╚══════════════════════════════════════════════════════╝"
   DetailPrint ""
-  DetailPrint "  guIDE includes CUDA GPU-acceleration libraries and a full"
-  DetailPrint "  local AI inference engine. Total size: ~600 MB."
+  DetailPrint "  Installing guIDE AI IDE..."
   DetailPrint ""
-  DetailPrint "  ⚠  WHY THE PROGRESS BAR PAUSES:"
-  DetailPrint "     The installer is extracting CUDA runtime libraries"
-  DetailPrint "     (cublas, curand, ggml backends). These are large binary"
-  DetailPrint "     files that take time to decompress and write to disk."
-  DetailPrint "     This is NORMAL — the installer has not crashed."
-  DetailPrint ""
-  DetailPrint "  ⏱  EXPECTED TIME: 5–10 minutes on most machines."
-  DetailPrint "     Slower HDDs or antivirus scanning may extend this."
-  DetailPrint ""
-  DetailPrint "  ✋  DO NOT close this window. Installation is running."
+  DetailPrint "  guIDE Cloud AI is built in — ready on first launch."
+  DetailPrint "  On first launch, guIDE detects your GPU and downloads"
+  DetailPrint "  GPU acceleration (~560 MB) silently in the background."
+  DetailPrint "  You can use cloud AI immediately while that runs."
   DetailPrint "  ──────────────────────────────────────────────────────"
   DetailPrint ""
   DetailPrint ""

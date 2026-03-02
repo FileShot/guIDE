@@ -1,8 +1,8 @@
-version: 1.6.7
+version: 1.6.10
 files:
-  - url: guIDE-Setup-1.6.7.exe
-    sha512: E1COJgnzT0cFCecAQz4R2zyAufQRSP0CK5WrNo+HaVD0ZHWMsN8ui8ZBONZZtr+YWFRgsBSz0/KTd7Gd2soEYA==
-    size: 197957257
-path: guIDE-Setup-1.6.7.exe
-sha512: E1COJgnzT0cFCecAQz4R2zyAufQRSP0CK5WrNo+HaVD0ZHWMsN8ui8ZBONZZtr+YWFRgsBSz0/KTd7Gd2soEYA==
-releaseDate: '2026-03-01T05:39:42.895Z'
+  - url: guIDE-CUDA-Setup-1.6.10.exe
+    sha512: dMHo7XgCjAJMsAx7oWq2nfZiUGEN2IyQJUNayj/Nl/rtxVTGycAPjcNK/ua09XId+GOtZseDnYPUp9iYYZ04Ug==
+    size: 423423383
+path: guIDE-CUDA-Setup-1.6.10.exe
+sha512: dMHo7XgCjAJMsAx7oWq2nfZiUGEN2IyQJUNayj/Nl/rtxVTGycAPjcNK/ua09XId+GOtZseDnYPUp9iYYZ04Ug==
+releaseDate: '2026-03-02T02:11:35.991Z'

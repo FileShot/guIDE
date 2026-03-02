@@ -262,13 +262,20 @@ export const ToolCallGroup: React.FC<{ children: React.ReactNode; count: number 
   const okCount = childArray.filter((c: any) => c?.props?.icon === '✓').length;
   const failCount = childArray.filter((c: any) => c?.props?.icon === '✗').length;
   const runningCount = count - okCount - failCount;
+  const isRunning = runningCount > 0;
+
+  // Auto-open when tools are executing so user sees live updates without clicking
+  useEffect(() => {
+    if (isRunning) setOpen(true);
+  }, [isRunning]);
+
   const summaryParts: string[] = [];
   if (okCount > 0) summaryParts.push(`${okCount} passed`);
   if (failCount > 0) summaryParts.push(`${failCount} failed`);
-  if (runningCount > 0) summaryParts.push(`${runningCount} running`);
   const summary = summaryParts.join(', ') || `${count} tools`;
-  const allOk = failCount === 0 && runningCount === 0;
+  const allOk = failCount === 0 && !isRunning;
   const hasFail = failCount > 0;
+
   return (
     <div className="my-0.5 overflow-hidden">
       <button
@@ -276,9 +283,19 @@ export const ToolCallGroup: React.FC<{ children: React.ReactNode; count: number 
         onClick={() => setOpen(!open)}
       >
         <span className={`text-[8px] transition-transform duration-150 flex-shrink-0 ${open ? 'rotate-90' : ''}`}>▶</span>
-        <Wrench size={12} className="text-[#dcdcaa] flex-shrink-0" />
+        {isRunning ? (
+          <Loader2 size={12} className="text-[#dcdcaa] flex-shrink-0 animate-spin" />
+        ) : (
+          <Wrench size={12} className={`flex-shrink-0 ${allOk ? 'text-[#89d185]' : hasFail ? 'text-[#f14c4c]' : 'text-[#dcdcaa]'}`} />
+        )}
         <span className="text-[#d4d4d4] font-medium">{count} tool call{count !== 1 ? 's' : ''}</span>
-        <span className={`ml-auto text-[9px] flex-shrink-0 ${hasFail ? 'text-[#f14c4c]' : allOk ? 'text-[#89d185]' : 'text-[#dcdcaa]'}`}>{summary}</span>
+        {isRunning ? (
+          <span className="ml-auto text-[9px] text-[#dcdcaa] animate-pulse flex-shrink-0 flex items-center gap-1">
+            running
+          </span>
+        ) : (
+          <span className={`ml-auto text-[9px] flex-shrink-0 ${hasFail ? 'text-[#f14c4c]' : allOk ? 'text-[#89d185]' : 'text-[#dcdcaa]'}`}>{summary}</span>
+        )}
       </button>
       {open && (
         <div className="pl-3 py-1 border-t border-[#3c3c3c] flex flex-col gap-0">

@@ -73,9 +73,10 @@ class LLMEngine extends EventEmitter {
       seed: -1,
     };
 
-    // User-configurable generation timeout (ms). Default 120s.
+    // User-configurable generation timeout (ms). Default 0 = no timeout (user cancels manually).
     // Can be updated live via Settings without reloading the model.
-    this.generationTimeoutMs = 120_000;
+    // Set > 0 in Settings to re-enable a hard timeout.
+    this.generationTimeoutMs = 0;
   }
 
   /**
@@ -973,13 +974,13 @@ After your brief acknowledgment, output ONLY the tool call blocks — no extra t
     this.abortController = new AbortController();
     
     // Generation safety timeout: abort if generation exceeds configured limit.
-    // Configurable via Settings UI — default 120s. Updates live without model reload.
+    // 0 = no timeout (users can cancel manually). Configurable in Settings.
     const GEN_TIMEOUT_MS = this.generationTimeoutMs;
-    const genTimeoutTimer = setTimeout(() => {
+    const genTimeoutTimer = GEN_TIMEOUT_MS > 0 ? setTimeout(() => {
       console.log(`[LLM] Generation timeout (${GEN_TIMEOUT_MS / 1000}s) — aborting to prevent hang`);
       this._lastAbortReason = 'timeout';
       this.cancelGeneration('timeout');
-    }, GEN_TIMEOUT_MS);
+    }, GEN_TIMEOUT_MS) : null;
     
     let fullResponse = '';
     let rawResponse = '';
@@ -1722,7 +1723,7 @@ After your brief acknowledgment, output ONLY the tool call blocks — no extra t
    * @param {Function} onFunctionCall - Called when a function call is generated
    * @returns {Object} {text, functionCalls: [{functionName, params}], stopReason}
    */
-  async generateWithFunctions(input, functions, params = {}, onToken, onThinkingToken, onFunctionCall) {
+  async generateWithFunctions(input, functions, params = {}, onToken, onThinkingToken, onFunctionCall, onToolGenerating) {
     if (!this.isReady || !this.chat) {
       throw new Error('Model not loaded. Please load a model first.');
     }
@@ -1758,15 +1759,18 @@ After your brief acknowledgment, output ONLY the tool call blocks — no extra t
     this.abortController = new AbortController();
 
     // Safety timeout — uses same configurable limit as generateStream()
+    // 0 = no timeout (user can cancel manually).
     const GEN_TIMEOUT_MS = this.generationTimeoutMs;
-    const genTimeoutTimer = setTimeout(() => {
+    const genTimeoutTimer = GEN_TIMEOUT_MS > 0 ? setTimeout(() => {
       console.log(`[LLM] Function-calling generation timeout — aborting`);
       this._lastAbortReason = 'timeout';
       this.cancelGeneration('timeout');
-    }, GEN_TIMEOUT_MS);
+    }, GEN_TIMEOUT_MS) : null;
 
     let fullResponse = '';
     let collectedFunctionCalls = [];
+    // Accumulate paramsChunk text per callIndex for live streaming to UI
+    const _paramsChunkBufs = {};
 
     try {
       this._compactHistory();
@@ -1821,9 +1825,18 @@ After your brief acknowledgment, output ONLY the tool call blocks — no extra t
             if (onFunctionCall) onFunctionCall(funcCall);
           },
           onFunctionCallParamsChunk: (chunk) => {
-            // Stream function call params as they generate (for UI feedback)
-            if (chunk.done && onToken) {
-              onToken(`\n\`\`\`json\n{"tool":"${chunk.functionName}","params":...}\n\`\`\`\n`);
+            // Accumulate paramsChunk text per callIndex and stream live to UI.
+            // This powers the streaming tool generation bubble in the renderer
+            // so users can see what the model is writing instead of a blank screen.
+            if (!_paramsChunkBufs[chunk.callIndex]) _paramsChunkBufs[chunk.callIndex] = '';
+            if (chunk.paramsChunk) _paramsChunkBufs[chunk.callIndex] += chunk.paramsChunk;
+            if (onToolGenerating) {
+              onToolGenerating({
+                callIndex: chunk.callIndex,
+                functionName: chunk.functionName,
+                paramsText: _paramsChunkBufs[chunk.callIndex],
+                done: !!chunk.done,
+              });
             }
           },
         } : {}),

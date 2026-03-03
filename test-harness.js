@@ -26,7 +26,7 @@ const fs = require('fs');
 const fsSync = require('fs');
 
 // ── Parse CLI ──
-const VALID_MODES = ['local', 'local-4b', 'local-30b', 'cerebras-70b', 'cerebras-120b'];
+const VALID_MODES = ['local', 'local-4b', 'local-30b', 'local-deepseek', 'cerebras-70b', 'cerebras-120b'];
 const mode = process.argv.find(a => VALID_MODES.includes(a)) || 'cerebras-70b';
 const isLocal = mode.startsWith('local');
 const forceDeterministic = process.argv.includes('--deterministic') || isLocal;
@@ -445,11 +445,12 @@ app.whenReady().then(async () => {
   // ── Prepare model/provider based on mode ──
   let baseContext = {};
 
-  if (mode === 'local' || mode === 'local-4b' || mode === 'local-30b') {
+  if (mode === 'local' || mode === 'local-4b' || mode === 'local-30b' || mode === 'local-deepseek') {
     const modelPaths = {
       'local': 'd:/models/models/Qwen3-0.6B-Q8_0.gguf',
       'local-4b': 'd:/models/models/Qwen3-4B-Instruct-2507-Q4_K_M.gguf',
       'local-30b': 'd:/models/models/Qwen3-Coder-30B-A3B-Instruct-Q4_K_S.gguf',
+      'local-deepseek': 'd:/models/tiny/DeepSeek-R1-Distill-Qwen-1.5B-Q8_0.gguf',
     };
     const modelPath = modelPaths[mode];
     console.log(`Loading local model: ${modelPath}`);
@@ -470,7 +471,7 @@ app.whenReady().then(async () => {
     console.log(`Cerebras pool: ${status?.totalKeys || 0} keys, ${status?.availableKeys || 0} available`);
     baseContext = {
       cloudProvider: 'cerebras',
-      cloudModel: 'zai-glm-4.7',
+      cloudModel: 'gpt-oss-120b',
       maxIterations: 30,
       params: { maxTokens: 4096, temperature: forceDeterministic ? 0 : 0.7 },
     };

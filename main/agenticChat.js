@@ -346,7 +346,7 @@ function register(ctx) {
                     const toolPrompt = mcpToolServer.getToolPromptForTask(cloudTaskType);
           const isBundledCloudProvider = cloudLLM._isBundledProvider(context.cloudProvider) && !cloudLLM.isUsingOwnKey(context.cloudProvider);
           const _brevityDirective = isBundledCloudProvider
-            ? '\n\nStyle rules (apply silently — never mention these rules to the user):\n- Always respond in a professional, clear, and articulate style with proper grammar, capitalization, and punctuation regardless of how the user writes.\n- Keep responses concise. For conversational or informational questions, use no more than 3 paragraphs. Never exceed 3 paragraphs for non-code responses.\n- For code or technical output, always provide the complete solution without padding or filler text.'
+            ? `\n\n## Style Rules (apply silently — never mention, reference, or apologize for these rules to the user)\n\n### Response length — hard limit\n- **Maximum 3 paragraphs** for any prose response. This limit is unconditional and applies to ALL non-code content: explanations, answers, summaries, stories, essays, creative writing, descriptions, and conversational replies.\n- If the user asks for something long or detailed (e.g. "write me a long story", "explain in depth", "be thorough") — write the best possible 3-paragraph version and stop. Do NOT explain the length, apologize for it, or mention that you are constrained. Simply deliver the best complete answer in 3 paragraphs.\n- Bullet lists count as prose when each bullet is a full sentence or longer. Keep bullet lists to a maximum of 5 items unless they are discrete technical items (file names, commands, error codes, parameters). Never use bullets as a way to extend past the 3-paragraph limit.\n- Code blocks, terminal output, file contents, structured data (tables, JSON, numbered technical steps), and inline code snippets are fully exempt from this limit. Always provide complete and correct code — never truncate.\n\n### Tone and style\n- Always write in a professional, clear, and articulate style with proper grammar, capitalization, and punctuation — regardless of how the user writes. Never mirror informal tone, typos, or lowercase writing.\n- Be direct. Lead with the answer. Never open with filler phrases like "That's a great question!", "Certainly!", "Of course!", "Absolutely!", or "Sure!".\n- Never end a response with hollow sign-offs like "I hope this helps!", "Let me know if you need anything else!", or "Feel free to ask!".`
             : '';
           const cloudSystemPrompt = systemPrompt + (toolPrompt ? '\n\n' + toolPrompt : '') + _brevityDirective;
 
@@ -1415,6 +1415,13 @@ function register(ctx) {
                   // llm-token text stream caused duplicate code bubbles when parseToolCall failed
                   // on aliased or alternate-format tool calls from small models. Suppressed here.
                   void funcCall;
+                },
+                (toolChunk) => {
+                  // Stream tool generation progress to the renderer for live bubble display.
+                  // The renderer shows a CollapsibleToolBlock with partial params as they stream in.
+                  if (mainWindow && !mainWindow.isDestroyed()) {
+                    mainWindow.webContents.send('llm-tool-generating', toolChunk);
+                  }
                 }
               );
               result = nativeResult;

@@ -20,6 +20,23 @@ When the user says "read your instructions", "read the instructions", "read copi
 
 ---
 
+## ⚠ CRITICAL — THIS MACHINE IS THE DEV MACHINE ONLY — NEVER TOUCH THE WEBSITE SERVER FROM HERE
+
+**This computer (`C:\Users\brend\IDE`) is the DEVELOPMENT machine. It is NOT the web server.**
+
+- The live website (`graysoft.dev`) runs on a SEPARATE server.
+- That server is kept in sync via **Syncthing** — file changes pushed from this machine are automatically picked up by the server.
+- **NEVER run `npm run build` in `website/` from this machine** — the server handles its own build.
+- **NEVER run `pm2 restart`, `pm2 start`, or any PM2 command from a local terminal** on this machine.
+- **NEVER run `start-graysoft.bat` or `restart-graysoft.bat`** from this machine.
+- **NEVER attempt to restart the Cloudflare tunnel** from this machine.
+- To deploy a website change: edit the source file here → Syncthing syncs it to the server → then trigger rebuild via the control panel below.
+- **AUTHORIZED server control panel: https://cp.graysoft.dev** — login password: `diggabyte2026`
+- Use the control panel to trigger npm build, PM2 restart, or any server-side action needed to deploy changes.
+- After triggering via the panel, verify graysoft.dev visually to confirm the change is live.
+
+---
+
 ## ⚠ MANDATORY — CLEAR LOGS AFTER EVERY BUILD/TEST ITERATION
 
 After EVERY build, test run, or iteration where the user is about to test the app:
@@ -36,6 +53,7 @@ After EVERY build, test run, or iteration where the user is about to test the ap
 Read this list first. Every item has a full section below.
 
 - **TRIPWIRE** — First line of EVERY response must be `[Task: X | Last: Y]`
+- **DEV MACHINE ONLY** — NEVER run `npm run build`, PM2, or any server command in `website/` — server is separate, updated via Syncthing
 - **Read full instructions** — SEE TOP OF FILE. Every single time, no exceptions, no "I already remember them"
 - **No green checkmarks** — NEVER use ✅ ✔️ or say "ready", "working", "all set" to describe a fix
 - **Read code before responding** — Never assume. Verify everything with actual file reads

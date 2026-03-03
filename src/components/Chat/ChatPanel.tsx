@@ -153,7 +153,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
 
   const streaming = useChatStreaming();
   const { streamingText, thinkingSegments, setStreamingText, setThinkingSegments,
-    streamBufferRef, thinkingSegmentsRef, wasRespondingRef, streamEpochRef, activeEpochRef } = streaming;
+    streamBufferRef, thinkingSegmentsRef, wasRespondingRef, streamEpochRef, activeEpochRef,
+    waitForTypewriterDone } = streaming;
 
   const addSystemMessage = useCallback((content: string) => {
     setMessages(prev => [...prev, {
@@ -346,6 +347,9 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     let executingTimeout: ReturnType<typeof setTimeout> | null = null;
 
     const cleanupExecuting = api.onToolExecuting?.((data: { tool: string; params: any }) => {
+      // Tool is now executing — clear the generating-phase bubble
+      generatingToolCallsRef.current = [];
+      setGeneratingToolCalls([]);
       const updated = [...executingToolsRef.current, { tool: data.tool, params: data.params }];
       executingToolsRef.current = updated;
       setExecutingTools(updated);
@@ -359,6 +363,9 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
 
     const cleanupResults = api.onMcpToolResults?.(() => {
       if (executingTimeout) clearTimeout(executingTimeout);
+      // Clear any lingering generating-phase bubbles
+      generatingToolCallsRef.current = [];
+      setGeneratingToolCalls([]);
       // BUG-NEW-A: Move currently-executing tools to completed so their pills stay visible
       // as ✓ checkmarks instead of vanishing the instant the tool finishes.
       const finished = executingToolsRef.current;
@@ -369,6 +376,16 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       setExecutingTools([]);
       // Refresh pending file changes after tools execute
       refreshPendingChanges();
+    });
+
+    const cleanupToolGenerating = api.onLlmToolGenerating?.((data: { callIndex: number; functionName: string; paramsText: string; done: boolean }) => {
+      // Update or remove the entry for this callIndex
+      const filtered = generatingToolCallsRef.current.filter(t => t.callIndex !== data.callIndex);
+      if (!data.done) {
+        filtered.push({ callIndex: data.callIndex, functionName: data.functionName, paramsText: data.paramsText });
+      }
+      generatingToolCallsRef.current = filtered;
+      setGeneratingToolCalls([...filtered]);
     });
 
     const cleanupProgress = api.onAgenticProgress?.((data: { iteration: number; maxIterations: number }) => {
@@ -430,6 +447,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       if (executingTimeout) clearTimeout(executingTimeout);
       cleanupExecuting?.();
       cleanupResults?.();
+      cleanupToolGenerating?.();
       cleanupProgress?.();
       cleanupPhase?.();
       cleanupTodo?.();
@@ -708,6 +726,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     setStreamingText('');
     setThinkingSegments([]);
     setCompletedStreamingTools([]);
+    generatingToolCallsRef.current = [];
+    setGeneratingToolCalls([]);
     executingToolsRef.current = [];
 
     try {
@@ -779,6 +799,16 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       // in-flight llm-token IPC events finish processing before we read streamBufferRef.
       if (result.success && !result.text) {
         await new Promise(r => setTimeout(r, 0));
+      }
+
+      // Wait for the typewriter to finish revealing all buffered chars before committing
+      // the assistant message bubble. Prevents wall-of-text flash on fast cloud responses
+      // where dispose() flushes all remaining chars in a single IPC call, delivering them
+      // to the renderer faster than the 100 chars/sec typewriter can reveal them.
+      // For local models this resolves instantly (typewriter always caught up in real-time).
+      // Only runs when a buffer is present and the generation epoch is still valid.
+      if (result.success && streamBufferRef.current.length > 0 && streamEpochRef.current === activeEpochRef.current) {
+        await waitForTypewriterDone();
       }
 
       // BUG-026: If model is unavailable, clear the queue — retrying queued messages
@@ -878,6 +908,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       setStreamingText('');
       setThinkingSegments([]);
       setCompletedStreamingTools([]);
+      generatingToolCallsRef.current = [];
+      setGeneratingToolCalls([]);
       executingToolsRef.current = [];
       setAgenticProgress(null);
       setAgenticPhases([]);
@@ -2446,6 +2478,44 @@ ${e.message}`,
                             style={{ width: `${Math.round((imageGenProgress.current / imageGenProgress.total) * 100)}%` }}
                           />
                         </div>
+                      </div>
+                    )}
+                    {generatingToolCalls.length > 0 && (
+                      <div className="mt-2">
+                        <ToolCallGroup count={generatingToolCalls.length}>
+                          {generatingToolCalls.map((tc) => {
+                            // Extract meaningful detail from partial params text as it streams
+                            let partialDetail = '';
+                            try {
+                              const fpMatch = tc.paramsText.match(/"filePath"\s*:\s*"([^"]+)"/);
+                              const urlMatch = tc.paramsText.match(/"url"\s*:\s*"([^"]+)"/);
+                              const qMatch = tc.paramsText.match(/"query"\s*:\s*"([^"]+)"/);
+                              if (fpMatch) {
+                                const fp = fpMatch[1];
+                                partialDetail = fp.includes('/') ? fp.split('/').pop() || fp : fp.includes('\\') ? fp.split('\\').pop() || fp : fp;
+                              } else if (urlMatch) {
+                                try { partialDetail = new URL(urlMatch[1]).hostname; } catch { partialDetail = urlMatch[1].substring(0, 30); }
+                              } else if (qMatch) {
+                                partialDetail = qMatch[1].substring(0, 25) + (qMatch[1].length > 25 ? '\u2026' : '');
+                              }
+                            } catch {}
+                            const genLabel = partialDetail ? `${tc.functionName}: ${partialDetail}` : tc.functionName;
+                            const displayText = tc.paramsText.length > 1500 ? tc.paramsText.substring(0, 1500) + '\n\u2026[truncated]' : tc.paramsText;
+                            return (
+                              <CollapsibleToolBlock key={`gen-${tc.callIndex}`} label={genLabel} icon="\u29d7">
+                                <div>
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <Loader2 size={12} className="animate-spin text-[#007acc]" />
+                                    <span className="text-[11px] text-[#858585]">Generating tool call\u2026</span>
+                                  </div>
+                                  {tc.paramsText && (
+                                    <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2 max-h-[180px] overflow-y-auto">{displayText}</pre>
+                                  )}
+                                </div>
+                              </CollapsibleToolBlock>
+                            );
+                          })}
+                        </ToolCallGroup>
                       </div>
                     )}
                     {(completedStreamingTools.length > 0 || executingTools.length > 0) && (

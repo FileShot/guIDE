@@ -19,6 +19,13 @@ export interface ChatStreamingState {
   streamEpochRef: MutableRefObject<number>;
   /** Set this to streamEpochRef.current when starting a new generation */
   activeEpochRef: MutableRefObject<number>;
+  /**
+   * Resolves when the typewriter animation has fully revealed all buffered chars.
+   * Await this before committing the assistant message bubble so the committed text
+   * matches exactly what was already visible — prevents wall-of-text flash on fast
+   * cloud responses where dispose() flushes a large batch in one IPC call.
+   */
+  waitForTypewriterDone: () => Promise<void>;
 }
 
 export function useChatStreaming(): ChatStreamingState {
@@ -199,10 +206,34 @@ export function useChatStreaming(): ChatStreamingState {
     };
   }, []);
 
+  /**
+   * Poll via RAF until the typewriter has revealed all chars in streamBufferRef.
+   * For local models this resolves in 0-1 frames (typewriter always caught up).
+   * For bundled cloud where dispose() delivers a large batch, this waits until the
+   * 100 chars/sec animation finishes before the caller commits the bubble.
+   * 30-second safety ceiling prevents hanging if something goes wrong.
+   */
+  const waitForTypewriterDone = (): Promise<void> => {
+    return new Promise((resolve) => {
+      let resolved = false;
+      const safeResolve = () => { if (!resolved) { resolved = true; resolve(); } };
+      const check = () => {
+        if (displayPosRef.current >= streamBufferRef.current.length) {
+          safeResolve();
+          return;
+        }
+        requestAnimationFrame(check);
+      };
+      requestAnimationFrame(check);
+      // Safety ceiling — resolve unconditionally after 30s
+      setTimeout(safeResolve, 30000);
+    });
+  };
+
   return {
     streamingText, thinkingSegments,
     setStreamingText, setThinkingSegments,
     streamBufferRef, thinkingSegmentsRef, wasRespondingRef,
-    streamEpochRef, activeEpochRef,
+    streamEpochRef, activeEpochRef, waitForTypewriterDone,
   };
 }

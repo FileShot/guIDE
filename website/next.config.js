@@ -3,6 +3,7 @@ const path = require('path');
 
 const nextConfig = {
   output: 'standalone',
+  distDir: '.next-ready',
   turbopack: {
     root: path.resolve(__dirname),
   },

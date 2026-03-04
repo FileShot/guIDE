@@ -1178,7 +1178,7 @@ ${e.message}`,
     try {
       const parsed = JSON.parse(content);
       if (parsed.params?.content && typeof parsed.params.content === 'string' && parsed.params.content.length > 500) {
-        const truncated = { ...parsed, params: { ...parsed.params, content: parsed.params.content.substring(0, 200) + '...[truncated]' } };
+        const truncated = { ...parsed, params: { ...parsed.params, content: parsed.params.content.substring(0, 2000) + '...[truncated]' } };
         return JSON.stringify(truncated, null, 2);
       }
     } catch { /* not JSON, truncate raw */ }
@@ -2512,7 +2512,7 @@ ${e.message}`,
                               }
                             } catch {}
                             const genLabel = partialDetail ? `${tc.functionName}: ${partialDetail}` : tc.functionName;
-                            const displayText = tc.paramsText.length > 1500 ? tc.paramsText.substring(0, 1500) + '\n\u2026[truncated]' : tc.paramsText;
+                            const displayText = tc.paramsText.length > 5000 ? tc.paramsText.substring(0, 5000) + '\n\u2026[truncated]' : tc.paramsText;
                             return (
                               <CollapsibleToolBlock key={`gen-${tc.callIndex}`} label={genLabel} icon="\u29d7">
                                 <div>

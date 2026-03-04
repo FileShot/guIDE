@@ -302,11 +302,13 @@ function parseToolCalls(text) {
         if (start === -1) break;
         let depth = 0;
         let inStr = false;
+        let inBacktick = false;
         let end = -1;
         for (let i = start; i < blockContent.length; i++) {
           const c = blockContent[i];
-          if (c === '"' && (i === 0 || blockContent[i - 1] !== '\\')) inStr = !inStr;
-          if (!inStr) {
+          if (!inBacktick && c === '"' && (i === 0 || blockContent[i - 1] !== '\\')) inStr = !inStr;
+          if (!inStr && c === '`') inBacktick = !inBacktick;
+          if (!inStr && !inBacktick) {
             if (c === '{') depth++;
             if (c === '}') { depth--; if (depth === 0) { end = i; break; } }
           }
@@ -372,15 +374,17 @@ function parseToolCalls(text) {
       // String-aware brace-counting to extract complete JSON
       let depth = 0;
       let inStr = false;
+      let inBacktick = false;
       let endIdx = startIdx;
       for (let i = startIdx; i < cleanedText.length; i++) {
         const c = cleanedText[i];
-        if (c === '"' && (i === 0 || cleanedText[i - 1] !== '\\')) inStr = !inStr;
-        if (!inStr) {
+        if (!inBacktick && c === '"' && (i === 0 || cleanedText[i - 1] !== '\\')) inStr = !inStr;
+        if (!inStr && c === '`') inBacktick = !inBacktick;
+        if (!inStr && !inBacktick) {
           if (c === '{') depth++;
           if (c === '}') depth--;
         }
-        if (depth === 0 && !inStr) {
+        if (depth === 0 && !inStr && !inBacktick) {
           endIdx = i + 1;
           break;
         }

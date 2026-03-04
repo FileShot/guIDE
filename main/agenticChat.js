@@ -463,9 +463,8 @@ function register(ctx) {
               if (planningText) {
                 mainWindow.webContents.send('llm-thinking-token', planningText);
               }
-              // Wipe this iteration's content from main chat — the final answer arrives in
-              // the last iteration that produces no tool calls (preserved by iterationStartOffsetRef).
-              mainWindow.webContents.send('llm-replace-last', '');
+              // Keep acknowledgment/planning text visible in the chat bubble — never delete it.
+              mainWindow.webContents.send('llm-replace-last', planningText);
             }
 
             if (!toolResults.hasToolCalls || toolResults.results.length === 0) {
@@ -1714,7 +1713,7 @@ function register(ctx) {
           iteration--; // Continuation is not a new agentic step
           currentPrompt = {
             systemContext: currentPrompt.systemContext, // Unchanged — KV cache preserved
-            userMessage: '[Continue your response exactly where you left off. If you were in the middle of a tool call, call that tool now to complete the task — do not output tool content as raw text. Output only the continuation — no preamble, no summary, no repeated content.]',
+            userMessage: '[Continue your response exactly where you left off. If you were listing steps or planning, STOP — do not add more steps. Call the first tool now to begin execution. If you were in the middle of a tool call, call that tool now to complete the task — do not output tool content as raw text. Output only the continuation — no preamble, no summary, no repeated content.]',
           };
           continue;
         }
@@ -1929,12 +1928,12 @@ function register(ctx) {
           }
           const planningText = responseText.substring(0, splitIdx).trim();
           if (planningText) {
-            // Planning text belongs in the thinking panel, not the main chat bubble
+            // Also send to thinking panel for the reasoning dropdown
             mainWindow.webContents.send('llm-thinking-token', planningText);
           }
-          // Wipe this iteration's streamed content from main chat — the final answer
-          // streams clean in the last iteration that produces no tool calls.
-          mainWindow.webContents.send('llm-replace-last', '');
+          // Keep acknowledgment/planning text visible in the chat bubble — never delete it.
+          // Send planningText (may be empty string) so prior text is preserved in the bubble.
+          mainWindow.webContents.send('llm-replace-last', planningText);
         }
         
         if (!toolResults.hasToolCalls || toolResults.results.length === 0) {

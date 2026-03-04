@@ -63,6 +63,10 @@ export function stripToolArtifacts(text: string): string {
   cleaned = cleaned.replace(/<think(?:ing)?>\s*[\s\S]*?<\/think(?:ing)?>/gi, '');
   cleaned = cleaned.replace(/<\/?think(?:ing)?>/gi, '');
   // (model output filters removed — model text is shown verbatim)
+  // Strip bare code-fence language labels leaked by the model without backtick fences
+  // e.g. the model outputs `json\n{"tool":...}` instead of ```json\n{...}\n```. These labels
+  // are visual garbage — the JSON below them is already suppressed by the tool-call parser.
+  cleaned = cleaned.replace(/^(json|html|css|javascript|typescript|python|bash|sh|xml|yaml)\s*\n(?=\s*\{)/gim, '');
   // Strip orphaned JSON fragments — e.g. `params": {"filePath":...}}` left when a tool
   // call's opening brace was consumed by the parser but the params field leaked as text.
   cleaned = cleaned.replace(/^\s*"?params"?\s*"?\s*:\s*\{[\s\S]*?\}\}?\s*$/gm, '');

@@ -1828,8 +1828,14 @@ After your brief acknowledgment, output ONLY the tool call blocks — no extra t
             // Accumulate paramsChunk text per callIndex and stream live to UI.
             // This powers the streaming tool generation bubble in the renderer
             // so users can see what the model is writing instead of a blank screen.
-            if (!_paramsChunkBufs[chunk.callIndex]) _paramsChunkBufs[chunk.callIndex] = '';
+            if (!_paramsChunkBufs[chunk.callIndex]) {
+              _paramsChunkBufs[chunk.callIndex] = '';
+              console.log(`[LLM] onFunctionCallParamsChunk FIRST FIRE: callIndex=${chunk.callIndex} functionName=${chunk.functionName} done=${chunk.done}`);
+            }
             if (chunk.paramsChunk) _paramsChunkBufs[chunk.callIndex] += chunk.paramsChunk;
+            if (chunk.done) {
+              console.log(`[LLM] onFunctionCallParamsChunk DONE: callIndex=${chunk.callIndex} totalLen=${_paramsChunkBufs[chunk.callIndex]?.length}`);
+            }
             if (onToolGenerating) {
               onToolGenerating({
                 callIndex: chunk.callIndex,

@@ -1,3 +1,22 @@
+# 🚫 STOP — READ THIS FIRST — NON-NEGOTIABLE — NO EXCEPTIONS
+
+## THIS COMPUTER IS A DEV MACHINE. IT IS NOT A SERVER.
+
+**DO NOT — under ANY circumstances — run any of the following on this machine:**
+- `pm2 start` / `pm2 restart` / `pm2 reload` / `pm2 stop` / `pm2 kill` / `pm2 save` / `pm2 resurrect`
+- `node server.js` / `npm start` / `npm run dev` (for any site backend or frontend server)
+- Create, modify, or trigger any Windows Scheduled Task
+- Start any cloudflared tunnel process
+- Run any ecosystem config (`ecosystem.config.cjs`, etc.)
+
+**The production server is a SEPARATE PHYSICAL COMPUTER.** It runs all 8 sites. You cannot access it from this terminal. Manage it ONLY via https://cp.graysoft.dev (password: `diggabyte2026`, PIN: `0615`).
+
+**Violating this rule causes production downtime for real users. Every time you start a process here it conflicts with the real server. This is not a warning — it is a hard rule.**
+
+**If you are about to run pm2 or start any server process: STOP. Do not do it. There is no scenario where it is correct.**
+
+---
+
 # GitHub Copilot Instructions — guIDE Project
 
 ---
@@ -66,6 +85,7 @@ Read this list first. Every item has a full section below.
 - **No half-assing** — Every feature fully implemented end-to-end. No partial implementations
 - **No lazy shortcuts** — Write the correct solution even if it takes 500 lines
 - **No guessing** — "I don't know" is always acceptable. Speculation presented as fact is not
+- **Never suggest without 100% certainty** — If you are not certain, DO NOT suggest. Read more code, read more logs, ask the user what they see. A wrong suggestion is worse than silence.
 - **No lying** — Never claim code works without verifying it
 - **Think through pros and cons** — Present trade-offs explicitly, let the user decide
 - **Respond to problems with solutions** — Don't just acknowledge. Propose and research
@@ -227,6 +247,17 @@ Before declaring any root cause:
 - Do not say a feature is "done" or "implemented" when it's scaffolding, stubs, or placeholder code.
 - Do not claim code works without verifying it compiles/runs.
 - If something failed, say it failed. Do not hide failures.
+
+### NEVER suggest without 100% certainty — ABSOLUTE RULE
+**This is non-negotiable. If you are not certain, do not suggest. Silence is better than a wrong suggestion.**
+
+- If you have not read every relevant line of code in the full call chain, you are NOT certain.
+- If the user has described behavior that contradicts your hypothesis, YOU ARE WRONG — not the user. Read more code.
+- If you cannot trace exactly WHY a bug occurs from source to screen with actual file reads, say "I need to read more code before I can say."
+- Do NOT say "it might be X" or "I believe it's Y" and then act on that belief. Uncertainty stated out loud is not permission to proceed.
+- Do NOT present a partial understanding as a complete diagnosis.
+- A wrong suggestion wastes build time, breaks trust, and violates PATTERN 7 in the recurring failures section.
+- The standard: if you were in court and had to swear the suggestion is correct under oath — would you? If not, stay silent and investigate more.
 
 ### Honesty Over Helpfulness
 - Being genuinely helpful means sometimes saying "there's nothing to do here" or "I don't know how to do this."

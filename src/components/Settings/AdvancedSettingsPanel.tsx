@@ -33,6 +33,7 @@ interface SettingsState {
   snapshotMaxChars: number;
   generationTimeoutSec: number;
   enableThinkingFilter: boolean;
+  enableGrammar: boolean;
   // Cloud (placeholder)
   cloudProvider: string;
   cloudApiKey: string;
@@ -67,6 +68,7 @@ const DEFAULTS: SettingsState = {
   snapshotMaxChars: 8000,
   generationTimeoutSec: 120,
   enableThinkingFilter: true,
+  enableGrammar: false,
   cloudProvider: 'none',
   cloudApiKey: '',
   cloudModel: '',
@@ -482,6 +484,7 @@ export const AdvancedSettingsPanel: React.FC = () => {
           <SliderField label="Generation Timeout (sec)" value={settings.generationTimeoutSec} min={30} max={600} step={10} onChange={v => update('generationTimeoutSec', v)} hint="Abort generation after this many seconds" />
           <SliderField label="Snapshot Max Chars" value={settings.snapshotMaxChars} min={1000} max={30000} step={1000} onChange={v => update('snapshotMaxChars', v)} hint="Larger = more page detail but uses more context" />
           <ToggleField label="Filter Thinking Tokens" value={settings.enableThinkingFilter} onChange={v => update('enableThinkingFilter', v)} hint="Strip <think>...</think> from output" />
+          <ToggleField label="Grammar-Constrained Tool Calls" value={settings.enableGrammar} onChange={v => update('enableGrammar', v)} hint="Forces structurally valid tool calls — may cause generation hangs on small models. Off by default." />
         </Section>
 
         {/* ── System Prompt ────────────────────── */}

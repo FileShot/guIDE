@@ -314,7 +314,7 @@ export const ToolCallGroup: React.FC<{ children: React.ReactNode; count: number 
 // ── Code Block with Copy/Apply ──
 const COLLAPSE_LINE_THRESHOLD = 6; // Collapse code blocks taller than this many lines
 
-export const CodeBlock: React.FC<{ code: string; language: string; onApply: () => void; isToolCall?: boolean }> = ({ code, language, onApply, isToolCall }) => {
+export const CodeBlock: React.FC<{ code: string; language: string; onApply: () => void; isToolCall?: boolean; isStreaming?: boolean }> = ({ code, language, onApply, isToolCall, isStreaming }) => {
   const [copied, setCopied] = useState(false);
   const lineCount = code.split('\n').length;
   const isLong = lineCount > COLLAPSE_LINE_THRESHOLD;
@@ -354,17 +354,19 @@ export const CodeBlock: React.FC<{ code: string; language: string; onApply: () =
             {copied ? <Check size={10} /> : <Copy size={10} />}
             {copied ? 'Copied' : 'Copy'}
           </button>
-          <button
-            className={`flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded ${
-              isToolCall 
-                ? 'text-[#89d185] hover:text-white hover:bg-[#89d185]' 
-                : 'text-[#007acc] hover:text-white hover:bg-[#007acc]'
-            }`}
-            onClick={onApply}
-          >
-            <Play size={10} />
-            {isToolCall ? 'Run' : 'Apply'}
-          </button>
+          {!isStreaming && (
+            <button
+              className={`flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded ${
+                isToolCall 
+                  ? 'text-[#89d185] hover:text-white hover:bg-[#89d185]' 
+                  : 'text-[#007acc] hover:text-white hover:bg-[#007acc]'
+              }`}
+              onClick={onApply}
+            >
+              <Play size={10} />
+              {isToolCall ? 'Run' : 'Apply'}
+            </button>
+          )}
         </div>
       </div>
       <div className="relative">

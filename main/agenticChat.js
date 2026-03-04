@@ -130,108 +130,6 @@ function register(ctx) {
     const isStale = () => myRequestId !== _activeRequestId || ctx.agenticCancelled;
   
     try {
-      // ── Image / Video Generation Detection ──
-      // If the user is asking for image/video generation, handle it directly instead of routing to an LLM
-      const imgDetect = ImageGenerationService.detectImageRequest(message);
-      const vidDetect = ImageGenerationService.detectVideoRequest(message);
-
-      if (vidDetect) {
-        // Attempt video generation via Pollinations (requires free API key)
-        const imageGen = ctx.imageGen;
-        if (!imageGen || imageGen._pollinationsKeys.length === 0) {
-          // No Pollinations API keys — inform user how to enable video gen
-          if (mainWindow) {
-            mainWindow.webContents.send('llm-token',
-              '⚠️ **Video generation requires a free Pollinations API key.**\n\n' +
-              '1. Go to **https://enter.pollinations.ai** and create a free account\n' +
-              '2. Copy your API key\n' +
-              '3. Paste it in **Settings → Pollinations API Key**\n\n' +
-              'Free video models available: **Seedance** (2-10s, best quality), **Wan** (2-15s, with audio), **Grok Video** (alpha).\n\n' +
-              'I can **generate a still image** instead if you\'d like — just ask me to "generate an image of …"'
-            );
-          }
-          return { success: true, response: 'Video generation requires Pollinations API key.', isVideoRequest: true };
-        }
-
-        if (mainWindow) {
-          mainWindow.webContents.send('llm-token', `🎬 *Generating video: "${vidDetect.extractedPrompt.substring(0, 100)}${vidDetect.extractedPrompt.length > 100 ? '…' : ''}"*\n\n⏳ Videos take 30-120 seconds to generate — please be patient…\n\n`);
-        }
-
-        try {
-          const result = await imageGen.generateVideo(vidDetect.extractedPrompt, {});
-
-          if (result.success) {
-            const videoPayload = JSON.stringify({
-              type: 'generated-video',
-              videoBase64: result.videoBase64,
-              mimeType: result.mimeType,
-              prompt: result.prompt,
-              provider: result.provider,
-              model: result.model,
-              duration: result.duration,
-            });
-
-            if (mainWindow) {
-              mainWindow.webContents.send('llm-token', `\n\n<!--GENERATED_VIDEO:${videoPayload}-->\n\n`);
-              mainWindow.webContents.send('llm-token', `✅ Video generated via **Pollinations AI** (${result.model}). Use the buttons below the video to save it.`);
-            }
-            return { success: true, response: 'Video generated successfully.', isVideoGeneration: true, video: result };
-          } else {
-            if (mainWindow) {
-              mainWindow.webContents.send('llm-token', `❌ Video generation failed: ${result.error}\n\nI can **generate a still image** instead — just ask!`);
-            }
-            return { success: false, error: result.error, isVideoGeneration: true };
-          }
-        } catch (vidErr) {
-          if (mainWindow) {
-            mainWindow.webContents.send('llm-token', `❌ Video generation error: ${vidErr.message}\n\nPlease try again.`);
-          }
-          return { success: false, error: vidErr.message, isVideoGeneration: true };
-        }
-      }
-
-      if (imgDetect.isImageRequest) {
-        const imageGen = ctx.imageGen;
-        if (mainWindow) {
-          mainWindow.webContents.send('llm-token', `🎨 *Generating image: "${imgDetect.extractedPrompt.substring(0, 100)}${imgDetect.extractedPrompt.length > 100 ? '…' : ''}"*\n\n`);
-        }
-
-        try {
-          const result = await imageGen.generate(imgDetect.extractedPrompt, {
-            width: 1024,
-            height: 1024,
-          });
-
-          if (result.success) {
-            // Send a special token that the renderer will parse as an inline image
-            const imagePayload = JSON.stringify({
-              type: 'generated-image',
-              imageBase64: result.imageBase64,
-              mimeType: result.mimeType,
-              prompt: result.prompt,
-              provider: result.provider,
-              model: result.model,
-            });
-
-            if (mainWindow) {
-              mainWindow.webContents.send('llm-token', `\n\n<!--GENERATED_IMAGE:${imagePayload}-->\n\n`);
-              mainWindow.webContents.send('llm-token', `✅ Image generated via **${result.provider === 'pollinations' ? 'Pollinations AI' : 'Google Gemini'}** (${result.model}). Use the buttons below the image to save or discard it.`);
-            }
-            return { success: true, response: 'Image generated successfully.', isImageGeneration: true, image: result };
-          } else {
-            if (mainWindow) {
-              mainWindow.webContents.send('llm-token', `❌ Image generation failed: ${result.error}\n\nI can still help you with text-based tasks — just let me know!`);
-            }
-            return { success: false, error: result.error, isImageGeneration: true };
-          }
-        } catch (imgErr) {
-          if (mainWindow) {
-            mainWindow.webContents.send('llm-token', `❌ Image generation error: ${imgErr.message}\n\nPlease try again.`);
-          }
-          return { success: false, error: imgErr.message, isImageGeneration: true };
-        }
-      }
-
       // ── Auto Mode: automatically pick the best model for this task ──
       if (context?.autoMode && !context?.cloudProvider) {
         const autoSelect = (() => {
@@ -1346,9 +1244,12 @@ function register(ctx) {
         // - xlarge models (14B+): grammar ON for first 2 iterations (original behavior)
         // The model can still output free text even with grammar constraining enabled —
         // the grammar only ensures that WHEN tool calls are made, they're structurally valid.
+        // Grammar toggle: respect user setting (default OFF). When off, skip native function calling
+        // entirely and go straight to text mode — avoids generation hangs on small models.
+        const grammarEnabled = _readConfig()?.userSettings?.enableGrammar ?? false;
         const grammarIterLimit = modelTier.grammarAlwaysOn ? Infinity
           : modelTier.tier === 'large' ? 5 : 2;
-        const useNativeFunctions = (taskType !== 'chat') && iteration <= grammarIterLimit;
+        const useNativeFunctions = grammarEnabled && (taskType !== 'chat') && iteration <= grammarIterLimit;
         let nativeFunctions = null;
         if (consecutiveEmptyGrammarRetries >= 1) {
           // Grammar-to-text fallback: model can't produce grammar output, degrade gracefully.
@@ -1420,6 +1321,10 @@ function register(ctx) {
                   // Stream tool generation progress to the renderer for live bubble display.
                   // The renderer shows a CollapsibleToolBlock with partial params as they stream in.
                   if (mainWindow && !mainWindow.isDestroyed()) {
+                    if (!toolChunk._loggedFirst) {
+                      toolChunk._loggedFirst = true;
+                      console.log(`[AI Chat] llm-tool-generating IPC SENT: callIndex=${toolChunk.callIndex} fn=${toolChunk.functionName} paramsLen=${toolChunk.paramsText?.length} done=${toolChunk.done}`);
+                    }
                     mainWindow.webContents.send('llm-tool-generating', toolChunk);
                   }
                 }
@@ -1431,16 +1336,61 @@ function register(ctx) {
               }
             } else {
               // ── LEGACY TEXT PARSING PATH ──
+              // Synthetic llm-tool-generating events: accumulate tokens and fire the same
+              // IPC event that grammar mode fires so the live streaming bubble appears.
+              // Grammar mode fires this from the toolChunk callback (4th arg of generateWithFunctions).
+              // Text mode has no equivalent callback, so we detect the JSON inline here.
+              let _tb = '';         // raw token accumulator (text path only)
+              let _tIdx = 9000;    // callIndex sentinel — grammar mode uses 0-based ints
+              let _tStart = -1;    // offset of opening '{' of current tool call in _tb
+              let _tName = null;   // tool name once the key has streamed through
+
               result = await llmEngine.generateStream(currentPrompt, {
                 ...(context?.params || {}),
                 maxTokens: effectiveMaxTokens,
               }, (token) => {
                 if (isStale()) { llmEngine.cancelGeneration('user'); return; }
                 localTokenBatcher.push(token);
+
+                // ── Live tool-call bubble (text mode) ──
+                _tb += token;
+                // Step 1: find the opening brace of a tool call if not already tracking one
+                if (_tStart === -1) {
+                  const m = _tb.match(/\{\s*"tool"\s*:\s*"([^"]+)"/);
+                  if (m) {
+                    _tStart = m.index;
+                    _tName = m[1];
+                  }
+                }
+                // Step 2: stream the accumulating content to the renderer
+                if (_tStart !== -1 && _tName && mainWindow && !mainWindow.isDestroyed()) {
+                  const raw = _tb.slice(_tStart);
+                  // Cap at 3000 chars for IPC efficiency; frontend further caps at 1500 for display
+                  const paramsText = raw.length > 3000 ? raw.slice(0, 3000) + '\n…[truncated]' : raw;
+                  mainWindow.webContents.send('llm-tool-generating', {
+                    callIndex: _tIdx,
+                    functionName: _tName,
+                    paramsText,
+                    done: false,
+                  });
+                }
               }, (thinkToken) => {
                 if (isStale()) { llmEngine.cancelGeneration('user'); return; }
                 localThinkingBatcher.push(thinkToken);
               });
+
+              // Mark any in-flight text-mode generating bubble as done.
+              // In the happy path the tool-executing IPC event clears generatingToolCalls
+              // automatically; this done:true handles edge cases where the model wrote a
+              // tool call but execution was skipped or cancelled.
+              if (_tStart !== -1 && _tName && mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send('llm-tool-generating', {
+                  callIndex: _tIdx,
+                  functionName: _tName,
+                  paramsText: '',
+                  done: true,
+                });
+              }
             }
           } finally {
             localTokenBatcher.dispose();
@@ -2384,8 +2334,14 @@ function register(ctx) {
         const executionStateBlock = getExecutionStateSummary() || '';
 
         const hasBrowserAction = toolResults.results.some(tr => tr.tool && tr.tool.startsWith('browser_'));
+        // Context-aware continuation: if all results this iteration were successful file writes,
+        // give the model explicit permission to stop rather than commanding another tool call.
+        const allSuccessfulWrites = toolResults.results.length > 0 &&
+          toolResults.results.every(tr => (tr.tool === 'write_file' || tr.tool === 'create_file') && tr.result?.success === true);
         const continueInstruction = hasBrowserAction
           ? `\n\nThe page snapshot above has element [ref=N] numbers. Do NOT call browser_snapshot — you already have it. Use browser_click, browser_type, etc. with [ref=N]. Output your next tool call as a fenced JSON block NOW.`
+          : allSuccessfulWrites
+          ? `\n\nFiles written successfully. If the task is complete, provide a final summary now. Only call another tool if there is genuinely more work remaining that has not been done yet.`
           : `\n\nOutput the next tool call to make progress. Only provide a final summary when ALL steps are fully complete.`;
         
         // Build the iteration prompt with structured context ordering:

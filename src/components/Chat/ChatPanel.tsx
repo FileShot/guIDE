@@ -96,6 +96,9 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   const [completedStreamingTools, setCompletedStreamingTools] = useState<Array<{tool: string; params: any}>>([]);
   // Ref so IPC callbacks (closed over at mount) can always read the latest executing list
   const executingToolsRef = useRef<Array<{tool: string; params: any}>>([]);
+  // Live tool-generation streaming bubbles (shown while model is writing tool call JSON)
+  const [generatingToolCalls, setGeneratingToolCalls] = useState<Array<{callIndex: number; functionName: string; paramsText: string}>>([]);
+  const generatingToolCallsRef = useRef<Array<{callIndex: number; functionName: string; paramsText: string}>>([]);
   const [agenticProgress, setAgenticProgress] = useState<{ iteration: number; maxIterations: number } | null>(null);
   const [agenticPhases, setAgenticPhases] = useState<Array<{ phase: string; label: string; status: 'running' | 'done' }>>([]);
   const [_showThinking, _setShowThinking] = useState(false);
@@ -1865,13 +1868,22 @@ ${e.message}`,
           const hasOpenFence = openFenceIdx !== -1;
           const hasClosingFence = hasOpenFence && remaining.indexOf('```', openFenceIdx + 3) !== -1;
           if (hasOpenFence && !hasClosingFence) {
-            // Incomplete fence — render only whatever came before it
+            // Incomplete fence — render text before the fence, then render partial code as a live CodeBlock
             const beforeFence = remaining.substring(0, openFenceIdx).trim();
             if (beforeFence) {
               parts.push(<InlineMarkdownText key={`s-${idx}`} content={beforeFence} />);
               idx++;
             }
-            // The incomplete fence itself is not rendered until it's closed
+            // Parse fence opener: ``` followed by optional language tag, then newline, then code
+            const fenceContent = remaining.substring(openFenceIdx + 3);
+            const firstNewlineInFence = fenceContent.indexOf('\n');
+            const fenceLang = firstNewlineInFence > 0 ? fenceContent.substring(0, firstNewlineInFence).trim() : '';
+            // Only render once the first newline has arrived — before that we only have the language tag, not code
+            const partialCode = firstNewlineInFence >= 0 ? fenceContent.substring(firstNewlineInFence + 1) : '';
+            if (partialCode.trim()) {
+              parts.push(<CodeBlock key={`streaming-${idx}`} code={partialCode} language={fenceLang || 'code'} onApply={() => {}} isStreaming={true} />);
+              idx++;
+            }
           } else {
           // Check for generated image/video markers first
           const imgMarkerRegex = /<!--GENERATED_(?:IMAGE|VIDEO):([\s\S]*?)-->/g;

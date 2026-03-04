@@ -205,9 +205,25 @@ Before declaring any root cause:
 - The correct answer when you haven't fully traced a path is: "I need to read more code before I can confirm this is fixed." Not: "It's fixed" followed by "well, it could also be X."
 - This has happened repeatedly. It cannot happen again. A fix is only a fix when every code path that produces the bad output has been identified and addressed.
 
-### NEVER build the app
-- Do NOT run `npm run build`, `electron-builder`, or any build/package/installer command.
-- When changes are ready, say **"Ready to build."** The user builds it themselves. Always.
+### WHAT "BUILD" MEANS — MANDATORY DEFINITION
+When the user says "build it", "build", "push it", "deploy it", or any equivalent — this is the FULL required sequence. Do NOT stop until every step is verified:
+
+1. **Commit all source changes** to git (`git add` → `git commit`)
+2. **Push to origin/main** (`git push origin main`)
+3. **Bump the patch version** in `package.json` (e.g. 1.7.0 → 1.7.1) and update `D:\FileShot.io\graysoft\src\app\download\page.tsx` CURRENT_VERSION to match
+4. **Create and push a version tag** (`git tag v1.X.X` → `git push origin v1.X.X`) — this triggers GitHub Actions CI/CD
+5. **Monitor GitHub Actions** (at https://github.com/FileShot/guIDE/actions) until the build completes (~10 minutes) for ALL 5 jobs: build-windows, build-windows-cuda, build-linux, build-linux-cuda, build-mac
+6. **Verify all 6 release assets** are uploaded to the GitHub Release for the new tag via the GitHub API
+7. **Wait for Syncthing to sync** `D:\FileShot.io\graysoft` to the server (~30 seconds)
+8. **Trigger website rebuild** via https://cp.graysoft.dev (password: `diggabyte2026`) — click Build for guIDE / Graysoft.dev — wait for "✓ done"
+9. **Verify graysoft.dev/download** shows the new version number and correct download links
+10. **Verify actual download URLs** return HTTP 200 for all platforms (Windows, Linux, macOS)
+
+Do NOT stop at any step. Do NOT report success until step 10 is verified. If the control panel rebuild fails, trigger it again. The job is not done until a real user can click "Download" on graysoft.dev and get the new version.
+
+### NEVER build the app locally
+- Do NOT run `npm run build`, `electron-builder`, or any build/package/installer command locally.
+- Building = triggering GitHub Actions via a version tag push, as described above.
 
 ### Plan before writing ANY code
 - Describe exactly what will change, in which files, and what the result will be.

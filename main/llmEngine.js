@@ -1243,7 +1243,9 @@ After your brief acknowledgment, output ONLY the tool call blocks — no extra t
           // In agentic loops, the model should emit short tool-call blocks (<300 chars).
           // If 2000+ chars of non-tool text accumulate, the model is likely confused
           // (echoing tool defs, narrating instead of acting, etc.). Abort early.
-          if (!detectedToolBlock && fullResponse.length + cleaned.length > 2000) {
+          // EXCEPTION: seamless continuations are legitimate long-form output — the model
+          // is mid-document and SHOULD be producing many chars. Skip the detector entirely.
+          if (!mergedParams.isContinuation && !detectedToolBlock && fullResponse.length + cleaned.length > 2000) {
             const hasToolMarker = toolDetectBuffer.includes('```') || toolDetectBuffer.includes('"tool"');
             if (!hasToolMarker) {
               console.log(`[LLM] Runaway non-tool output detected (${fullResponse.length + cleaned.length} chars without tool call), aborting`);

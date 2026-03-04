@@ -1348,6 +1348,7 @@ function register(ctx) {
               result = await llmEngine.generateStream(currentPrompt, {
                 ...(context?.params || {}),
                 maxTokens: effectiveMaxTokens,
+                isContinuation: continuationCount > 0,
               }, (token) => {
                 if (isStale()) { llmEngine.cancelGeneration('user'); return; }
                 localTokenBatcher.push(token);
@@ -1713,7 +1714,7 @@ function register(ctx) {
           iteration--; // Continuation is not a new agentic step
           currentPrompt = {
             systemContext: currentPrompt.systemContext, // Unchanged — KV cache preserved
-            userMessage: '[Continue your response exactly where you left off. Output only the continuation — no preamble, no summary, no repeated content.]',
+            userMessage: '[Continue your response exactly where you left off. If you were in the middle of a tool call, call that tool now to complete the task — do not output tool content as raw text. Output only the continuation — no preamble, no summary, no repeated content.]',
           };
           continue;
         }

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * guIDE MCP Tools Server - Model Context Protocol tools for browser automation,
  * web search, code execution, and system interaction.
  * Copyright (c) 2025-2026 Brendan Gray (GitHub: FileShot)
@@ -2302,11 +2302,12 @@ class MCPToolServer {
     if (taskType === 'browser') {
       selectedNames = new Set([...coreTool, ...browserTools]);
     } else if (taskType === 'code') {
-      selectedNames = new Set([...coreTool, ...codeTools]); // RISK-19 fix: include web_search for code tasks
+      selectedNames = new Set([...coreTool, ...codeTools, 'write_todos', 'update_todo']); // RISK-19 fix: include web_search for code tasks
     } else {
       // General: all tools â€” user might need anything
       selectedNames = new Set([...coreTool, ...browserTools, ...codeTools,
         'fetch_webpage', 'save_memory', 'get_memory', 'list_memories',
+        'write_todos', 'update_todo',
       ]);
     }
     

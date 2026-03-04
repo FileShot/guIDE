@@ -168,6 +168,11 @@ function register(ctx) {
 
   ipcMain.handle('file-accept-changes', (_, filePaths) => ctx.mcpToolServer.acceptFileChanges(filePaths));
 
+  // ─── Apply chat code block directly to file (auto-apply, tracked for undo) ──
+  ipcMain.handle('apply-chat-code', async (_, filePath, content) => {
+    return ctx.mcpToolServer._writeFile(filePath, content);
+  });
+
   // ─── Checkpoints ────────────────────────────────────────────────────
   ipcMain.handle('checkpoint-list', () => ctx.mcpToolServer.getCheckpointList());
 

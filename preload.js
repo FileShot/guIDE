@@ -326,6 +326,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   fileUndo: (filePath) => ipcRenderer.invoke('file-undo', filePath),
   fileUndoAll: () => ipcRenderer.invoke('file-undo-all'),
   fileAcceptChanges: (filePaths) => ipcRenderer.invoke('file-accept-changes', filePaths),
+  applyChatCode: (filePath, content) => ipcRenderer.invoke('apply-chat-code', filePath, content),
 
   // ── Checkpoints ──
   checkpointList: () => ipcRenderer.invoke('checkpoint-list'),

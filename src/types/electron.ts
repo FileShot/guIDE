@@ -380,6 +380,7 @@ export interface ElectronAPI {
   fileUndo(filePath: string): Promise<{ success: boolean; action?: string; error?: string }>;
   fileUndoAll(): Promise<{ success: boolean; action?: string; error?: string }[]>;
   fileAcceptChanges(filePaths?: string[]): Promise<{ success: boolean }>;
+  applyChatCode(filePath: string, content: string): Promise<{ success: boolean; error?: string }>;
 
   // Checkpoints
   checkpointList(): Promise<{ turnId: string; timestamp: number; userMessage: string; files: { filePath: string; fileName: string; isNew: boolean }[] }[]>;

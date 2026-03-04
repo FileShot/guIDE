@@ -1,0 +1,81 @@
+
+> guide-website@1.0.0 build
+> next build
+
+▲ Next.js 16.1.6 (Turbopack)
+- Environments: .env.local
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 8.7s
+  Running TypeScript ...
+  Collecting page data using 15 workers ...
+  Generating static pages using 15 workers (0/900) ...
+  Generating static pages using 15 workers (225/900) 
+  Generating static pages using 15 workers (450/900) 
+  Generating static pages using 15 workers (675/900) 
+✓ Generating static pages using 15 workers (900/900) in 9.5s
+  Finalizing page optimization ...
+
+Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ○ /about
+├ ○ /account
+├ ○ /admin
+├ ƒ /api/ai/proxy
+├ ƒ /api/analytics
+├ ƒ /api/analytics/track
+├ ƒ /api/auth/activate-token
+├ ƒ /api/auth/github
+├ ƒ /api/auth/github/callback
+├ ƒ /api/auth/google
+├ ƒ /api/auth/google/callback
+├ ƒ /api/auth/login
+├ ƒ /api/auth/logout
+├ ƒ /api/auth/me
+├ ƒ /api/auth/register
+├ ƒ /api/auth/session-check
+├ ƒ /api/community
+├ ƒ /api/contact
+├ ƒ /api/donate
+├ ƒ /api/donate/total
+├ ƒ /api/license/deactivate-machine
+├ ƒ /api/license/validate
+├ ƒ /api/stripe/checkout
+├ ƒ /api/stripe/webhook
+├ ○ /blog
+├ ● /blog/[slug]
+│ ├ /blog/introducing-pocket-guide
+│ ├ /blog/introducing-guide
+│ ├ /blog/guide-vs-cursor
+│ └ [+2 more paths]
+├ ○ /community
+├ ○ /contact
+├ ○ /download
+├ ○ /faq
+├ ○ /login
+├ ○ /models
+├ ● /models/[slug]
+│ ├ /models/calme-3-2-instruct-78b
+│ ├ /models/maziyarpanahi-calme-3-2-instruct-78b
+│ ├ /models/calme-3-1-instruct-78b
+│ └ [+497 more paths]
+├ ○ /models/benchmarks
+├ ○ /models/compare
+├ ● /models/compare/[slug]
+│ ├ /models/compare/qwen3-0-6b-q8-0-vs-qwen3-1-7b-q4-k-m
+│ ├ /models/compare/qwen2-5-coder-3b-instruct-q4-k-m-vs-qwen3-0-6b-q8-0
+│ ├ /models/compare/llama-3-2-1b-intruct-tool-calling-v2-q8-0-vs-qwen3-0-6b-q8-0
+│ └ [+350 more paths]
+├ ○ /privacy
+├ ○ /projects
+├ ○ /register
+├ ○ /sitemap.xml
+├ ○ /support
+└ ○ /terms
+
+
+○  (Static)   prerendered as static content
+●  (SSG)      prerendered as static HTML (uses generateStaticParams)
+ƒ  (Dynamic)  server-rendered on demand
+

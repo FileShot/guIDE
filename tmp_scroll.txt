@@ -1,0 +1,2 @@
+﻿_throttledScroll = _throttleBrowserEvt((e) => _sendBrowserInput('scroll', e, canvas), 80);
+    canv

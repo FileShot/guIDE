@@ -1,0 +1,55 @@
+// guIDE IDE workspace — Syncthing ignore patterns
+// Excludes build artifacts, dependencies, and large binary files
+// that have no business being synced to the server.
+
+// Node dependencies (every package in the workspace)
+node_modules
+
+// Python virtualenv
+.venv
+
+// Electron build output — .exe files, installers, unpacked dirs
+dist-electron
+dist-electron-new
+
+// App build output
+build
+
+// Next.js build artifacts (website)
+website/.next
+website/.next-ready
+
+// LLM model files — can be 2GB–100GB each, NEVER sync these
+models
+
+// Log files
+*.log
+fresh_logs.txt
+helper-log.txt
+stress-test-log*.txt
+
+// Large text dumps / scratch files
+build-output*.txt
+build-website*.txt
+builder-output*.txt
+d2l_*.txt
+test-results-*.txt
+vitest-results.txt
+ts_errors.txt
+
+// Electron-builder cache
+.cache
+
+// VS Code local state (not project config)
+.vscode/settings.json
+.vscode/launch.json
+
+// Python cache
+__pycache__
+*.pyc
+*.pyo
+
+// Misc
+New folder
+output
+set

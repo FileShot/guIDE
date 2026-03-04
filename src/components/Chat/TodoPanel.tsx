@@ -1,7 +1,7 @@
-/**
+﻿/**
  * TodoPanel.tsx — Displays the agent's TODO/plan list in the chat panel.
- * Receives todo updates via IPC from the backend when the model calls write_todos/update_todo.
- * Collapsible, compact, and visually integrated with the chat UI.
+ * Pinned above the input area (VS Code-style). Shows current in-progress task
+ * in the header for at-a-glance visibility without expanding.
  */
 import React, { useState } from 'react';
 import { CheckCircle2, Circle, Loader2, ChevronDown, ChevronRight, ListTodo } from 'lucide-react';
@@ -16,14 +16,14 @@ interface TodoPanelProps {
   todos: TodoItem[];
 }
 
-const statusIcon = (status: string) => {
+const StatusIcon: React.FC<{ status: string; size?: number }> = ({ status, size = 13 }) => {
   switch (status) {
     case 'done':
-      return <CheckCircle2 size={14} className="text-green-400 flex-shrink-0" />;
+      return <CheckCircle2 size={size} className="text-[#89d185] flex-shrink-0" />;
     case 'in-progress':
-      return <Loader2 size={14} className="text-blue-400 animate-spin flex-shrink-0" />;
+      return <Loader2 size={size} className="text-[#007acc] animate-spin flex-shrink-0" />;
     default:
-      return <Circle size={14} className="text-[#666] flex-shrink-0" />;
+      return <Circle size={size} className="text-[#555] flex-shrink-0" />;
   }
 };
 
@@ -35,43 +35,62 @@ export const TodoPanel: React.FC<TodoPanelProps> = ({ todos }) => {
   const done = todos.filter(t => t.status === 'done').length;
   const total = todos.length;
   const progressPct = total > 0 ? Math.round((done / total) * 100) : 0;
+  const allDone = done === total;
+  const inProgress = todos.find(t => t.status === 'in-progress');
+
+  // Truncate active task text to fit the header line
+  const activeText = inProgress?.text
+    ? inProgress.text.length > 42 ? inProgress.text.slice(0, 42) + '...' : inProgress.text
+    : null;
 
   return (
-    <div className="mx-2 mb-2 rounded-md border border-[#333] bg-[#1e1e1e] overflow-hidden">
-      {/* Header */}
+    <div className="mx-2 mb-1 rounded border border-[#2d2d2d] bg-[#252526] overflow-hidden flex-shrink-0">
+      {/* Header row - VS Code style: chevron + icon + active task + progress */}
       <button
-        onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-[#ccc] hover:bg-[#2a2a2a] transition-colors"
+        onClick={() => setExpanded(e => !e)}
+        className="w-full flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] hover:bg-[#2d2d2d] transition-colors"
       >
-        {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-        <ListTodo size={13} className="text-blue-400" />
-        <span className="font-medium">Plan</span>
-        <span className="text-[#888] ml-auto">{done}/{total}</span>
-        {/* Progress bar */}
-        <div className="w-16 h-1.5 bg-[#333] rounded-full overflow-hidden">
-          <div
-            className="h-full bg-blue-500 rounded-full transition-all duration-300"
-            style={{ width: `${progressPct}%` }}
-          />
-        </div>
+        <span className="flex-shrink-0 text-[#666]">
+          {expanded ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+        </span>
+        <ListTodo size={12} className={allDone ? 'text-[#89d185] flex-shrink-0' : 'text-[#007acc] flex-shrink-0'} />
+        {activeText && !expanded ? (
+          <>
+            <span className="text-[#dcdcaa] truncate min-w-0">{activeText}</span>
+            <span className="text-[#555] flex-shrink-0 ml-auto pl-2">{done}/{total}</span>
+          </>
+        ) : (
+          <>
+            <span className={`font-medium flex-shrink-0 ${allDone ? 'text-[#89d185]' : 'text-[#ccc]'}`}>
+              {allDone ? 'Plan complete' : 'Plan'}
+            </span>
+            <span className="text-[#555] ml-1 flex-shrink-0">{done}/{total}</span>
+            <div className="flex-1 mx-2 h-[3px] bg-[#333] rounded-full overflow-hidden min-w-[24px]">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${allDone ? 'bg-[#89d185]' : 'bg-[#007acc]'}`}
+                style={{ width: `${progressPct}%` }}
+              />
+            </div>
+          </>
+        )}
       </button>
 
-      {/* Items */}
+      {/* Expanded item list */}
       {expanded && (
-        <div className="px-3 pb-2 space-y-0.5">
+        <div className="border-t border-[#2d2d2d] px-2.5 pb-1.5 pt-1 space-y-0.5">
           {todos.map(todo => (
             <div
               key={todo.id}
-              className={`flex items-start gap-2 py-0.5 text-xs transition-all duration-300 ${
+              className={`flex items-start gap-1.5 py-[2px] text-[11px] transition-all duration-200 ${
                 todo.status === 'done'
-                  ? 'text-[#666] line-through opacity-60'
+                  ? 'text-[#555] line-through'
                   : todo.status === 'in-progress'
                     ? 'text-[#dcdcaa]'
-                    : 'text-[#ccc]'
+                    : 'text-[#888]'
               }`}
             >
-              {statusIcon(todo.status)}
-              <span className="leading-tight">{todo.text}</span>
+              <StatusIcon status={todo.status} />
+              <span className="leading-snug">{todo.text}</span>
             </div>
           ))}
         </div>

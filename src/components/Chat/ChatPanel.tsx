@@ -342,6 +342,49 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     } catch { setPendingFileChanges([]); }
   }, []);
 
+  // Auto-apply a code block to the current file when generation completes.
+  // Only fires when: currentFile is set, exactly one code block in the response,
+  // and the fenced language tag matches the current file's extension.
+  const lastAutoAppliedMsgIdRef = useRef<string | null>(null);
+  const wasGeneratingRef = useRef(false);
+  useEffect(() => {
+    const justFinished = wasGeneratingRef.current && !isGenerating;
+    wasGeneratingRef.current = isGenerating;
+    if (!justFinished) return;
+    if (!currentFile) return;
+    const lastMsg = messages[messages.length - 1];
+    if (!lastMsg || lastMsg.role !== 'assistant') return;
+    if (lastAutoAppliedMsgIdRef.current === lastMsg.id) return;
+
+    const ext = currentFile.includes('.') ? (currentFile.split('.').pop()?.toLowerCase() || '') : '';
+    const extToLang: Record<string, string[]> = {
+      html: ['html'], css: ['css'], js: ['js', 'javascript'], ts: ['ts', 'typescript'],
+      tsx: ['tsx'], jsx: ['jsx'], py: ['py', 'python'], json: ['json'],
+      md: ['md', 'markdown'], sh: ['sh', 'bash', 'shell'], xml: ['xml'],
+      yaml: ['yaml', 'yml'], yml: ['yaml', 'yml'], rs: ['rs', 'rust'],
+      go: ['go'], java: ['java'], cs: ['cs', 'csharp'], cpp: ['cpp'], c: ['c'],
+      sql: ['sql'], txt: ['txt', 'text', ''],
+    };
+    const validLangs = extToLang[ext] || [ext];
+
+    // Extract all fenced code blocks with their language tags
+    const codeBlockRegex = /```([\w]*)\r?\n([\s\S]*?)```/g;
+    const blocks: { lang: string; code: string }[] = [];
+    let match;
+    while ((match = codeBlockRegex.exec(lastMsg.content)) !== null) {
+      blocks.push({ lang: match[1].toLowerCase(), code: match[2] });
+    }
+
+    // Only auto-apply if exactly one block matches the current file extension
+    const matchingBlocks = blocks.filter(b => validLangs.includes(b.lang) || b.lang === '' && blocks.length === 1);
+    if (matchingBlocks.length !== 1) return;
+
+    lastAutoAppliedMsgIdRef.current = lastMsg.id;
+    window.electronAPI?.applyChatCode?.(currentFile, matchingBlocks[0].code)
+      .then(() => refreshPendingChanges())
+      .catch(() => {});
+  }, [isGenerating, messages, currentFile, refreshPendingChanges]);
+
   // Listen for live tool execution events
   useEffect(() => {
     const api = window.electronAPI;
@@ -2419,7 +2462,7 @@ ${e.message}`,
               manualScrollUpRef.current = false;
             }
           }}
-          components={{ Header: () => todos.length > 0 ? <TodoPanel todos={todos} /> : null }}
+          components={{ Header: () => null }}
           itemContent={(index) => {
             // Last virtual item is the streaming indicator when generating
             if (index === messages.length && isGenerating) {
@@ -2741,6 +2784,9 @@ ${e.message}`,
           }}
         />
       )}
+
+      {/* Plan / Todo panel — pinned above input, visible like VS Code's planning steps */}
+      {todos.length > 0 && <TodoPanel todos={todos} />}
 
       {/* Context indicator */}
       {(currentFile || selectedText) && (

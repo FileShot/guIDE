@@ -6,6 +6,18 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Loader2, Copy, Check, Play, Wrench, X as XIcon } from 'lucide-react';
 import { sanitizeSVG, markdownInlineToHTML } from '@/utils/sanitize';
 
+// ── Animated ellipsis dots for tool call in-progress state ──
+const AnimatedDots: React.FC = () => {
+  const [dots, setDots] = React.useState('');
+  React.useEffect(() => {
+    const interval = setInterval(() => {
+      setDots(d => d.length >= 3 ? '' : d + '.');
+    }, 400);
+    return () => clearInterval(interval);
+  }, []);
+  return <span className="inline-block w-[18px] text-left opacity-70">{dots}</span>;
+};
+
 // ── Audio Waveform Animation (active microphone indicator) ──
 export const AudioWaveAnimation: React.FC<{ isActive: boolean }> = ({ isActive }) => {
   if (!isActive) return null;
@@ -288,12 +300,12 @@ export const ToolCallGroup: React.FC<{ children: React.ReactNode; count: number 
         ) : (
           <Wrench size={12} className={`flex-shrink-0 ${allOk ? 'text-[#89d185]' : hasFail ? 'text-[#f14c4c]' : 'text-[#dcdcaa]'}`} />
         )}
-        <span className="text-[#d4d4d4] font-medium">{count} tool call{count !== 1 ? 's' : ''}</span>
         {isRunning ? (
-          <span className="ml-auto text-[9px] text-[#dcdcaa] animate-pulse flex-shrink-0 flex items-center gap-1">
-            running
-          </span>
+          <span className="text-[#d4d4d4] font-medium italic">{count} tool call{count !== 1 ? 's' : ''}<AnimatedDots /></span>
         ) : (
+          <span className="text-[#d4d4d4] font-medium">{count} tool call{count !== 1 ? 's' : ''}</span>
+        )}
+        {!isRunning && (
           <span className={`ml-auto text-[9px] flex-shrink-0 ${hasFail ? 'text-[#f14c4c]' : allOk ? 'text-[#89d185]' : 'text-[#dcdcaa]'}`}>{summary}</span>
         )}
       </button>

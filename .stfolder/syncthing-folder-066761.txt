@@ -1,0 +1,5 @@
+# This directory is a Syncthing folder marker.
+# Do not delete.
+
+folderID: guide-ide
+created: 2026-03-03T18:58:51-05:00

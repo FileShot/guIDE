@@ -1693,9 +1693,9 @@ function register(ctx) {
         // fullResponseText (fed back to the model for context) keeps the raw text.
         // displayResponseText (committed to the chat message) should only have natural language.
         // Targets: ```tool_call```, ```tool```, and ```json``` whose root object is a tool call.
+        // Tool-call fenced blocks are left in displayChunk so they appear as formatted code
+        // blocks in the chat bubble rather than being silently stripped to nothing.
         const displayChunk = responseText
-          .replace(/```(?:tool_call|tool)[^\n]*\n[\s\S]*?```/g, '')
-          .replace(/```json[^\n]*\n\s*(?:\[\s*)?\{\s*"(?:tool|name)"\s*:[\s\S]*?```/g, '')
           .replace(/\n{3,}/g, '\n\n');
         displayResponseText += displayChunk;
 
@@ -1703,13 +1703,22 @@ function register(ctx) {
         // If generation stopped because maxTokens was hit (not a natural EOS), and no tool
         // calls were returned, loop back and continue generating into the SAME open bubble.
         // The UI sees one uninterrupted stream throughout. Guard: max 3 continuations.
-        const _wasTruncated = (result?.stopReason === 'maxTokens' || result?.stopReason === 'max-tokens')
+        // Also trigger seamless continuation when EOS fires mid-tool-call (unclosed fenced block).
+        // This happens with small models (e.g. Qwen3-0.6B) that emit the EOS token before
+        // closing the ```json block — stopReason comes back as 'eogToken', not 'maxTokens'.
+        const _fenceIdx = responseText.search(/```(?:json|tool_call|tool)\b/);
+        const _hasUnclosedToolFence = _fenceIdx !== -1 && !responseText.slice(_fenceIdx).includes('\n```');
+        const _wasTruncated = (
+          (result?.stopReason === 'maxTokens' || result?.stopReason === 'max-tokens') ||
+          _hasUnclosedToolFence
+        )
           && nativeFunctionCalls.length === 0
           && !_timedOut
           && !isStale();
         if (_wasTruncated && continuationCount < 3) {
           continuationCount++;
-          console.log(`[AI Chat] Seamless continuation ${continuationCount}/3 — response hit maxTokens, continuing in same bubble`);
+          const _truncReason = _hasUnclosedToolFence ? 'unclosed tool fence (EOS mid-block)' : 'maxTokens';
+          console.log(`[AI Chat] Seamless continuation ${continuationCount}/3 — ${_truncReason}, continuing in same bubble`);
           iteration--; // Continuation is not a new agentic step
           currentPrompt = {
             systemContext: currentPrompt.systemContext, // Unchanged — KV cache preserved

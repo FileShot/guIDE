@@ -62,6 +62,7 @@ After EVERY build, test run, or iteration where the user is about to test the ap
 - Run: `Clear-Content "C:\Users\brend\AppData\Roaming\guide-ide\logs\guide-main.log"`
 - Do this WITHOUT being asked. Every single time. No exceptions.
 - If you're about to say "ready to build" or "test it" — clear the logs first.
+- **ALSO clear immediately after a build/deployment sequence completes** — the user will test next. Do not wait to be asked.
 - The log file fills with stale entries from previous runs. Stale logs cause misdiagnosis.
 - Read log: `Get-Content "C:\Users\brend\AppData\Roaming\guide-ide\logs\guide-main.log"`
 
@@ -224,6 +225,9 @@ Do NOT stop at any step. Do NOT report success until step 10 is verified. If the
 ### NEVER build the app locally
 - Do NOT run `npm run build`, `electron-builder`, or any build/package/installer command locally.
 - Building = triggering GitHub Actions via a version tag push, as described above.
+
+### GREEN LIGHT TO IMPLEMENT = GREEN LIGHT TO BUILD — NO EXCEPTIONS
+When the user approves a plan and says to proceed with implementation, that approval covers the FULL sequence: implement the changes AND run the complete 10-step build sequence defined above. Do NOT stop after writing code and wait for a second "build it" command. The build sequence is part of implementation. The task is not complete until step 10 is verified (graysoft.dev/download shows the new version and download URLs return HTTP 200).
 
 ### Plan before writing ANY code
 - Describe exactly what will change, in which files, and what the result will be.

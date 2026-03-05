@@ -1239,22 +1239,11 @@ After your brief acknowledgment, output ONLY the tool call blocks — no extra t
             lastTokens = recent;
           }
 
-          // Runaway non-tool output detection:
-          // In agentic loops, the model should emit short tool-call blocks (<300 chars).
-          // If 2000+ chars of non-tool text accumulate, the model is likely confused
-          // (echoing tool defs, narrating instead of acting, etc.). Abort early.
-          // EXCEPTION: seamless continuations are legitimate long-form output — the model
-          // is mid-document and SHOULD be producing many chars. Skip the detector entirely.
-          if (!mergedParams.isContinuation && !detectedToolBlock && fullResponse.length + cleaned.length > 2000) {
-            const hasToolMarker = toolDetectBuffer.includes('```') || toolDetectBuffer.includes('"tool"');
-            if (!hasToolMarker) {
-              console.log(`[LLM] Runaway non-tool output detected (${fullResponse.length + cleaned.length} chars without tool call), aborting`);
-              this.cancelGeneration('runaway');
-              fullResponse += cleaned;
-              if (onToken) onToken(cleaned);
-              return;
-            }
-          }
+          // Runaway non-tool output detector removed — the 2000-char threshold was too
+          // aggressive, silently aborting legitimate long responses (HTML, code, explanations)
+          // mid-stream, which caused the "response disappears" visual bug. The repetition
+          // detectors above catch genuine stuck/broken model output. The model decides whether
+          // to use tools based on the system preamble.
 
           fullResponse += cleaned;
           if (onToken) onToken(cleaned);

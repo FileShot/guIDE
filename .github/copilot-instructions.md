@@ -229,6 +229,13 @@ Do NOT stop at any step. Do NOT report success until step 10 is verified. If the
 ### GREEN LIGHT TO IMPLEMENT = GREEN LIGHT TO BUILD — NO EXCEPTIONS
 When the user approves a plan and says to proceed with implementation, that approval covers the FULL sequence: implement the changes AND run the complete 10-step build sequence defined above. Do NOT stop after writing code and wait for a second "build it" command. The build sequence is part of implementation. The task is not complete until step 10 is verified (graysoft.dev/download shows the new version and download URLs return HTTP 200).
 
+**SAYING "Ready to build." AND STOPPING IS A DIRECT RULE VIOLATION.**
+- You NEVER hand the build back to the user. You do it. Every time. No exceptions.
+- "Ready to build" implies the user must take action. That is wrong. YOU execute the 10-step build sequence immediately after writing the last file change.
+- If you have just finished writing code changes and you are about to type "Ready to build." — STOP. Instead, run `git status`, then proceed through all 10 steps.
+- The only time you do NOT build is when the user EXPLICITLY says "don't build yet" or "I'll build it myself". A user asking you to make changes and NOT explicitly opting out of build = build is required.
+- This rule was violated on 2026-03-05 after completing the Group 1 classifier removal. Do not repeat it.
+
 ### Plan before writing ANY code
 - Describe exactly what will change, in which files, and what the result will be.
 - Wait for explicit approval. Execute EXACTLY what was described — no more, no less.

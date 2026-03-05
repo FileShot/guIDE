@@ -2,7 +2,7 @@
 
 // Single source of truth for the displayed release version.
 // Updated automatically by: npm run release:deploy (from IDE root)
-const CURRENT_VERSION = '1.7.1';
+const CURRENT_VERSION = '1.7.6';
 
 import Link from 'next/link';
 import { useState } from 'react';
@@ -97,7 +97,7 @@ export default function DownloadPage() {
           </p>
 
           {/* Pocket guIDE alternative */}
-          <div className="rounded-xl border border-accent/20 bg-accent/[0.03] p-5 mb-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="glass-purple rounded-xl p-5 mb-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div>
               <p className="text-sm font-medium text-white mb-1">
                 Don&apos;t want to install anything?
@@ -119,7 +119,7 @@ export default function DownloadPage() {
 
         {/* Platform Tabs */}
         <FadeIn delay={0.05}>
-          <div className="flex gap-1 p-1 rounded-xl bg-white/[0.03] border border-white/[0.06] mb-4">
+          <div className="flex gap-1 p-1 rounded-xl bg-white/[0.04] backdrop-blur-sm border border-white/[0.10] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] mb-4">
             {platforms.map((p) => (
               <button
                 key={p.id}
@@ -175,7 +175,7 @@ export default function DownloadPage() {
 
         {/* Download Card */}
         <FadeIn delay={0.1}>
-          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-8 mb-10">
+          <div className="glass-card rounded-2xl p-8 mb-10">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
               <div>
                 <h2 className="text-xl font-semibold text-white mb-1">
@@ -192,7 +192,7 @@ export default function DownloadPage() {
                 <a
                   href={dl.file}
                   onClick={() => trackDownload(platform)}
-                  className="flex items-center gap-2 px-8 py-3.5 bg-accent hover:bg-accent-light text-white rounded-lg font-medium transition-all duration-300 hover:shadow-[0_0_30px_rgba(0,122,204,0.25)] whitespace-nowrap"
+                  className="btn-purple-3d flex items-center gap-2 px-8 py-3.5 text-white rounded-lg font-medium whitespace-nowrap"
                 >
                   <Download size={18} />
                   Download

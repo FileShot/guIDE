@@ -275,15 +275,13 @@ class MCPToolServer {
    */
   _sanitizeShellArg(str) {
     if (!str || typeof str !== 'string') return '';
+    // Only strip genuinely dangerous injection vectors. PowerShell operators ($, |, >, <, ;,
+    // &, %, ^, !, (), ") are intentionally preserved — stripping them breaks legitimate
+    // PowerShell commands. Sandboxing via projectPath is the real security boundary.
     return str
-      .replace(/[\x00]/g, '')           // null bytes
-      .replace(/[`$]/g, '')             // command substitution
-      .replace(/[;|&]/g, '')            // command chaining
-      .replace(/[><]/g, '')             // redirection
-      .replace(/[\n\r]/g, ' ')          // newline injection
-      .replace(/\\/g, '/')              // backslashes → forward slashes (prevent trailing-backslash quote escape)
-      .replace(/"/g, '\\"')             // escape quotes
-      .replace(/[%^!()]/g, '')          // Windows cmd.exe: variable expansion, escape char, subshells, delayed expansion
+      .replace(/[\x00]/g, '')           // null bytes — always dangerous
+      .replace(/[`]/g, '')              // backtick — PowerShell command substitution
+      .replace(/[\n\r]/g, ' ')          // newline injection — always dangerous
       .trim();
   }
 

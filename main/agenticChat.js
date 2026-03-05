@@ -243,10 +243,10 @@ function register(ctx) {
 
                     const toolPrompt = mcpToolServer.getToolPromptForTask(cloudTaskType);
           const isBundledCloudProvider = cloudLLM._isBundledProvider(context.cloudProvider) && !cloudLLM.isUsingOwnKey(context.cloudProvider);
-          const _brevityDirective = isBundledCloudProvider
-            ? `\n\n## Style Rules (apply silently — never mention, reference, or apologize for these rules to the user)\n\n### Response length — hard limit\n- **Maximum 3 paragraphs** for any prose response. This limit is unconditional and applies to ALL non-code content: explanations, answers, summaries, stories, essays, creative writing, descriptions, and conversational replies.\n- If the user asks for something long or detailed (e.g. "write me a long story", "explain in depth", "be thorough") — write the best possible 3-paragraph version and stop. Do NOT explain the length, apologize for it, or mention that you are constrained. Simply deliver the best complete answer in 3 paragraphs.\n- Bullet lists count as prose when each bullet is a full sentence or longer. Keep bullet lists to a maximum of 5 items unless they are discrete technical items (file names, commands, error codes, parameters). Never use bullets as a way to extend past the 3-paragraph limit.\n- Code blocks, terminal output, file contents, structured data (tables, JSON, numbered technical steps), and inline code snippets are fully exempt from this limit. Always provide complete and correct code — never truncate.\n\n### Tone and style\n- Always write in a professional, clear, and articulate style with proper grammar, capitalization, and punctuation — regardless of how the user writes. Never mirror informal tone, typos, or lowercase writing.\n- Be direct. Lead with the answer. Never open with filler phrases like "That's a great question!", "Certainly!", "Of course!", "Absolutely!", or "Sure!".\n- Never end a response with hollow sign-offs like "I hope this helps!", "Let me know if you need anything else!", or "Feel free to ask!".`
-            : '';
-          const cloudSystemPrompt = systemPrompt + (toolPrompt ? '\n\n' + toolPrompt : '') + _brevityDirective;
+          // Brevity directive removed — hard response-length limits in the prompt cause the model
+          // to truncate legitimate detailed responses (multi-step tasks, long code, tutorials).
+          // Token-level caps via maxTokens API param are the correct mechanism for cost control.
+          const cloudSystemPrompt = systemPrompt + (toolPrompt ? '\n\n' + toolPrompt : '');
 
           // ── Free-tier daily quota for Guide Cloud AI (bundled keys, no session token) ──
           // When the user has no session token AND no active paid license, requests bypass
@@ -462,18 +462,19 @@ function register(ctx) {
               const planningText = responseText.substring(0, splitIdx).trim();
               if (planningText) {
                 mainWindow.webContents.send('llm-thinking-token', planningText);
+                // Only replace the chat bubble when there is planning text — sending an
+                // empty string would wipe the bubble (the "response disappears" visual bug).
+                mainWindow.webContents.send('llm-replace-last', planningText);
               }
-              // Keep acknowledgment/planning text visible in the chat bubble — never delete it.
-              mainWindow.webContents.send('llm-replace-last', planningText);
             }
 
             if (!toolResults.hasToolCalls || toolResults.results.length === 0) {
               // ── PILLAR 3: Structured Error Recovery (cloud path) ──
-              const cloudIsBrowserTask = /\b(browse|navigate|website|url|http|www\.|\.com|visit|open.*site)\b/i.test(message || '') ||
-                allCloudToolResults.some(tr => tr.tool?.startsWith('browser_'));
+              // cloudIsBrowserTask regex classifier removed — unreliable keyword matching.
+              // classifyResponseFailure uses allCloudToolResults for browser task detection.
               const cloudFailure = classifyResponseFailure(
                 responseText, false, cloudTaskType, cloudIteration, message, previousCloudResponse,
-                { isBrowserTask: cloudIsBrowserTask, nudgesRemaining: cloudNudgesRemaining, allToolResults: allCloudToolResults }
+                { nudgesRemaining: cloudNudgesRemaining, allToolResults: allCloudToolResults }
               );
 
               if (cloudFailure) {
@@ -873,21 +874,11 @@ function register(ctx) {
         if (effectiveTaskType !== 'browser' && effectiveTaskType !== 'chat' && context?.projectPath && ragEngine.projectPath) {
           const maxChunks = tokenBudget > 2000 ? 5 : tokenBudget > 1000 ? 3 : 1;
           const ragContext = ragEngine.getContextForQuery(message, maxChunks, tokenBudget * 2);
-          
-          // Detect "create new content" intent — user wants to build something
-          // new, not reference existing project code. Common pattern: "create a
-          // website/app/page for X" where X is unrelated to the current project.
-          const createNewPattern = /\b(create|build|make|generate|write|design)\b.*\b(html|website|web\s*page|app|application|page|document|site|landing\s*page|portfolio|dashboard)\b(?!.*\b(for\s+this|in\s+this|our|the\s+project|this\s+project|existing|current)\b)/i;
-          const isCreatingNew = createNewPattern.test(message);
-          
-          // When creating new content, only inject RAG if results are strongly
-          // relevant (high score) — prevents project context from leaking into
-          // unrelated creative work
-          const highScoreThreshold = 5.0;
-          const filteredChunks = isCreatingNew
-            ? ragContext.chunks.filter(c => c.score >= highScoreThreshold)
-            : ragContext.chunks;
-          
+          // Regex-based "create new content" intent filter removed — it silently withheld
+          // project context from the model based on unreliable keyword matching. Token budget
+          // (appendIfBudget) already handles context size limits correctly.
+          const filteredChunks = ragContext.chunks;
+
           if (filteredChunks.length > 0) {
             let ragSection = '## Relevant Code from Project\n\n';
             for (const chunk of filteredChunks) {
@@ -1072,40 +1063,22 @@ function register(ctx) {
       const summarizer = new ConversationSummarizer();
       summarizer.setGoal(message);
       
-      // Detect browser intent from user message BEFORE the first iteration
-      // so the nudge logic can trigger even when no browser tools have been used yet
-      const browserIntentPattern = /\b(go\s+to|navigate\s+to|open|visit|browse|load|show\s+me|check\s+out|head\s+to|pull\s+up)\b.*\b([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}\b|\bhttps?:\/\/|\bwww\./i;
-      const userWantsBrowser = browserIntentPattern.test(message);
-      if (userWantsBrowser) {
-        console.log('[AI Chat] Browser intent detected in user message');
-      }
-
       // currentPrompt lives outside the loop so subsequent iterations can use the value set at end of prior iteration
       let webSearchInstruction = '';
       if (context?.webSearch) {
         webSearchInstruction = '## Web Search Enabled\nThe user has enabled web search. Use the `web_search` tool to find up-to-date information from the internet to help answer their question. Search first, then respond with what you find.\n\n';
       }
-      // If browser intent detected, prepend a strong instruction to use browser_navigate
-      let browserInstruction = '';
-      let expectedBrowserUrl = null;
-      if (userWantsBrowser) {
-        // Extract URL from the message
-        const urlMatch = message.match(/(?:https?:\/\/[^\s]+|www\.[^\s]+|(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+(?:com|org|net|edu|gov|io|co|dev|app|me|info|biz|us|uk|ca|au|de|fr|jp|cn|in|br|ru|mx|es|it|nl|se|no|dk|fi|pl|cz|at|ch|be|ie|pt|gr|hu|ro|bg|hr|si|sk|lt|lv|ee|is|lu|mt|cy|li|mc|sm|ad|va|maine\.edu)[^\s]*)/i);
-        const detectedUrl = urlMatch ? urlMatch[0] : null;
-        if (detectedUrl) {
-          const fullUrl = detectedUrl.startsWith('http') ? detectedUrl : `https://${detectedUrl}`;
-          expectedBrowserUrl = fullUrl;
-          browserInstruction = `\n\n## CRITICAL INSTRUCTION\nThe user wants you to navigate to a website. You MUST call the browser_navigate tool IMMEDIATELY with this URL: ${fullUrl}\nDo NOT read local files. Do NOT describe the project. Do NOT do anything else first. Just call browser_navigate NOW.\nOutput EXACTLY this:\n\`\`\`json\n{"tool": "browser_navigate", "params": {"url": "${fullUrl}"}}\n\`\`\`\n\n`;
-        }
-      }
+      // browserIntentPattern + hardcoded browserInstruction removed — injecting a forced
+      // "call browser_navigate RIGHT NOW, output EXACTLY this JSON" override is a regex
+      // keyword classifier unreliable across real message variability. The system preamble
+      // already instructs the model to call browser_navigate when asked to visit a URL.
+
       // Build structured prompt with proper system/user role separation
       // systemContext = tool defs + memory + RAG + file context (goes in system message)
       // userMessage = the actual user request (goes in user message)
       let currentPrompt = {
-        // Put the browser "CRITICAL INSTRUCTION" first so it isn't buried
-        // under large tool prompts (improves compliance for small/finicky models).
         systemContext: basePrompt,
-        userMessage: buildDynamicContext() + browserInstruction + webSearchInstruction + message
+        userMessage: buildDynamicContext() + webSearchInstruction + message
       };
 
       // If the renderer provided conversation history (e.g., after a model switch or session reset),
@@ -1902,7 +1875,6 @@ function register(ctx) {
         } else {
           // ── LEGACY TEXT PARSING PATH ──
           const textOpts = { toolPaceMs: localToolPace, skipWriteDeferral: modelTier.tier === 'tiny' };
-          if (iteration === 1 && expectedBrowserUrl) textOpts.enforceNavigateUrl = expectedBrowserUrl;
           toolResults = await mcpToolServer.processResponse(responseText, textOpts);
         }
 
@@ -1939,17 +1911,17 @@ function register(ctx) {
           if (planningText) {
             // Also send to thinking panel for the reasoning dropdown
             mainWindow.webContents.send('llm-thinking-token', planningText);
+            // Only replace the chat bubble when there is planning text — sending an empty
+            // string would wipe the bubble, causing the "response disappears" visual bug.
+            mainWindow.webContents.send('llm-replace-last', planningText);
           }
-          // Keep acknowledgment/planning text visible in the chat bubble — never delete it.
-          // Send planningText (may be empty string) so prior text is preserved in the bubble.
-          mainWindow.webContents.send('llm-replace-last', planningText);
         }
         
         if (!toolResults.hasToolCalls || toolResults.results.length === 0) {
           // ── PILLAR 3: Structured Error Recovery ──
           // Single unified failure classifier replaces 6 scattered if/else chains.
           // Each failure type → specific recovery strategy. No generic placeholders.
-          const isBrowserTask = userWantsBrowser || allToolResults.some(tr => tr.tool?.startsWith('browser_'));
+          const isBrowserTask = allToolResults.some(tr => tr.tool?.startsWith('browser_'));
           const failure = classifyResponseFailure(
             responseText, false, taskType, iteration, message, lastIterationResponse,
             { isBrowserTask, nudgesRemaining, allToolResults }
@@ -2384,7 +2356,7 @@ function register(ctx) {
       // If the last iteration used tool calls, generate a final summary so the response
       // never ends abruptly on raw tool output
       // IMPORTANT: avoid blocking browser automations with an extra summary call.
-      const shouldAutoSummarize = allToolResults.length > 0 && iteration >= 2 && !userWantsBrowser;
+      const shouldAutoSummarize = allToolResults.length > 0 && iteration >= 2 && !allToolResults.some(tr => tr.tool?.startsWith('browser_'));
       if (shouldAutoSummarize) {
         const lastResponseTrimmed = (fullResponseText || '').trim();
         const endsWithToolOutput = lastResponseTrimmed.endsWith('```') || 
@@ -2426,63 +2398,9 @@ function register(ctx) {
         }
       }
 
-      // ── Completion Guarantee (post-loop) ──
-      // Ensures files contain real data, not fabricated content. Two cases:
-      // A) No file written → create file from gathered data
-      // B) File written but fabricated → overwrite with gathered data
-      // This runs AFTER the loop so corrections can't be overwritten by subsequent model writes.
-      if (gatheredWebData.length > 0) {
-        const userWantsFile = /\b(?:save|write|create|put|store|make)\b.*\b(?:file|desktop|document|txt|csv)\b/i.test(message) ||
-                              /\b(?:file|desktop|document)\b.*\b(?:save|write|create)\b/i.test(message);
-        const wroteFile = allToolResults.some(tr => tr.tool === 'write_file' && tr.result?.success);
-
-        // Build corrected content from gathered data
-        const buildCorrectedContent = () => {
-          const lines = gatheredWebData.slice(0, 10).map((r, i) =>
-            `${i + 1}. ${r.title}\n   URL: ${r.url}${r.snippet ? '\n   ' + r.snippet.substring(0, 200) : ''}`
-          );
-          return `Results gathered from web search:\n\n${lines.join('\n\n')}`;
-        };
-
-        if (userWantsFile && !wroteFile) {
-          // Case A: no file written at all
-          console.log('[AI Chat] Completion guarantee (case A): no file written — auto-generating');
-          try {
-            const content = buildCorrectedContent();
-            const desktopPath = require('path').join(require('os').homedir(), 'Desktop');
-            const filePath = require('path').join(desktopPath, 'search_results.txt');
-            require('fs').writeFileSync(filePath, content, 'utf8');
-            console.log(`[AI Chat] Completion guarantee: wrote ${content.length} chars to ${filePath}`);
-            fullResponseText += `\n\nResults saved to ${filePath}`;
-            displayResponseText += `\n\nResults saved to ${filePath}`;
-            if (mainWindow) mainWindow.webContents.send('llm-token', `\n\n*Results saved to Desktop/search_results.txt*`);
-          } catch (e) {
-            console.log(`[AI Chat] Completion guarantee (case A) failed: ${e.message}`);
-          }
-        } else if (wroteFile) {
-          // Case B: file was written — check if content is fabricated
-          const lastWrite = [...allToolResults].reverse().find(tr => tr.tool === 'write_file' && tr.result?.success && tr.params?.filePath);
-          if (lastWrite) {
-            try {
-              // Sanitize filePath same way MCPToolServer does — model stores hallucinated paths
-              const sanitized = mcpToolServer._sanitizeFilePath(lastWrite.params.filePath);
-              const absPath = require('path').resolve(mcpToolServer.projectPath || '.', sanitized);
-              const currentContent = require('fs').readFileSync(absPath, 'utf8');
-              const contentLower = currentContent.toLowerCase();
-              const looksLikeData = /(?:\$\d|price|product|listing|mileage|miles|bedroom|salary)/i.test(currentContent);
-              if (looksLikeData) {
-                const snippets = gatheredWebData.flatMap(wd => [wd.url, wd.title].filter(Boolean));
-                const overlap = snippets.filter(s => s.length > 5 && contentLower.includes(s.toLowerCase())).length;
-                if (overlap === 0) {
-                  const corrected = buildCorrectedContent();
-                  require('fs').writeFileSync(absPath, corrected, 'utf8');
-                  console.log(`[AI Chat] Completion guarantee (case B): overwrote fabricated ${currentContent.length} chars with ${corrected.length} chars of real data in ${absPath}`);
-                }
-              }
-            } catch (_) {}
-          }
-        }
-      }
+      // Completion Guarantee block removed — it used regex keyword matching on the user's
+      // message to silently create or overwrite files, bypassing the model entirely.
+      // If the model doesn't save files when asked, fix the preamble — not a post-loop override.
 
       memoryStore.addConversation('assistant', fullResponseText);
 

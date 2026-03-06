@@ -1263,6 +1263,18 @@ function register(ctx) {
           lastEvaluation: llmEngine.lastEvaluation,
         };
 
+        // Text-mode tool-bubble state — declared at iteration scope so the conditional
+        // done:true send after the _wasTruncated check can access them, and so continuations
+        // re-attach the bubble by seeding from _pendingPartialBlock.
+        let _tb = _pendingPartialBlock || '';
+        let _tIdx = 9000;
+        let _tStart = -1;
+        let _tName = null;
+        if (_pendingPartialBlock) {
+          const _seedM = _pendingPartialBlock.match(/\{\s*"tool"\s*:\s*"([^"]+)"/);
+          if (_seedM) { _tStart = _seedM.index; _tName = _seedM[1]; }
+        }
+
         try {
           // Signal UI to record current stream buffer length as iteration start offset.
           // This allows llm-replace-last to preserve prior iterations' text when cleaning fences.
@@ -1315,10 +1327,9 @@ function register(ctx) {
               // IPC event that grammar mode fires so the live streaming bubble appears.
               // Grammar mode fires this from the toolChunk callback (4th arg of generateWithFunctions).
               // Text mode has no equivalent callback, so we detect the JSON inline here.
-              let _tb = '';         // raw token accumulator (text path only)
-              let _tIdx = 9000;    // callIndex sentinel — grammar mode uses 0-based ints
-              let _tStart = -1;    // offset of opening '{' of current tool call in _tb
-              let _tName = null;   // tool name once the key has streamed through
+              // NOTE: _tb, _tIdx, _tStart, _tName are declared at iteration scope above the try block.
+              // They are seeded from _pendingPartialBlock for continuations, and the done:true send
+              // is deferred until after the _wasTruncated check so continuations keep the bubble alive.
 
               result = await llmEngine.generateStream(currentPrompt, {
                 ...(context?.params || {}),
@@ -1355,18 +1366,8 @@ function register(ctx) {
                 localThinkingBatcher.push(thinkToken);
               });
 
-              // Mark any in-flight text-mode generating bubble as done.
-              // In the happy path the tool-executing IPC event clears generatingToolCalls
-              // automatically; this done:true handles edge cases where the model wrote a
-              // tool call but execution was skipped or cancelled.
-              if (_tStart !== -1 && _tName && mainWindow && !mainWindow.isDestroyed()) {
-                mainWindow.webContents.send('llm-tool-generating', {
-                  callIndex: _tIdx,
-                  functionName: _tName,
-                  paramsText: '',
-                  done: true,
-                });
-              }
+              // done:true for the text-mode bubble is sent AFTER the _wasTruncated check below,
+              // so that seamless continuations can keep the bubble alive across passes.
             }
           } finally {
             localTokenBatcher.dispose();
@@ -1715,9 +1716,17 @@ function register(ctx) {
           if (_hasUnclosedToolFence) {
             // EOS fired mid-JSON: tell the model exactly where the output was cut.
             // It must output ONLY the remainder to complete the tool call — no restart.
+            // FIX-B: Use only a short tail (~200 chars) of the partial fence content in the prompt
+            // instead of the full accumulated content. The full block is preserved in _pendingPartialBlock
+            // for MCP reconstruction — the model only needs the tail to know where to continue from.
+            // This prevents the prompt from growing by thousands of tokens across continuations,
+            // keeping each pass's generation budget large enough to make real progress.
             const _partialFenceContent = _stitchedForMcp.slice(_fenceIdx);
-            _pendingPartialBlock = _partialFenceContent; // save so next iter MCP can reconstruct
-            _continuationUserMsg = `[You were generating a tool call and the context window was exhausted mid-JSON. The partial output is shown below — output ONLY the remainder of the JSON continuing from exactly where it ends, then close the object and the code fence. Do NOT restart the tool call from the beginning. Do NOT add any preamble or explanation. Continue from:\n\n${_partialFenceContent}]`;
+            _pendingPartialBlock = _partialFenceContent; // save full block so MCP can reconstruct
+            const _tail = _partialFenceContent.length > 200
+              ? '\u2026' + _partialFenceContent.slice(-200)
+              : _partialFenceContent;
+            _continuationUserMsg = `[Continue the tool call JSON from exactly where it was cut. Output ONLY the JSON continuation — the remainder of the current value, any remaining keys, closing brace, and code fence. Do NOT restart the tool call. Do NOT add preamble. Continue from:\n${_tail}]`;
           } else {
             // maxTokens hit mid-text — original behaviour
             _continuationUserMsg = '[Continue your response exactly where you left off. If you were listing steps or planning, STOP — do not add more steps. Call the first tool now to begin execution. If you were in the middle of a tool call, call that tool now to complete the task — do not output tool content as raw text. Output only the continuation — no preamble, no summary, no repeated content.]';
@@ -1730,6 +1739,18 @@ function register(ctx) {
         }
         // Natural stop or max continuations reached — reset counter for next response
         if (!_wasTruncated) continuationCount = 0;
+        // FIX-A: Send done:true for the text-mode generating bubble ONLY when NOT continuing.
+        // When continuing (above), the bubble must stay alive so the user sees the ongoing stream.
+        // In the happy path, onToolExecuting on the renderer already clears the bubble;
+        // this handles edge cases where the tool call was written but execution was skipped.
+        if (_tStart !== -1 && _tName && !nativeFunctionCalls.length && mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('llm-tool-generating', {
+            callIndex: _tIdx,
+            functionName: _tName,
+            paramsText: '',
+            done: true,
+          });
+        }
 
         // Check stale after generation — user may have sent a new message during inference
         if (isStale()) {

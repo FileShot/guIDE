@@ -1693,7 +1693,8 @@ function register(ctx) {
         // Targets: ```tool_call```, ```tool```, and ```json``` blocks (duplicate visible text —
         // proper tool call UI is rendered via the 'tool-executing' IPC channel instead).
         let displayChunk = responseText
-          .replace(/\n?```(?:json|tool_call|tool)\b[\s\S]*?```\n?/g, '')
+          .replace(/\n?```(?:json|tool_call|tool)\b[\s\S]*?```\n?/g, '')  // strip closed fences
+          .replace(/\n?```(?:json|tool_call|tool)\b[\s\S]*$/g, '')         // strip unclosed fences at end
           .replace(/\n{3,}/g, '\n\n');
         // Strip echoed continuation prompts — small models sometimes echo our bracketed
         // instructions back as output instead of continuing. This is NOT a user-input classifier;

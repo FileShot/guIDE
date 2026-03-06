@@ -73,10 +73,10 @@ class LLMEngine extends EventEmitter {
       seed: -1,
     };
 
-    // User-configurable generation timeout (ms). Default 120s — aborts if no tokens are
-    // produced for 2 minutes (handles CPU-only models swapping heavily, stuck generation).
-    // Can be updated live via Settings without reloading the model.
-    this.generationTimeoutMs = 120_000;
+    // User-configurable generation timeout (ms). 0 = disabled (no timeout).
+    // Set > 0 via Settings UI to re-enable. Hard-disabled here because timeout killed
+    // seamless continuation recovery in v1.7.11 (see CHANGES_LOG.md).
+    this.generationTimeoutMs = 0;  // 0 = no timeout
   }
 
   /**

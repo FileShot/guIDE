@@ -313,7 +313,36 @@ function parseToolCalls(text) {
             if (c === '}') { depth--; if (depth === 0) { end = i; break; } }
           }
         }
-        if (end === -1) break;
+        if (end === -1) {
+          // Unclosed JSON: brace counter never found closing brace — JSON string was truncated.
+          // Attempt partial write_file/create_file recovery: extract filePath and whatever
+          // content was generated before the truncation, then execute with that content.
+          // This handles: (a) generation timeout cut mid-content, (b) model self-restart mid-block.
+          if (toolCalls.length === 0) {
+            const partial = blockContent.substring(start);
+            const toolNameMatch = partial.match(/"tool"\s*:\s*"(write_file|create_file)"/);
+            const fpMatch = partial.match(/"filePath"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+            const contentKeyResult = /"content"\s*:\s*"/.exec(partial);
+            let recoveredContent = '';
+            if (contentKeyResult) {
+              const rawTail = partial.substring(contentKeyResult.index + contentKeyResult[0].length);
+              // Unescape JSON string escape sequences in the partial (truncated) content value
+              recoveredContent = rawTail
+                .replace(/\\n/g, '\n')
+                .replace(/\\r/g, '\r')
+                .replace(/\\t/g, '\t')
+                .replace(/\\"/g, '"')
+                .replace(/\\\\/g, '\\');
+            }
+            if (toolNameMatch && fpMatch && fpMatch[1] && recoveredContent.length > 100) {
+              const toolName = toolNameMatch[1];
+              const filePath = fpMatch[1];
+              console.log(`[MCP] Partial ${toolName} recovery: ${filePath} (${recoveredContent.length} chars from truncated JSON)`);
+              toolCalls.push({ tool: toolName, params: { filePath, content: recoveredContent } });
+            }
+          }
+          break;
+        }
         try {
           const rawStr = blockContent.substring(start, end + 1);
           const jsonStr = sanitizeJson(rawStr);
@@ -1005,7 +1034,10 @@ function _detectFallbackFileOperations(responseText, userMessage) {
     /writ(e|ing)\s+(a|the|this)?\s*(file|code\s+file|script|html|css)/i.test(responseText) ||
     /save\s+(this|the|it|them)\s*(as|to|in)/i.test(responseText) ||
     /generat(e|ing)\s+(?:\w+\s+){0,3}(?:file|folder|script)/i.test(responseText) ||
-    /mak(e|ing)\s+(a|the|this)?\s*(file|folder|directory|document)/i.test(responseText)
+    /mak(e|ing)\s+(a|the|this)?\s*(file|folder|directory|document)/i.test(responseText) ||
+    // Also detect raw JSON write_file/create_file tool calls (partial or complete fenced blocks)
+    // that survived the fence-regex pass but weren't executed (e.g. truncated JSON, double-fence restart).
+    /"tool"\s*:\s*"(?:write_file|create_file)"/.test(responseText)
   );
   // Also detect implied file intent: code blocks with recognized language tags
   // If model dumped code blocks without tool calls, it likely intended to create files.

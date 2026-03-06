@@ -73,10 +73,10 @@ class LLMEngine extends EventEmitter {
       seed: -1,
     };
 
-    // User-configurable generation timeout (ms). Default 0 = no timeout (user cancels manually).
+    // User-configurable generation timeout (ms). Default 120s — aborts if no tokens are
+    // produced for 2 minutes (handles CPU-only models swapping heavily, stuck generation).
     // Can be updated live via Settings without reloading the model.
-    // Set > 0 in Settings to re-enable a hard timeout.
-    this.generationTimeoutMs = 0;
+    this.generationTimeoutMs = 120_000;
   }
 
   /**
@@ -234,6 +234,9 @@ class LLMEngine extends EventEmitter {
 
       const { getLlama, LlamaChat, InputLookupTokenPredictor } = await import(getNodeLlamaCppPath());
 
+      // Cancel any in-flight generation before disposing — prevents "Object is disposed"
+      // errors from node-llama-cpp when generateStream() still holds native object refs.
+      this.cancelGeneration('model-switch');
       // Dispose previous model if loaded
       await this.dispose();
 

@@ -766,6 +766,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     setGenerationStuck(false);
     // Sync active epoch to current epoch — re-enables token acceptance after clear/cancel
     activeEpochRef.current = streamEpochRef.current;
+    // Capture epoch at send time — guards stale ai-chat promise commits in new sessions
+    const callEpoch = streamEpochRef.current;
     streamBufferRef.current = '';
     thinkingSegmentsRef.current = [];
     wasRespondingRef.current = false;
@@ -929,7 +931,10 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
         toolsUsed: result.toolResults && result.toolResults.length > 0 ? result.toolResults : undefined,
       };
 
-      setMessages(prev => [...prev, assistantMsg]);
+      // Epoch guard: discard result if session was cancelled/reset while waiting for ai-chat
+      if (streamEpochRef.current === callEpoch) {
+        setMessages(prev => [...prev, assistantMsg]);
+      }
 
       // TTS: speak the response if enabled
       if (ttsEnabled && result.success && result.text) {
@@ -1546,23 +1551,37 @@ ${e.message}`,
         if (toolCall) {
           const queue = toolResultMap.get(toolCall.tool);
           const result = queue?.length ? queue.shift() : undefined;
+          const isWriteTool = ['write_file', 'create_file', 'edit_file', 'append_to_file'].includes(toolCall.tool);
+          const writeContent = isWriteTool ? toolCall.params?.content as string | undefined : undefined;
+          const writeFilePath = (toolCall.params?.filePath as string || '');
+          const writeExt = writeFilePath.includes('.') ? writeFilePath.split('.').pop()?.toLowerCase() || '' : '';
+          const writeLangMap: Record<string, string> = { ts: 'typescript', tsx: 'tsx', js: 'javascript', jsx: 'jsx', py: 'python', rs: 'rust', go: 'go', java: 'java', cs: 'csharp', cpp: 'cpp', c: 'c', html: 'html', css: 'css', json: 'json', yaml: 'yaml', yml: 'yaml', md: 'markdown', sh: 'bash', bat: 'batch', txt: 'text', xml: 'xml', sql: 'sql' };
+          const writeLang = writeLangMap[writeExt] || writeExt || 'code';
           if (result) {
             allToolElements.push(
               <CollapsibleToolBlock key={`t-${i}`} label={getToolLabel(toolCall, result.isOk ? 'ok' : 'fail')} icon={result.isOk ? '✓' : '✗'}>
-                <div>
-                  <div className="text-[10px] text-[#858585] mb-1 font-medium tracking-wide">PARAMETERS</div>
-                  <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2 mb-2 max-h-[300px] overflow-y-auto">{code}</pre>
-                  <div className="border-t border-[#333] pt-2">
-                    <div className={`text-[10px] mb-1 font-medium tracking-wide ${result.isOk ? 'text-[#89d185]' : 'text-[#f14c4c]'}`}>RESULT</div>
-                    <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2">{result.text}</pre>
+                {isWriteTool && writeContent ? (
+                  <CodeBlock code={writeContent} language={writeLang} onApply={() => onApplyCode(currentFile, writeContent)} isToolCall={true} />
+                ) : (
+                  <div>
+                    <div className="text-[10px] text-[#858585] mb-1 font-medium tracking-wide">PARAMETERS</div>
+                    <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2 mb-2 max-h-[300px] overflow-y-auto">{code}</pre>
+                    <div className="border-t border-[#333] pt-2">
+                      <div className={`text-[10px] mb-1 font-medium tracking-wide ${result.isOk ? 'text-[#89d185]' : 'text-[#f14c4c]'}`}>RESULT</div>
+                      <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2">{result.text}</pre>
+                    </div>
                   </div>
-                </div>
+                )}
               </CollapsibleToolBlock>
             );
           } else {
             allToolElements.push(
               <CollapsibleToolBlock key={`t-${i}`} label={getToolLabel(toolCall, 'ok')} icon="✓">
-                <div className="text-[11px] text-[#858585]">Completed</div>
+                {isWriteTool && writeContent ? (
+                  <CodeBlock code={writeContent} language={writeLang} onApply={() => onApplyCode(currentFile, writeContent)} isToolCall={true} />
+                ) : (
+                  <div className="text-[11px] text-[#858585]">Completed</div>
+                )}
               </CollapsibleToolBlock>
             );
           }
@@ -1670,23 +1689,37 @@ ${e.message}`,
             if (seg.type === 'tool' && seg.toolCall) {
               const queue = toolResultMap.get(seg.toolCall.tool);
               const result = queue?.length ? queue.shift() : undefined;
+              const isInlineWriteTool = ['write_file', 'create_file', 'edit_file', 'append_to_file'].includes(seg.toolCall.tool);
+              const inlineWriteContent = isInlineWriteTool ? seg.toolCall.params?.content as string | undefined : undefined;
+              const inlineWriteFilePath = (seg.toolCall.params?.filePath as string || '');
+              const inlineWriteExt = inlineWriteFilePath.includes('.') ? inlineWriteFilePath.split('.').pop()?.toLowerCase() || '' : '';
+              const inlineLangMap: Record<string, string> = { ts: 'typescript', tsx: 'tsx', js: 'javascript', jsx: 'jsx', py: 'python', rs: 'rust', go: 'go', java: 'java', cs: 'csharp', cpp: 'cpp', c: 'c', html: 'html', css: 'css', json: 'json', yaml: 'yaml', yml: 'yaml', md: 'markdown', sh: 'bash', bat: 'batch', txt: 'text', xml: 'xml', sql: 'sql' };
+              const inlineWriteLang = inlineLangMap[inlineWriteExt] || inlineWriteExt || 'code';
               if (result) {
                 allToolElements.push(
                   <CollapsibleToolBlock key={`inline-${i}-${j}-${allToolElements.length}`} label={getToolLabel(seg.toolCall, result.isOk ? 'ok' : 'fail')} icon={result.isOk ? '✓' : '✗'}>
-                    <div>
-                      <div className="text-[10px] text-[#858585] mb-1 font-medium tracking-wide">PARAMETERS</div>
-                      <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2 mb-2 max-h-[300px] overflow-y-auto">{seg.content}</pre>
-                      <div className="border-t border-[#333] pt-2">
-                        <div className={`text-[10px] mb-1 font-medium tracking-wide ${result.isOk ? 'text-[#89d185]' : 'text-[#f14c4c]'}`}>RESULT</div>
-                        <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2">{result.text}</pre>
+                    {isInlineWriteTool && inlineWriteContent ? (
+                      <CodeBlock code={inlineWriteContent} language={inlineWriteLang} onApply={() => onApplyCode(currentFile, inlineWriteContent)} isToolCall={true} />
+                    ) : (
+                      <div>
+                        <div className="text-[10px] text-[#858585] mb-1 font-medium tracking-wide">PARAMETERS</div>
+                        <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2 mb-2 max-h-[300px] overflow-y-auto">{seg.content}</pre>
+                        <div className="border-t border-[#333] pt-2">
+                          <div className={`text-[10px] mb-1 font-medium tracking-wide ${result.isOk ? 'text-[#89d185]' : 'text-[#f14c4c]'}`}>RESULT</div>
+                          <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2">{result.text}</pre>
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </CollapsibleToolBlock>
                 );
               } else {
                 allToolElements.push(
                   <CollapsibleToolBlock key={`inline-${i}-${j}-${allToolElements.length}`} label={getToolLabel(seg.toolCall, 'ok')} icon="✓">
-                    <div className="text-[11px] text-[#858585]">Completed</div>
+                    {isInlineWriteTool && inlineWriteContent ? (
+                      <CodeBlock code={inlineWriteContent} language={inlineWriteLang} onApply={() => onApplyCode(currentFile, inlineWriteContent)} isToolCall={true} />
+                    ) : (
+                      <div className="text-[11px] text-[#858585]">Completed</div>
+                    )}
                   </CollapsibleToolBlock>
                 );
               }
@@ -1718,15 +1751,27 @@ ${e.message}`,
       if (!hasToolGroup) {
         const toolGroup = (
           <ToolCallGroup key="msg-tools" count={msg.toolsUsed.length}>
-            {msg.toolsUsed.map((tu, i) => (
-              <CollapsibleToolBlock
-                key={`msg-tu-${i}`}
-                label={getToolLabel(tu, tu.result?.success !== false ? 'ok' : 'fail')}
-                icon={tu.result?.success !== false ? '✓' : '✗'}
-              >
-                <div className="text-[11px] text-[#858585]">Completed</div>
-              </CollapsibleToolBlock>
-            ))}
+            {msg.toolsUsed.map((tu, i) => {
+              const isMsgWriteTool = ['write_file', 'create_file', 'edit_file', 'append_to_file'].includes(tu.tool);
+              const msgWriteContent = isMsgWriteTool ? tu.params?.content as string | undefined : undefined;
+              const msgWriteFilePath = (tu.params?.filePath as string || '');
+              const msgWriteExt = msgWriteFilePath.includes('.') ? msgWriteFilePath.split('.').pop()?.toLowerCase() || '' : '';
+              const msgLangMap: Record<string, string> = { ts: 'typescript', tsx: 'tsx', js: 'javascript', jsx: 'jsx', py: 'python', rs: 'rust', go: 'go', java: 'java', cs: 'csharp', cpp: 'cpp', c: 'c', html: 'html', css: 'css', json: 'json', yaml: 'yaml', yml: 'yaml', md: 'markdown', sh: 'bash', bat: 'batch', txt: 'text', xml: 'xml', sql: 'sql' };
+              const msgWriteLang = msgLangMap[msgWriteExt] || msgWriteExt || 'code';
+              return (
+                <CollapsibleToolBlock
+                  key={`msg-tu-${i}`}
+                  label={getToolLabel(tu, tu.result?.success !== false ? 'ok' : 'fail')}
+                  icon={tu.result?.success !== false ? '✓' : '✗'}
+                >
+                  {isMsgWriteTool && msgWriteContent ? (
+                    <CodeBlock code={msgWriteContent} language={msgWriteLang} onApply={() => onApplyCode(currentFile, msgWriteContent)} isToolCall={true} />
+                  ) : (
+                    <div className="text-[11px] text-[#858585]">Completed</div>
+                  )}
+                </CollapsibleToolBlock>
+              );
+            })}
           </ToolCallGroup>
         );
         return [toolGroup, ...parts];
@@ -2562,11 +2607,23 @@ ${e.message}`,
                     {(completedStreamingTools.length > 0 || executingTools.length > 0) && (
                       <div className="mt-2">
                         <ToolCallGroup count={completedStreamingTools.length + executingTools.length}>
-                          {completedStreamingTools.map((toolData, i) => (
-                            <CollapsibleToolBlock key={`done-${i}`} label={getToolLabel(toolData, 'ok')} icon="✓">
-                              <div className="text-[11px] text-[#858585]">Completed</div>
-                            </CollapsibleToolBlock>
-                          ))}
+                          {completedStreamingTools.map((toolData, i) => {
+                            const isDoneWriteTool = ['write_file', 'create_file', 'edit_file', 'append_to_file'].includes(toolData.tool);
+                            const doneWriteContent = isDoneWriteTool ? toolData.params?.content as string | undefined : undefined;
+                            const doneFilePath = ((toolData.params?.filePath || toolData.params?.fileName || '') as string);
+                            const doneExt = doneFilePath.includes('.') ? doneFilePath.split('.').pop()?.toLowerCase() || '' : '';
+                            const doneLangMap: Record<string, string> = { ts: 'typescript', tsx: 'tsx', js: 'javascript', jsx: 'jsx', py: 'python', rs: 'rust', go: 'go', java: 'java', cs: 'csharp', cpp: 'cpp', c: 'c', html: 'html', css: 'css', json: 'json', yaml: 'yaml', yml: 'yaml', md: 'markdown', sh: 'bash', bat: 'batch', txt: 'text', xml: 'xml', sql: 'sql' };
+                            const doneLang = doneLangMap[doneExt] || doneExt || 'code';
+                            return (
+                              <CollapsibleToolBlock key={`done-${i}`} label={getToolLabel(toolData, 'ok')} icon="✓">
+                                {isDoneWriteTool && doneWriteContent ? (
+                                  <CodeBlock code={doneWriteContent} language={doneLang} onApply={() => onApplyCode(currentFile, doneWriteContent)} isToolCall={true} />
+                                ) : (
+                                  <div className="text-[11px] text-[#858585]">Completed</div>
+                                )}
+                              </CollapsibleToolBlock>
+                            );
+                          })}
                           {executingTools.map((toolData, i) => {
                             const isCodeWriteTool = ['write_file', 'create_file', 'edit_file', 'append_to_file'].includes(toolData.tool);
                             const codeContent = toolData.params?.content as string | undefined;

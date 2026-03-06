@@ -1574,9 +1574,11 @@ function register(ctx) {
           const isFatal = fatalPatterns.some(pat => errLower.includes(pat));
           
           if (isFatal) {
-            const fatalMsg = `\n\n*[Generation stopped: ${genError.message.substring(0, 200)}. Please reload the model.]*\n`;
-            if (mainWindow) mainWindow.webContents.send('llm-token', fatalMsg);
-            fullResponseText += fatalMsg;
+            if (!isStale()) {
+              const fatalMsg = `\n\n*[Generation stopped: ${genError.message.substring(0, 200)}. Please reload the model.]*\n`;
+              if (mainWindow) mainWindow.webContents.send('llm-token', fatalMsg);
+              fullResponseText += fatalMsg;
+            }
             break; // Don't retry fatal errors
           }
           
@@ -1945,7 +1947,7 @@ function register(ctx) {
           // ── LEGACY TEXT PARSING PATH ──
           // Use _stitchedForMcp (partial block from previous iter + this iter) so MCP can
           // parse the reconstructed complete tool call when a fence was truncated mid-JSON.
-          const textOpts = { toolPaceMs: localToolPace, skipWriteDeferral: modelTier.tier === 'tiny' };
+          const textOpts = { toolPaceMs: localToolPace, skipWriteDeferral: modelTier.tier === 'tiny', userMessage: message };
           toolResults = await mcpToolServer.processResponse(_stitchedForMcp, textOpts);
         }
 

@@ -1179,10 +1179,21 @@ function register(ctx) {
                 await llmEngine.resetSession(true);
                 sessionJustRotated = true;
                 const rotatedBase = buildStaticPrompt();
-                currentPrompt = {
-                  systemContext: rotatedBase,
-                  userMessage: buildDynamicContext() + '\n' + lastConvSummary + `\nContext was rotated. The current user request is: ${message.substring(0, 300)}${message.length > 300 ? '...' : ''}`
-                };
+                if (_pendingPartialBlock) {
+                  // Seamless continuation in progress — KV cache flush is correct and necessary,
+                  // but do NOT overwrite the continuation userMessage. The model must see
+                  // "[Continue the tool call JSON from exactly where it was cut...]" — not a
+                  // generic rotation message. Overwriting it causes corrupted/unrelated output.
+                  currentPrompt = {
+                    systemContext: rotatedBase,
+                    userMessage: currentPrompt.userMessage,
+                  };
+                } else {
+                  currentPrompt = {
+                    systemContext: rotatedBase,
+                    userMessage: buildDynamicContext() + '\n' + lastConvSummary + `\nContext was rotated. The current user request is: ${message.substring(0, 300)}${message.length > 300 ? '...' : ''}`
+                  };
+                }
               }
             }
           } catch (_) {}
@@ -1388,6 +1399,14 @@ function register(ctx) {
           // error could trigger rotation, which looked like the app was "summarizing"
           // on the very first turn.
           if (isContextOverflow && contextRotations < MAX_CONTEXT_ROTATIONS) {
+            // If the model overflowed mid-generation during a seamless continuation pass,
+            // the _pendingPartialBlock is unusable (generation ended in error, not valid EOS).
+            // Clear it so the rotation produces a clean fresh prompt instead of injecting
+            // a stale partial block into the rotation hint.
+            if (_pendingPartialBlock) {
+              console.log('[AI Chat] In-generation overflow during continuation — clearing stale partial block, retrying clean');
+              _pendingPartialBlock = null;
+            }
             // ── FIRST-TURN OVERFLOW DETECTION ──
             // If no tool calls have been made (completedSteps === 0), there's nothing to
             // summarize. Rotation is pointless — the rebuilt prompt will be the same size.
@@ -1707,10 +1726,10 @@ function register(ctx) {
           && nativeFunctionCalls.length === 0
           && !_timedOut
           && !isStale();
-        if (_wasTruncated && continuationCount < 3) {
+        if (_wasTruncated && continuationCount < 50) {
           continuationCount++;
           const _truncReason = _hasUnclosedToolFence ? 'unclosed tool fence (EOS mid-block)' : 'maxTokens';
-          console.log(`[AI Chat] Seamless continuation ${continuationCount}/3 — ${_truncReason}, continuing in same bubble`);
+          console.log(`[AI Chat] Seamless continuation ${continuationCount}/50 — ${_truncReason}, continuing in same bubble`);
           iteration--; // Continuation is not a new agentic step
           let _continuationUserMsg;
           if (_hasUnclosedToolFence) {

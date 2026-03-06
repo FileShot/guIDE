@@ -391,8 +391,8 @@ class LLMEngine extends EventEmitter {
           // Previously only skipped when auto=0 — but auto can return a small nonzero count (e.g. 6)
           // that is still well below what a computed partial offload gives (e.g. 14).
           const _partialFallback = gpuModes.find(m => typeof m === 'number');
-          if (tryGpuMode === 'auto' && _partialFallback !== undefined && gpuLayers < _partialFallback) {
-            console.log(`[LLM] Auto returned ${gpuLayers} GPU layers (< partial fallback ${_partialFallback}) — trying explicit partial offload`);
+          if ((tryGpuMode === 'auto' || tryGpuMode === 'cuda') && _partialFallback !== undefined && gpuLayers < _partialFallback) {
+            console.log(`[LLM] ${tryGpuMode} returned ${gpuLayers} GPU layers (< partial fallback ${_partialFallback}) — trying explicit partial offload`);
             continue;
           }
         } catch (loadErr) {

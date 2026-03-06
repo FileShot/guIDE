@@ -1338,8 +1338,8 @@ function register(ctx) {
                 // Step 2: stream the accumulating content to the renderer
                 if (_tStart !== -1 && _tName && mainWindow && !mainWindow.isDestroyed()) {
                   const raw = _tb.slice(_tStart);
-                  // Cap at 3000 chars for IPC efficiency; frontend further caps at 1500 for display
-                  const paramsText = raw.length > 3000 ? raw.slice(0, 3000) + '\n…[truncated]' : raw;
+                  // Pass full raw JSON — no truncation
+                  const paramsText = raw;
                   mainWindow.webContents.send('llm-tool-generating', {
                     callIndex: _tIdx,
                     functionName: _tName,
@@ -1665,11 +1665,17 @@ function register(ctx) {
         // Strip tool-call JSON fences from the user-visible copy before accumulating.
         // fullResponseText (fed back to the model for context) keeps the raw text.
         // displayResponseText (committed to the chat message) should only have natural language.
-        // Targets: ```tool_call```, ```tool```, and ```json``` whose root object is a tool call.
-        // Tool-call fenced blocks are left in displayChunk so they appear as formatted code
-        // blocks in the chat bubble rather than being silently stripped to nothing.
-        const displayChunk = responseText
+        // Targets: ```tool_call```, ```tool```, and ```json``` blocks (duplicate visible text —
+        // proper tool call UI is rendered via the 'tool-executing' IPC channel instead).
+        let displayChunk = responseText
+          .replace(/\n?```(?:json|tool_call|tool)\b[\s\S]*?```\n?/g, '')
           .replace(/\n{3,}/g, '\n\n');
+        // Strip echoed continuation prompt — small models sometimes echo our bracketed
+        // instruction back as output instead of continuing. This is NOT a user-input classifier;
+        // it detects only our own constant continuation prompt string being reflected by the model.
+        if (continuationCount > 0) {
+          displayChunk = displayChunk.replace(/\[Continue your response[\s\S]*?\]/gi, '');
+        }
         displayResponseText += displayChunk;
 
         // ── SEAMLESS CONTINUATION ──

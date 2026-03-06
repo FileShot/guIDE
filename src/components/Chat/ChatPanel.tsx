@@ -1215,23 +1215,10 @@ ${e.message}`,
     return detail ? `${tool}: ${detail}${statusText}` : `${tool}${statusText}`;
   };
 
-  // Truncate tool call JSON content for display (especially large write_file content)
-  const truncateToolContent = (content: string, maxLines = 15): string => {
-    // Check if it's JSON with large content fields
-    try {
-      const parsed = JSON.parse(content);
-      if (parsed.params?.content && typeof parsed.params.content === 'string' && parsed.params.content.length > 500) {
-        const truncated = { ...parsed, params: { ...parsed.params, content: parsed.params.content.substring(0, 2000) + '...[truncated]' } };
-        return JSON.stringify(truncated, null, 2);
-      }
-    } catch { /* not JSON, truncate raw */ }
-    
-    const lines = content.split('\n');
-    if (lines.length > maxLines) {
-      return lines.slice(0, maxLines).join('\n') + `\n...[${lines.length - maxLines} more lines]`;
-    }
-    return content;
-  };
+  // Display tool call JSON content in full — no truncation. The <pre> elements use
+  // max-h / overflow-y-auto so large content scrolls within the bubble instead of
+  // being cut off with a misleading '[truncated]' marker.
+  const truncateToolContent = (content: string): string => content;
 
   // ── Generated Image Preview Component ──
   const GeneratedImagePreview: React.FC<{
@@ -1564,7 +1551,7 @@ ${e.message}`,
               <CollapsibleToolBlock key={`t-${i}`} label={getToolLabel(toolCall, result.isOk ? 'ok' : 'fail')} icon={result.isOk ? '✓' : '✗'}>
                 <div>
                   <div className="text-[10px] text-[#858585] mb-1 font-medium tracking-wide">PARAMETERS</div>
-                  <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2 mb-2">{truncateToolContent(code)}</pre>
+                  <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2 mb-2 max-h-[300px] overflow-y-auto">{code}</pre>
                   <div className="border-t border-[#333] pt-2">
                     <div className={`text-[10px] mb-1 font-medium tracking-wide ${result.isOk ? 'text-[#89d185]' : 'text-[#f14c4c]'}`}>RESULT</div>
                     <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2">{result.text}</pre>
@@ -1688,7 +1675,7 @@ ${e.message}`,
                   <CollapsibleToolBlock key={`inline-${i}-${j}-${allToolElements.length}`} label={getToolLabel(seg.toolCall, result.isOk ? 'ok' : 'fail')} icon={result.isOk ? '✓' : '✗'}>
                     <div>
                       <div className="text-[10px] text-[#858585] mb-1 font-medium tracking-wide">PARAMETERS</div>
-                      <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2 mb-2">{truncateToolContent(seg.content)}</pre>
+                      <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2 mb-2 max-h-[300px] overflow-y-auto">{seg.content}</pre>
                       <div className="border-t border-[#333] pt-2">
                         <div className={`text-[10px] mb-1 font-medium tracking-wide ${result.isOk ? 'text-[#89d185]' : 'text-[#f14c4c]'}`}>RESULT</div>
                         <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2">{result.text}</pre>
@@ -2555,7 +2542,6 @@ ${e.message}`,
                               }
                             } catch {}
                             const genLabel = partialDetail ? `${tc.functionName}: ${partialDetail}` : tc.functionName;
-                            const displayText = tc.paramsText.length > 5000 ? tc.paramsText.substring(0, 5000) + '\n\u2026[truncated]' : tc.paramsText;
                             return (
                               <CollapsibleToolBlock key={`gen-${tc.callIndex}`} label={genLabel} icon="\u29d7">
                                 <div>
@@ -2564,7 +2550,7 @@ ${e.message}`,
                                     <span className="text-[11px] text-[#858585]">Generating tool call\u2026</span>
                                   </div>
                                   {tc.paramsText && (
-                                    <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2 max-h-[180px] overflow-y-auto">{displayText}</pre>
+                                    <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2 max-h-[180px] overflow-y-auto">{tc.paramsText}</pre>
                                   )}
                                 </div>
                               </CollapsibleToolBlock>

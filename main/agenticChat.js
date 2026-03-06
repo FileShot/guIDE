@@ -1126,6 +1126,9 @@ function register(ctx) {
       // Seamless continuation counter — tracks how many times we've continued a
       // truncated response in the same bubble. Reset to 0 each new user message.
       let continuationCount = 0;
+      // When EOS fires mid-tool-fence, save the partial block here so the next
+      // continuation iteration can prepend it for MCP to reconstruct the full tool call.
+      let _pendingPartialBlock = null;
       while (iteration < effectiveMaxIterations) {
         // Check if user cancelled or a newer request superseded us
         if (isStale()) {
@@ -1670,11 +1673,11 @@ function register(ctx) {
         let displayChunk = responseText
           .replace(/\n?```(?:json|tool_call|tool)\b[\s\S]*?```\n?/g, '')
           .replace(/\n{3,}/g, '\n\n');
-        // Strip echoed continuation prompt — small models sometimes echo our bracketed
-        // instruction back as output instead of continuing. This is NOT a user-input classifier;
-        // it detects only our own constant continuation prompt string being reflected by the model.
+        // Strip echoed continuation prompts — small models sometimes echo our bracketed
+        // instructions back as output instead of continuing. This is NOT a user-input classifier;
+        // it detects only our own constant continuation prompt strings being reflected by the model.
         if (continuationCount > 0) {
-          displayChunk = displayChunk.replace(/\[Continue your response[\s\S]*?\]/gi, '');
+          displayChunk = displayChunk.replace(/\[(?:Continue your response|You were generating a tool call)[\s\S]*?\]/gi, '');
         }
         displayResponseText += displayChunk;
 
@@ -1685,8 +1688,17 @@ function register(ctx) {
         // Also trigger seamless continuation when EOS fires mid-tool-call (unclosed fenced block).
         // This happens with small models (e.g. Qwen3-0.6B) that emit the EOS token before
         // closing the ```json block — stopReason comes back as 'eogToken', not 'maxTokens'.
-        const _fenceIdx = responseText.search(/```(?:json|tool_call|tool)\b/);
-        const _hasUnclosedToolFence = _fenceIdx !== -1 && !responseText.slice(_fenceIdx).includes('\n```');
+        //
+        // FENCE STITCHING: if the previous iteration had an unclosed tool fence, _pendingPartialBlock
+        // holds that partial JSON. Prepend it here so that:
+        //   (a) _hasUnclosedToolFence evaluates on the complete accumulated block, and
+        //   (b) MCP receives the reconstructed complete tool call for parsing & execution.
+        const _stitchedForMcp = _pendingPartialBlock
+          ? _pendingPartialBlock + responseText
+          : responseText;
+        _pendingPartialBlock = null; // consumed — will be re-set below if this iteration also truncates
+        const _fenceIdx = _stitchedForMcp.search(/```(?:json|tool_call|tool)\b/);
+        const _hasUnclosedToolFence = _fenceIdx !== -1 && !_stitchedForMcp.slice(_fenceIdx).includes('\n```');
         const _wasTruncated = (
           (result?.stopReason === 'maxTokens' || result?.stopReason === 'max-tokens') ||
           _hasUnclosedToolFence
@@ -1699,9 +1711,20 @@ function register(ctx) {
           const _truncReason = _hasUnclosedToolFence ? 'unclosed tool fence (EOS mid-block)' : 'maxTokens';
           console.log(`[AI Chat] Seamless continuation ${continuationCount}/3 — ${_truncReason}, continuing in same bubble`);
           iteration--; // Continuation is not a new agentic step
+          let _continuationUserMsg;
+          if (_hasUnclosedToolFence) {
+            // EOS fired mid-JSON: tell the model exactly where the output was cut.
+            // It must output ONLY the remainder to complete the tool call — no restart.
+            const _partialFenceContent = _stitchedForMcp.slice(_fenceIdx);
+            _pendingPartialBlock = _partialFenceContent; // save so next iter MCP can reconstruct
+            _continuationUserMsg = `[You were generating a tool call and the context window was exhausted mid-JSON. The partial output is shown below — output ONLY the remainder of the JSON continuing from exactly where it ends, then close the object and the code fence. Do NOT restart the tool call from the beginning. Do NOT add any preamble or explanation. Continue from:\n\n${_partialFenceContent}]`;
+          } else {
+            // maxTokens hit mid-text — original behaviour
+            _continuationUserMsg = '[Continue your response exactly where you left off. If you were listing steps or planning, STOP — do not add more steps. Call the first tool now to begin execution. If you were in the middle of a tool call, call that tool now to complete the task — do not output tool content as raw text. Output only the continuation — no preamble, no summary, no repeated content.]';
+          }
           currentPrompt = {
             systemContext: currentPrompt.systemContext, // Unchanged — KV cache preserved
-            userMessage: '[Continue your response exactly where you left off. If you were listing steps or planning, STOP — do not add more steps. Call the first tool now to begin execution. If you were in the middle of a tool call, call that tool now to complete the task — do not output tool content as raw text. Output only the continuation — no preamble, no summary, no repeated content.]',
+            userMessage: _continuationUserMsg,
           };
           continue;
         }
@@ -1880,8 +1903,10 @@ function register(ctx) {
           };
         } else {
           // ── LEGACY TEXT PARSING PATH ──
+          // Use _stitchedForMcp (partial block from previous iter + this iter) so MCP can
+          // parse the reconstructed complete tool call when a fence was truncated mid-JSON.
           const textOpts = { toolPaceMs: localToolPace, skipWriteDeferral: modelTier.tier === 'tiny' };
-          toolResults = await mcpToolServer.processResponse(responseText, textOpts);
+          toolResults = await mcpToolServer.processResponse(_stitchedForMcp, textOpts);
         }
 
         // Duplicate call detection — disabled by default.

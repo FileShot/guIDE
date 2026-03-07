@@ -2216,8 +2216,9 @@ class MCPToolServer {
    * Grammar handles structural validity; this provides semantic guidance.
    * Task-filtered to reduce noise. ~350 tokens.
    */
-  getCompactToolHint(taskType) {
+  getCompactToolHint(taskType, options) {
     if (taskType === 'chat') return '';
+    const minimal = options && options.minimal;
     let hint = '## Your Tools\n';
     hint += 'Call tools with: ```json\n{"tool":"read_file","params":{"filePath":"index.js"}}\n```\nUse the actual parameter names shown below for each tool.\n';
     if (this.projectPath) {
@@ -2234,6 +2235,16 @@ class MCPToolServer {
     hint += '- **list_directory**(dirPath) — List files in directory.\n';
     hint += '- **run_command**(command) — Run a terminal/shell command.\n';
     hint += '\n';
+
+    // For minimal mode (extremely constrained contexts <4096 tokens), stop here.
+    // The 6 file tools above are the essential set. Skip browser, memory, planning
+    // to save ~400 tokens of context budget.
+    if (minimal) {
+      hint += '### Web\n';
+      hint += '- **web_search**(query) — Search the internet.\n\n';
+      hint += 'ALWAYS use write_file for code — NEVER output code as chat text.\n';
+      return hint;
+    }
 
     if (taskType === 'code') {
       hint += '### Code Task Examples\n';

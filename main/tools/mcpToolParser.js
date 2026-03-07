@@ -492,6 +492,25 @@ function parseToolCalls(text) {
       } catch (_) {}
     }
 
+    // 3a.5: Function-call syntax with string arguments (not JSON):
+    // e.g. append_to_file('site.html', '<script src="..."></script>')
+    // or write_file('index.html', '<!DOCTYPE html>...')
+    // Small models sometimes produce Python/JS-style calls instead of JSON params.
+    if (toolCalls.length === 0) {
+      const FILE_TOOL_NAMES = ['write_file', 'append_to_file', 'create_file'];
+      const strArgRegex = new RegExp(`\\b(${FILE_TOOL_NAMES.join('|')})\\s*\\(\\s*['"]([^'"]+)['"]\\s*,\\s*['"]([\\s\\S]*?)['"]\\s*\\)`, 'g');
+      let strArgMatch;
+      while ((strArgMatch = strArgRegex.exec(cleanedText)) !== null) {
+        const toolName = TOOL_NAME_ALIASES[strArgMatch[1].toLowerCase()] || strArgMatch[1];
+        const filePath = strArgMatch[2];
+        const content = strArgMatch[3];
+        if (filePath && content && content.length > 5) {
+          console.log('[MCP] Method 3a.5: Found string-arg function-call syntax:', toolName);
+          toolCalls.push({ tool: toolName, params: { filePath, content } });
+        }
+      }
+    }
+
     // 3b: Plain JSON with filePath+content but no "tool" key → infer write_file
     if (toolCalls.length === 0) {
       const plainJsonRegex = /\{\s*"filePath"\s*:\s*"[^"]+"\s*,\s*"content"\s*:/g;
@@ -922,10 +941,10 @@ async function processResponse(responseText, options = {}) {
         const result = await this.executeTool(call.tool, call.params || {});
         results.push({ tool: call.tool, params: call.params, result });
       }
-      return { hasToolCalls: true, results, capped: fbCapped, skippedToolCalls: fbSkipped };
+      return { hasToolCalls: true, results, capped: fbCapped, skippedToolCalls: fbSkipped, formalCallCount: 0 };
     }
     console.log('[MCP] No fallback tool calls either');
-    return { hasToolCalls: false, results: [] };
+    return { hasToolCalls: false, results: [], formalCallCount: 0 };
   }
 
   // ── Browser Tool Capping ──
@@ -1011,7 +1030,7 @@ async function processResponse(responseText, options = {}) {
     console.log(`[MCP] Browser cap enforced: executed ${browserStateChanges} state-changing actions, skipped ${browserSkipped}`);
   }
 
-  return { hasToolCalls: true, results, capped: capped || browserCapped, skippedToolCalls: skippedCount + browserSkipped };
+  return { hasToolCalls: true, results, capped: capped || browserCapped, skippedToolCalls: skippedCount + browserSkipped, formalCallCount: toolCalls.length };
 }
 
 /**

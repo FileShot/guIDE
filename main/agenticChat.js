@@ -108,7 +108,7 @@ function register(ctx) {
   ipcMain.handle('ai-chat', async (_, message, context) => {
     const mainWindow = ctx.getMainWindow();
     const MAX_AGENTIC_ITERATIONS = context?.maxIterations || _readConfig()?.userSettings?.maxAgenticIterations || 100; // Default 100; overridable via Settings UI
-    const STUCK_THRESHOLD = 3; // Same tool+params repeated this many times = stuck
+    const STUCK_THRESHOLD = 2; // Same tool+params repeated this many times = stuck
     const CYCLE_MIN_REPEATS = 3; // A 2-4 tool cycle must repeat this many times to be flagged
     let _completenessCheckedFiles = null; // One-shot guard for post-write completeness checks
     
@@ -774,8 +774,21 @@ function register(ctx) {
           const useCompactTools = toolPromptStyle === 'grammar-only' || toolPromptStyle === 'compact';
           if (useCompactTools) {
             // Grammar handles structural validity — just tell the model it has tools
-            const compactHint = mcpToolServer.getCompactToolHint(effectiveTaskType);
+            // For extremely constrained contexts (<4096 tokens), use a minimal tool set
+            // to save ~400 tokens. Better to have fewer tools than to overflow the context.
+            const compactHint = totalCtx < 4096
+              ? mcpToolServer.getCompactToolHint(effectiveTaskType, { minimal: true })
+              : mcpToolServer.getCompactToolHint(effectiveTaskType);
             appendIfBudget(compactHint + '\n', 'tools-compact');
+
+            // Inject few-shot tool call examples if the profile requests them.
+            // These give small models a concrete template of the JSON format,
+            // dramatically improving formal tool call rate vs. code-dump-to-fallback.
+            const _fewShotCount = modelProfile.generation?.fewShotExamples ?? 0;
+            if (_fewShotCount > 0 && tokenBudget > 150) {
+              const _fewShotExample = '### Tool Call Example\nUser: Create an HTML page called hello.html with a greeting\nAssistant:\n```json\n{"tool":"write_file","params":{"filePath":"hello.html","content":"<!DOCTYPE html>\\n<html><head><title>Hello</title></head><body><h1>Hello!</h1></body></html>"}}\n```\n';
+              appendIfBudget(_fewShotExample, 'few-shot-example');
+            }
           } else {
             // Full tool prompt for large models, text-mode fallback, and first-time context
             const toolPrompt = mcpToolServer.getToolPromptForTask(effectiveTaskType);
@@ -1142,6 +1155,40 @@ function register(ctx) {
         console.log(`[AI Chat] Agentic iteration ${iteration}/${MAX_AGENTIC_ITERATIONS}`);
         
         console.log(`[AI Chat] Prompt: ~${estimateTokens(typeof currentPrompt === 'string' ? currentPrompt : (currentPrompt.systemContext || '') + (currentPrompt.userMessage || ''))} tokens`);
+
+        // ── FIRST-TURN PROMPT OVERFLOW GUARD ──
+        // On the first iteration, check if the assembled prompt exceeds or nearly
+        // fills the context window. progressiveContextCompaction can't help here
+        // (nothing to compact yet). Instead, rebuild the prompt with less content.
+        if (iteration === 1) {
+          const _ftPromptText = typeof currentPrompt === 'string' ? currentPrompt : ((currentPrompt.systemContext || '') + (currentPrompt.userMessage || ''));
+          const _ftPromptTokens = estimateTokens(_ftPromptText);
+          const _ftHeadroom = totalCtx - _ftPromptTokens;
+          if (_ftHeadroom < Math.floor(totalCtx * 0.15)) {
+            console.log(`[AI Chat] First-turn overflow guard: prompt ~${_ftPromptTokens} tokens, ctx=${totalCtx}, headroom=${_ftHeadroom}`);
+            // Step 1: Rebuild with minimal dynamic context (10% budget)
+            currentPrompt = {
+              systemContext: buildStaticPrompt(),
+              userMessage: buildDynamicContext(undefined, Math.floor(maxPromptTokens * 0.10)) + message
+            };
+            let _ftRetryText = (currentPrompt.systemContext || '') + (currentPrompt.userMessage || '');
+            let _ftRetryTokens = estimateTokens(_ftRetryText);
+            if (totalCtx - _ftRetryTokens < Math.floor(totalCtx * 0.15)) {
+              // Step 2: Rebuild with NO dynamic context at all
+              currentPrompt = {
+                systemContext: buildStaticPrompt(),
+                userMessage: message
+              };
+              _ftRetryText = (currentPrompt.systemContext || '') + (currentPrompt.userMessage || '');
+              _ftRetryTokens = estimateTokens(_ftRetryText);
+            }
+            if (totalCtx - _ftRetryTokens < 128) {
+              // Still too tight — cap effectiveMaxTokens to whatever room remains
+              console.log(`[AI Chat] Context extremely constrained: reducing response budget`);
+            }
+            console.log(`[AI Chat] First-turn overflow resolved: prompt ~${_ftRetryTokens} tokens (was ~${_ftPromptTokens})`);
+          }
+        }
 
         // ── PROACTIVE PRE-GENERATION CONTEXT CHECK ──
         // Before generating, estimate context usage. If it's already high (>60%),
@@ -1782,10 +1829,29 @@ function register(ctx) {
           && !_timedOut
           && !isStale();
         if (_wasTruncated && continuationCount < 50) {
-          continuationCount++;
-          const _truncReason = _hasUnclosedToolFence ? 'unclosed tool fence (EOS mid-block)' : 'maxTokens';
-          console.log(`[AI Chat] Seamless continuation ${continuationCount}/50 — ${_truncReason}, continuing in same bubble`);
-          iteration--; // Continuation is not a new agentic step
+          // ── Per-pass context budget check ──
+          // Before continuing, verify context isn't already too full.
+          // Without this, seamless continuation can fill the entire context
+          // across many passes, causing stalls and repetition.
+          let _contContextPct = 0;
+          try {
+            let _contUsed = 0;
+            try { if (llmEngine.sequence?.nTokens) _contUsed = llmEngine.sequence.nTokens; } catch (_) {}
+            if (!_contUsed) {
+              const _contPromptLen = typeof currentPrompt === 'string' ? currentPrompt.length : ((currentPrompt.systemContext || '').length + (currentPrompt.userMessage || '').length);
+              _contUsed = Math.ceil((_contPromptLen + fullResponseText.length) / 4);
+            }
+            _contContextPct = _contUsed / totalCtx;
+          } catch (_) {}
+          if (_contContextPct > 0.70) {
+            console.log(`[AI Chat] Seamless continuation aborted: context at ${Math.round(_contContextPct * 100)}% (>70% budget). Rotating instead.`);
+            continuationCount = 0;
+            // Fall through to normal post-generation compaction / rotation below
+          } else {
+            continuationCount++;
+            const _truncReason = _hasUnclosedToolFence ? 'unclosed tool fence (EOS mid-block)' : 'maxTokens';
+            console.log(`[AI Chat] Seamless continuation ${continuationCount}/50 — ${_truncReason}, continuing in same bubble`);
+            iteration--; // Continuation is not a new agentic step
           let _continuationUserMsg;
           if (_hasUnclosedToolFence) {
             // EOS fired mid-JSON: tell the model exactly where the output was cut.
@@ -1815,6 +1881,7 @@ function register(ctx) {
             userMessage: _continuationUserMsg,
           };
           continue;
+          } // close else block from context budget check
         }
         // Natural stop or max continuations reached — reset counter for next response
         if (!_wasTruncated) continuationCount = 0;
@@ -2009,9 +2076,10 @@ function register(ctx) {
           toolResults = await mcpToolServer.processResponse(_stitchedForMcp, textOpts);
         }
 
-        // Duplicate call detection — disabled by default.
-        // Enable via Settings → enableLoopDetection: true.
-        if ((_readConfig()?.userSettings?.enableLoopDetection ?? false) && toolResults.hasToolCalls && toolResults.results.length > 0) {
+        // Cross-turn duplicate call detection — always active.
+        // Blocks exact-same tool+params calls within a single iteration to prevent
+        // fallback-driven duplicate writes.
+        if (toolResults.hasToolCalls && toolResults.results.length > 0) {
           const iterationCallSigs = new Set();
           const dedupedResults = [];
           for (const tr of toolResults.results) {
@@ -2071,7 +2139,20 @@ function register(ctx) {
 
             }
 
-          // No more tool calls - we're done
+          // No more tool calls - check for code-dump nudge opportunity.
+          // If the model produced a long response with code blocks but no formal tool calls,
+          // and nudges remain, give it one chance to re-try with proper tool format.
+          const _hasCodeBlocks = /```(?:html?|css|javascript|js|typescript|ts|python|py|json)\s*\n[\s\S]{50,}```/i.test(responseText);
+          if (_hasCodeBlocks && nudgesRemaining > 0 && iteration < effectiveMaxIterations - 1) {
+            nudgesRemaining--;
+            console.log(`[AI Chat] Code-dump nudge: model produced code blocks without tool calls. Nudges remaining: ${nudgesRemaining}`);
+            const _nudgeMsg = `[SYSTEM: You wrote code directly in the chat instead of saving it to a file. Use the write_file tool to save code to a file. Format: \`\`\`json\n{"tool":"write_file","params":{"filePath":"filename.ext","content":"...your code..."}}\n\`\`\`\nDo NOT repeat the code in chat — call write_file now.]`;
+            currentPrompt = {
+              systemContext: currentPrompt.systemContext,
+              userMessage: _nudgeMsg,
+            };
+            continue; // retry without breaking
+          }
           console.log(`[AI Chat] No more tool calls, ending agentic loop`);
           break;
         }
@@ -2296,9 +2377,19 @@ function register(ctx) {
             } else if ((tr.tool === 'write_file' || tr.tool === 'append_to_file') && tr.result?.path) {
               const byteCount = (tr.params?.content || '').length;
               toolFeedback += `**File written:** \`${tr.result.path}\` (${byteCount.toLocaleString()} chars, ${tr.result.isNew ? 'new file' : 'updated'})\n`;
-              // Continuation hint — signal to keep building multi-section or multi-file output
+              // Continuation hint — context-aware to prevent duplicate-write loops.
+              // If the same filePath was already written in a previous iteration, do NOT
+              // nudge to "call write_file IMMEDIATELY" — that causes the model to re-write
+              // the same file repeatedly. Instead, signal task completion for that file.
               if (tr.tool === 'write_file') {
-                toolFeedback += `*File written. If the task requires MORE FILES to be created, call write_file IMMEDIATELY for the next file. If this file needs more content added, call append_to_file IMMEDIATELY. Do NOT stop until ALL required files and content are fully written.*\n`;
+                const _prevWritesSameFile = allToolResults.slice(0, currentIterationStart).some(
+                  prev => prev.tool === 'write_file' && prev.params?.filePath === tr.params?.filePath
+                );
+                if (_prevWritesSameFile) {
+                  toolFeedback += `*File updated (already created earlier). This file is complete. If the original task required OTHER files, create them now. Otherwise, provide a summary of what was built.*\n`;
+                } else {
+                  toolFeedback += `*File written. If the task requires MORE FILES to be created, call write_file IMMEDIATELY for the next file. If this file needs more content added, call append_to_file IMMEDIATELY. Do NOT stop until ALL required files and content are fully written.*\n`;
+                }
               } else {
                 toolFeedback += `*Content appended. If more content remains for this file, call append_to_file again immediately. If other files still need to be created, call write_file for the next required file. Stop only when ALL required files and sections are fully written.*\n`;
               }

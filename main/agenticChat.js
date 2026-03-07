@@ -1172,6 +1172,16 @@ function register(ctx) {
                 console.log(`[AI Chat] Pre-generation compaction: phase ${preCompaction.phase}, ${preCompaction.pruned} items at ${Math.round(preGenPct * 100)}%`);
               }
               if (preCompaction.shouldRotate && contextRotations < MAX_CONTEXT_ROTATIONS) {
+                // Detect if rotation is firing during seamless continuation (no completed steps yet).
+                // In that case fullResponseText holds partial tool-call JSON that never completed.
+                // Injecting it via lastConvSummary causes the model to emit HTML inline after
+                // rotation instead of calling write_file. Clear it and rebuild a clean prompt.
+                const isContinuationRotation = continuationCount > 0 && summarizer.completedSteps.length === 0;
+                if (isContinuationRotation) {
+                  console.log(`[AI Chat] Pre-gen rotation during seamless continuation (${continuationCount} passes) — clearing partial content for clean retry`);
+                  fullResponseText = '';
+                  continuationCount = 0;
+                }
                 contextRotations++;
                 console.log(`[AI Chat] Pre-generation rotation ${contextRotations}/${MAX_CONTEXT_ROTATIONS}`);
                 summarizer.markRotation();
@@ -1187,6 +1197,13 @@ function register(ctx) {
                   currentPrompt = {
                     systemContext: rotatedBase,
                     userMessage: currentPrompt.userMessage,
+                  };
+                } else if (isContinuationRotation) {
+                  // Clean retry after seamless-continuation rotation — no HTML hint.
+                  // Use narrow dynamic context (10%) so prompt stays small on constrained models.
+                  currentPrompt = {
+                    systemContext: rotatedBase,
+                    userMessage: buildDynamicContext(undefined, Math.floor(maxPromptTokens * 0.10)) + '\n' + message
                   };
                 } else {
                   currentPrompt = {
@@ -1415,6 +1432,33 @@ function register(ctx) {
               console.log('[AI Chat] In-generation overflow during continuation — clearing stale partial block, retrying clean');
               _pendingPartialBlock = null;
             }
+            // ── SEAMLESS-CONTINUATION OVERFLOW ──
+            // If overflow fires while we were mid-seamless-continuation (continuationCount > 0),
+            // fullResponseText holds accumulated partial tool-call JSON that never completed.
+            // Injecting it into the retry prompt inflates the pre-gen context estimate to >100%
+            // even on a freshly reset KV, causing every subsequent iteration to also overflow.
+            // Fix: clear fullResponseText, do the retry HERE with the FULL response budget
+            // (do NOT fall through to the first-turn handler which would halve the budget).
+            // The KV is clean after reset, so there is plenty of room for a fresh generation.
+            if (continuationCount > 0 && summarizer.completedSteps.length === 0) {
+              console.log(`[AI Chat] Overflow after ${continuationCount} seamless continuation pass(es) — clearing accumulated partial content and retrying clean`);
+              fullResponseText = '';
+              continuationCount = 0;
+              // Mark budget-reduced so a second overflow from this retry falls to the
+              // "context too small" message instead of looping back into this block.
+              overflowResponseBudgetReduced = true;
+              contextRotations++;
+              try { await llmEngine.resetSession(true); } catch (_) {}
+              sessionJustRotated = true;
+              const contOverflowBase = buildStaticPrompt();
+              currentPrompt = {
+                systemContext: contOverflowBase,
+                userMessage: buildDynamicContext(undefined, Math.floor(maxPromptTokens * 0.10)) + '\n' + message
+              };
+              // effectiveMaxTokens intentionally NOT halved — KV is clean, full budget is safe
+              console.log(`[AI Chat] Continuation-overflow retry: clean KV, budget=${effectiveMaxTokens} tokens`);
+              continue;
+            }
             // ── FIRST-TURN OVERFLOW DETECTION ──
             // If no tool calls have been made (completedSteps === 0), there's nothing to
             // summarize. Rotation is pointless — the rebuilt prompt will be the same size.
@@ -1435,8 +1479,8 @@ function register(ctx) {
               // Fix C: use 10% of prompt budget for dynamic context on retry — drops memory/RAG/file
               // context but keeps tools and preamble fully intact. Prevents repeat overflow on
               // small-context models without touching the model's tool access.
-              // Fix D: if partial content was generated before the overflow, inject it so the model
-              // continues from where it left off rather than restarting the response from scratch.
+              // Fix D: only inject partial hint if it came from a NON-continuation overflow —
+              // continuation-overflow partials were cleared above and must NOT be re-injected.
               const _firstTurnPartial = fullResponseText.trim().length > 0
                 ? fullResponseText.substring(Math.max(0, fullResponseText.length - 1500))
                 : '';
@@ -1758,8 +1802,13 @@ function register(ctx) {
               : _partialFenceContent;
             _continuationUserMsg = `[Continue the tool call JSON from exactly where it was cut. Output ONLY the JSON continuation — the remainder of the current value, any remaining keys, closing brace, and code fence. Do NOT restart the tool call. Do NOT add preamble. Continue from:\n${_tail}]`;
           } else {
-            // maxTokens hit mid-text — original behaviour
-            _continuationUserMsg = '[Continue your response exactly where you left off. If you were listing steps or planning, STOP — do not add more steps. Call the first tool now to begin execution. If you were in the middle of a tool call, call that tool now to complete the task — do not output tool content as raw text. Output only the continuation — no preamble, no summary, no repeated content.]';
+            // maxTokens hit mid-text — inject tail so model knows exactly where it stopped
+            // Without this, the model has zero context about what it was writing and often
+            // restarts from the beginning instead of continuing forward.
+            const _maxTokensTail = responseText.length > 2000
+              ? '\u2026' + responseText.slice(-2000)
+              : responseText;
+            _continuationUserMsg = `[Continue your response exactly where you left off. Output only the continuation — no preamble, no summary, no repeated content. If you were writing a file, continue from exactly where it was cut — do not restart from the beginning. Here is the end of what you wrote so far:\n${_maxTokensTail}]`;
           }
           currentPrompt = {
             systemContext: currentPrompt.systemContext, // Unchanged — KV cache preserved
@@ -2247,6 +2296,12 @@ function register(ctx) {
             } else if ((tr.tool === 'write_file' || tr.tool === 'append_to_file') && tr.result?.path) {
               const byteCount = (tr.params?.content || '').length;
               toolFeedback += `**File written:** \`${tr.result.path}\` (${byteCount.toLocaleString()} chars, ${tr.result.isNew ? 'new file' : 'updated'})\n`;
+              // Continuation hint — signal to keep building multi-section or multi-file output
+              if (tr.tool === 'write_file') {
+                toolFeedback += `*File written. If the task requires MORE FILES to be created, call write_file IMMEDIATELY for the next file. If this file needs more content added, call append_to_file IMMEDIATELY. Do NOT stop until ALL required files and content are fully written.*\n`;
+              } else {
+                toolFeedback += `*Content appended. If more content remains for this file, call append_to_file again immediately. If other files still need to be created, call write_file for the next required file. Stop only when ALL required files and sections are fully written.*\n`;
+              }
             } else {
               toolFeedback += `**Result:** ${tr.result?.message || 'Done'}\n`;
             }

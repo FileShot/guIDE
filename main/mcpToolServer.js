@@ -161,6 +161,12 @@ class MCPToolServer {
         normalized.filePath = normalized.file;
         delete normalized.file;
       }
+      if (normalized.filePath == null && typeof normalized.key === 'string') {
+        // Defense: model confused generic {key,value} example with real params
+        normalized.filePath = normalized.key;
+        delete normalized.key;
+        delete normalized.value;
+      }
     }
 
     if (toolName === 'list_directory') {
@@ -178,6 +184,11 @@ class MCPToolServer {
         } else if (typeof normalized.directory === 'string') {
           normalized.dirPath = normalized.directory;
           delete normalized.directory;
+        } else if (typeof normalized.key === 'string') {
+          // Defense: model confused generic {key,value} example with real params
+          normalized.dirPath = normalized.key;
+          delete normalized.key;
+          delete normalized.value;
         }
       }
     }
@@ -317,7 +328,8 @@ class MCPToolServer {
       },
       {
         name: 'write_file',
-        description: 'Write or create a file in the project. Always use this to save file content — never output file content as raw text in the chat. Format: {"tool":"write_file","params":{"filePath":"src/app.js","content":"..."}}',
+        description: 'Write or create a file — OVERWRITES the entire file with the content provided. Use for new files or when replacing the full content. If you need to add to a file without losing existing content, use append_to_file instead. Always use this to save file content — never output file content as raw text. Format: {"tool":"write_file","params":{"filePath":"src/app.js","content":"..."}}',
+
         parameters: {
           filePath: { type: 'string', description: 'File path', required: true },
           content: { type: 'string', description: 'File content', required: true },
@@ -695,7 +707,7 @@ class MCPToolServer {
       },
       {
         name: 'append_to_file',
-        description: 'Append content to the end of a file (creates it if it does not exist).',
+        description: 'Append content to the end of an existing file WITHOUT overwriting it. Use this when building a large file across multiple tool calls: write_file for the opening section, then append_to_file for every subsequent section. This is the correct pattern for generating large HTML, code, or documents that exceed one tool call. Creates the file if it does not exist.',
         parameters: {
           filePath: { type: 'string', description: 'File path', required: true },
           content: { type: 'string', description: 'Content to append', required: true },
@@ -2207,7 +2219,7 @@ class MCPToolServer {
   getCompactToolHint(taskType) {
     if (taskType === 'chat') return '';
     let hint = '## Your Tools\n';
-    hint += 'Call tools with: ```json\n{"tool":"tool_name","params":{"key":"value"}}\n```\n';
+    hint += 'Call tools with: ```json\n{"tool":"read_file","params":{"filePath":"index.js"}}\n```\nUse the actual parameter names shown below for each tool.\n';
     if (this.projectPath) {
       hint += `Project: ${this.projectPath} — use relative paths.\n`;
     }

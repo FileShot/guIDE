@@ -49,7 +49,7 @@ class LLMEngine extends EventEmitter {
     this.isReady = false;
     this.modelInfo = null;
     this.abortController = null;
-    this._abortReason = null; // 'user' | 'tool_call' | 'repetition' | 'template' | null
+    this._abortReason = null; // 'user' | 'tool_call' | 'timeout' | 'model-switch' | null
     this.loadAbortController = null; // Separate abort controller for model loading
     this._initializingPromise = null; // Tracks in-flight initialize() for serialization (prevents native C++ double-op crash)
     this.gpuInfo = null;
@@ -73,9 +73,8 @@ class LLMEngine extends EventEmitter {
       seed: -1,
     };
 
-    // User-configurable generation timeout (ms). 0 = disabled (no timeout).
-    // Set > 0 via Settings UI to re-enable. Hard-disabled here because timeout killed
-    // seamless continuation recovery in v1.7.11 (see CHANGES_LOG.md).
+    // User-configurable generation timeout (ms). Default 120s.
+    // Can be updated live via Settings without reloading the model.
     this.generationTimeoutMs = 0;  // 0 = no timeout
   }
 
@@ -976,8 +975,8 @@ After your brief acknowledgment, output ONLY the tool call blocks — no extra t
     const mergedParams = { ...this.defaultParams, ...modelOverrides, ...params };
     this.abortController = new AbortController();
     
-    // Generation safety timeout: abort if generation exceeds configured limit.
-    // 0 = no timeout (users can cancel manually). Configurable in Settings.
+    // Generation safety timeout: disabled by default (generationTimeoutMs = 0).
+    // Only active if generationTimeoutMs is set > 0 via Settings UI.
     const GEN_TIMEOUT_MS = this.generationTimeoutMs;
     const genTimeoutTimer = GEN_TIMEOUT_MS > 0 ? setTimeout(() => {
       console.log(`[LLM] Generation timeout (${GEN_TIMEOUT_MS / 1000}s) — aborting to prevent hang`);
@@ -987,8 +986,6 @@ After your brief acknowledgment, output ONLY the tool call blocks — no extra t
     
     let fullResponse = '';
     let rawResponse = '';
-    let lastTokens = ''; // Track recent tokens for garbage detection
-    let repetitionCount = 0;
     let thinkingTokenCount = 0;
     let lastTokenTime = Date.now();
 
@@ -1018,10 +1015,6 @@ After your brief acknowledgment, output ONLY the tool call blocks — no extra t
         return '';
       }
     };
-
-    // Garbage token patterns to strip from streaming output
-    // Includes raw turn indicators that broken models output
-    const garbageTokenRegex = /<\|file_separator\|>|<start_of_turn>(?:model|user)?|<end_of_turn>|<bos>|<eos>|<\|endoftext\|>|<\|im_start\|>(?:system|user|assistant)?|<\|im_end\|>|<\|end\|>|<\|eot_id\|>|<\|EOT\|>|\[INST\]|\[\/INST\]|<<SYS>>|<<\/SYS>>|^\s*(?:assistant|user|system|model|human)\s*$/gim;
 
     // Context management is handled by the agentic loop in electron-main.js
     // which has accurate token counting via sequence.nTokens.
@@ -1096,7 +1089,7 @@ After your brief acknowledgment, output ONLY the tool call blocks — no extra t
           rawResponse += text;
 
           const isThought = chunk.segmentType === 'thought';
-          let cleanedSegment = text.replace(garbageTokenRegex, '');
+          let cleanedSegment = text;
           if (!cleanedSegment) return;
 
           if (isThought) {
@@ -1193,61 +1186,6 @@ After your brief acknowledgment, output ONLY the tool call blocks — no extra t
             }
           }
 
-          // Detect repetitive output (model stuck in a loop)
-          lastTokens += cleaned;
-          if (lastTokens.length > 200) {
-            const recent = lastTokens.slice(-200);
-            
-            // Check 1: exact 80-char substring repetition
-            const tail = recent.slice(-80);
-            const beforeTail = recent.slice(0, -80);
-            if (tail.length > 20 && beforeTail.includes(tail)) {
-              repetitionCount++;
-            }
-            
-            // Check 2: word-level stuttering (e.g., "the the", "project project project")
-            const words = recent.split(/\s+/).filter(w => w.length > 1);
-            if (words.length >= 6) {
-              let stutterCount = 0;
-              for (let i = 1; i < words.length; i++) {
-                if (words[i].toLowerCase() === words[i - 1].toLowerCase()) {
-                  stutterCount++;
-                }
-              }
-              if (stutterCount >= Math.floor(words.length * 0.25)) {
-                console.log(`[LLM] Detected stuttering pattern (${stutterCount} repeated words in last ${words.length}), aborting`);
-                this.cancelGeneration('repetition');
-                return;
-              }
-            }
-            
-            // Check 3: raw turn indicator spam (broken chat template)
-            const turnIndicatorPattern = /^(assistant|user|system|model|human)\s*$/gim;
-            const turnMatches = recent.match(turnIndicatorPattern);
-            if (turnMatches && turnMatches.length >= 3) {
-              console.log(`[LLM] Detected broken chat template output (${turnMatches.length}x turn indicators), aborting`);
-              this.cancelGeneration('template');
-              return;
-            }
-            
-            if (repetitionCount > 5) {
-              console.log('[LLM] Detected repetitive output, aborting generation');
-              this.cancelGeneration('repetition');
-              return;
-            } else if (tail.length > 20 && !beforeTail.includes(tail)) {
-              // No repetition detected this pass — decay the counter
-              // This prevents false positives from accumulating over long generations
-              repetitionCount = Math.max(0, repetitionCount - 1);
-            }
-            lastTokens = recent;
-          }
-
-          // Runaway non-tool output detector removed — the 2000-char threshold was too
-          // aggressive, silently aborting legitimate long responses (HTML, code, explanations)
-          // mid-stream, which caused the "response disappears" visual bug. The repetition
-          // detectors above catch genuine stuck/broken model output. The model decides whether
-          // to use tools based on the system preamble.
-
           fullResponse += cleaned;
           if (onToken) onToken(cleaned);
         },
@@ -1287,8 +1225,6 @@ After your brief acknowledgment, output ONLY the tool call blocks — no extra t
 
         fullResponse = '';
         rawResponse = '';
-        lastTokens = '';
-        repetitionCount = 0;
         thinkingTokenCount = 0;
         lastTokenTime = Date.now();
         insideThinkBlock = false;
@@ -1375,19 +1311,11 @@ After your brief acknowledgment, output ONLY the tool call blocks — no extra t
         // (repetition/runaway/template) use a CLEAN placeholder — NOT the garbage partial.
         // Storing repeated/runaway text in chatHistory teaches the model to reproduce it
         // on the next turn, causing the "same wrong response every time" loop.
-        const isQualityAbort = reason === 'repetition' || reason === 'runaway' || reason === 'template';
-        const historyModelEntry = isQualityAbort
-          ? '[Response generated]'  // clean placeholder so next generation starts from clean context
-          : (fullResponse ? this._sanitizeResponse(fullResponse) : '[Generation cancelled]');
+        const historyModelEntry = fullResponse ? this._sanitizeResponse(fullResponse) : '[Generation cancelled]';
         this.chatHistory.push({ type: 'user', text: userMessage });
         this.chatHistory.push({ type: 'model', response: [historyModelEntry] });
         const sanitized = this._sanitizeResponse(fullResponse);
-        const suffix = reason === 'repetition'
-          ? '\n[Generation cancelled: repetitive output detected]'
-          : reason === 'template'
-            ? '\n[Generation cancelled: broken chat template detected]'
-            : '\n[Generation cancelled]';
-        return { text: (sanitized || '') + suffix, model: this.modelInfo?.name, tokensUsed: 0 };
+        return { text: sanitized || '[Generation cancelled]', model: this.modelInfo?.name, tokensUsed: 0 };
       }
       // Handle context overflow — summarize & continue, never tell user to "try again"
       if (error.message && (error.message.includes('compress') || error.message.includes('context') || error.message.includes('too long'))) {
@@ -1717,7 +1645,7 @@ After your brief acknowledgment, output ONLY the tool call blocks — no extra t
    * @param {Function} onFunctionCall - Called when a function call is generated
    * @returns {Object} {text, functionCalls: [{functionName, params}], stopReason}
    */
-  async generateWithFunctions(input, functions, params = {}, onToken, onThinkingToken, onFunctionCall, onToolGenerating) {
+  async generateWithFunctions(input, functions, params = {}, onToken, onThinkingToken, onFunctionCall) {
     if (!this.isReady || !this.chat) {
       throw new Error('Model not loaded. Please load a model first.');
     }
@@ -1752,8 +1680,8 @@ After your brief acknowledgment, output ONLY the tool call blocks — no extra t
     const mergedParams = { ...this.defaultParams, ...modelOverrides, ...params };
     this.abortController = new AbortController();
 
-    // Safety timeout — uses same configurable limit as generateStream()
-    // 0 = no timeout (user can cancel manually).
+    // Safety timeout — disabled by default (generationTimeoutMs = 0).
+    // Only active if generationTimeoutMs is set > 0 via Settings UI.
     const GEN_TIMEOUT_MS = this.generationTimeoutMs;
     const genTimeoutTimer = GEN_TIMEOUT_MS > 0 ? setTimeout(() => {
       console.log(`[LLM] Function-calling generation timeout — aborting`);
@@ -1763,8 +1691,6 @@ After your brief acknowledgment, output ONLY the tool call blocks — no extra t
 
     let fullResponse = '';
     let collectedFunctionCalls = [];
-    // Accumulate paramsChunk text per callIndex for live streaming to UI
-    const _paramsChunkBufs = {};
 
     try {
       this._compactHistory();
@@ -1819,24 +1745,9 @@ After your brief acknowledgment, output ONLY the tool call blocks — no extra t
             if (onFunctionCall) onFunctionCall(funcCall);
           },
           onFunctionCallParamsChunk: (chunk) => {
-            // Accumulate paramsChunk text per callIndex and stream live to UI.
-            // This powers the streaming tool generation bubble in the renderer
-            // so users can see what the model is writing instead of a blank screen.
-            if (!_paramsChunkBufs[chunk.callIndex]) {
-              _paramsChunkBufs[chunk.callIndex] = '';
-              console.log(`[LLM] onFunctionCallParamsChunk FIRST FIRE: callIndex=${chunk.callIndex} functionName=${chunk.functionName} done=${chunk.done}`);
-            }
-            if (chunk.paramsChunk) _paramsChunkBufs[chunk.callIndex] += chunk.paramsChunk;
-            if (chunk.done) {
-              console.log(`[LLM] onFunctionCallParamsChunk DONE: callIndex=${chunk.callIndex} totalLen=${_paramsChunkBufs[chunk.callIndex]?.length}`);
-            }
-            if (onToolGenerating) {
-              onToolGenerating({
-                callIndex: chunk.callIndex,
-                functionName: chunk.functionName,
-                paramsText: _paramsChunkBufs[chunk.callIndex],
-                done: !!chunk.done,
-              });
+            // Stream function call params as they generate (for UI feedback)
+            if (chunk.done && onToken) {
+              onToken(`\n\`\`\`json\n{"tool":"${chunk.functionName}","params":...}\n\`\`\`\n`);
             }
           },
         } : {}),

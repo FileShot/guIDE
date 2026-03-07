@@ -557,9 +557,9 @@ function getProgressiveTools(taskType, iteration, recentTools, maxTools) {
   if (!maxTools) return null;
 
   // Priority-ranked: most universally useful tools first.
-  // Tier examples: tiny(6) → top 6 only, small(12) → top 12, medium(20) → top 20, etc.
+  // Tier examples: tiny(8) → top 8 only, small(14) → top 14, medium(20) → top 20, etc.
   const priorityTools = [
-    'read_file', 'write_file', 'edit_file', 'list_directory', 'run_command',
+    'read_file', 'write_file', 'append_to_file', 'edit_file', 'list_directory', 'run_command',
     'web_search', 'search_codebase', 'grep_search', 'find_files',
     'browser_navigate', 'browser_snapshot', 'browser_click', 'browser_type',
     'browser_scroll', 'browser_press_key', 'browser_select_option',

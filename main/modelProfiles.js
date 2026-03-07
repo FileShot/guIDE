@@ -69,7 +69,7 @@ const BASE_DEFAULTS = {
   generation: {
     grammarConstrained: false,        // Grammar DISABLED — causes infinite loops and stuck generation
     stopStrings: [],                  // Additional stop strings
-    maxToolsPerTurn: 10,              // Max tool calls per generation
+    maxToolsPerTurn: 14,              // Max tool calls per generation
   },
   quirks: {
     loopsFrequently: false,           // Model tends to repeat itself
@@ -126,7 +126,7 @@ const FAMILY_PROFILES = {
       prompt: { style: 'compact', toolPromptStyle: 'compact', fewShotExamples: 1 },
       thinkTokens: { mode: 'none' },
       _thinkBudgetWhenActive: 128, // used by isThinkingVariant override in llmEngine.js
-      generation: { maxToolsPerTurn: 6 },
+      generation: { maxToolsPerTurn: 10 },
       quirks: { truncatesMidTool: true, poorMultiTool: true },
     },
     small: {
@@ -139,7 +139,7 @@ const FAMILY_PROFILES = {
       prompt: { style: 'compact', toolPromptStyle: 'compact', fewShotExamples: 1 },
       thinkTokens: { mode: 'none' },
       _thinkBudgetWhenActive: 256, // used by isThinkingVariant override in llmEngine.js
-      generation: { maxToolsPerTurn: 12 },
+      generation: { maxToolsPerTurn: 14 },
     },
     medium: {
       // Qwen2.5-7B, Qwen3-8B: excellent all-round
@@ -187,7 +187,7 @@ const FAMILY_PROFILES = {
       context: { effectiveContextSize: 32768, maxResponseTokens: 4096 },
       prompt: { style: 'compact', toolPromptStyle: 'compact', fewShotExamples: 2 },
       thinkTokens: { mode: 'none' }, // Llama 3.2 is not a thinking model
-      generation: { maxToolsPerTurn: 6 },
+      generation: { maxToolsPerTurn: 10 },
       quirks: { truncatesMidTool: true, poorMultiTool: true, loopsFrequently: true },
     },
     small: {
@@ -196,7 +196,7 @@ const FAMILY_PROFILES = {
       context: { effectiveContextSize: 32768, maxResponseTokens: 4096 },
       prompt: { style: 'compact', toolPromptStyle: 'compact', fewShotExamples: 1 },
       thinkTokens: { mode: 'none' }, // Llama 3.2 is not a thinking model
-      generation: { maxToolsPerTurn: 12 },
+      generation: { maxToolsPerTurn: 14 },
     },
     medium: {
       // Llama-3.1-8B: solid
@@ -240,7 +240,7 @@ const FAMILY_PROFILES = {
       context: { effectiveContextSize: 32768, maxResponseTokens: 4096 },
       prompt: { style: 'compact', toolPromptStyle: 'compact' },
       thinkTokens: { mode: 'budget', budget: 128 },
-      generation: { maxToolsPerTurn: 6 },
+      generation: { maxToolsPerTurn: 10 },
       quirks: { loopsFrequently: true, truncatesMidTool: true, poorMultiTool: true },
     },
     small: {
@@ -249,7 +249,7 @@ const FAMILY_PROFILES = {
       context: { effectiveContextSize: 32768, maxResponseTokens: 4096 },
       prompt: { style: 'compact', toolPromptStyle: 'compact' },
       thinkTokens: { mode: 'budget', budget: 256 },
-      generation: { maxToolsPerTurn: 12 },
+      generation: { maxToolsPerTurn: 14 },
       quirks: { loopsFrequently: true, overlyVerbose: true },
     },
     medium: {
@@ -257,7 +257,7 @@ const FAMILY_PROFILES = {
       sampling: { temperature: 0.40, topP: 0.85, topK: 25, repeatPenalty: 1.15 },
       context: { effectiveContextSize: 16384, maxResponseTokens: 4096 },
       prompt: { style: 'full', toolPromptStyle: 'full' },
-      generation: { maxToolsPerTurn: 12 },
+      generation: { maxToolsPerTurn: 14 },
     },
     large: {
       // Phi-4 (14B)
@@ -294,7 +294,7 @@ const FAMILY_PROFILES = {
       context: { effectiveContextSize: 32768, maxResponseTokens: 4096 },
       prompt: { style: 'compact', toolPromptStyle: 'compact', fewShotExamples: 1 },
       thinkTokens: { mode: 'budget', budget: 128 },
-      generation: { maxToolsPerTurn: 6 },
+      generation: { maxToolsPerTurn: 10 },
       quirks: { truncatesMidTool: true, poorMultiTool: true },
     },
     small: {
@@ -303,7 +303,7 @@ const FAMILY_PROFILES = {
       context: { effectiveContextSize: 32768, maxResponseTokens: 4096 },
       prompt: { style: 'compact', toolPromptStyle: 'compact', fewShotExamples: 1 },
       thinkTokens: { mode: 'budget', budget: 256 },
-      generation: { maxToolsPerTurn: 12 },
+      generation: { maxToolsPerTurn: 14 },
     },
     medium: {
       // Gemma-2-9B
@@ -341,7 +341,7 @@ const FAMILY_PROFILES = {
       context: { effectiveContextSize: 32768, maxResponseTokens: 4096 },
       prompt: { style: 'compact', toolPromptStyle: 'compact' },
       thinkTokens: { mode: 'budget', budget: 128 },
-      generation: { maxToolsPerTurn: 6 },
+      generation: { maxToolsPerTurn: 10 },
       quirks: { overlyVerbose: true, truncatesMidTool: true },
     },
     small: {
@@ -349,7 +349,7 @@ const FAMILY_PROFILES = {
       context: { effectiveContextSize: 32768, maxResponseTokens: 4096 },
       prompt: { style: 'compact', toolPromptStyle: 'compact' },
       thinkTokens: { mode: 'budget', budget: 256 },
-      generation: { maxToolsPerTurn: 12 },
+      generation: { maxToolsPerTurn: 14 },
     },
     medium: {
       context: { effectiveContextSize: 16384, maxResponseTokens: 4096 },
@@ -534,14 +534,14 @@ const FAMILY_PROFILES = {
       sampling: { temperature: 0.40, topP: 0.85, topK: 20, repeatPenalty: 1.12, lastTokensPenaltyCount: 512 },
       context: { effectiveContextSize: 32768, maxResponseTokens: 4096 },
       prompt: { style: 'compact', toolPromptStyle: 'compact', fewShotExamples: 1 },
-      generation: { maxToolsPerTurn: 6 },
+      generation: { maxToolsPerTurn: 10 },
     },
     small: {
       // LFM2-2.6B
       sampling: { temperature: 0.45, topP: 0.88, topK: 25, repeatPenalty: 1.10 },
       context: { effectiveContextSize: 32768, maxResponseTokens: 4096 },
       prompt: { style: 'compact', toolPromptStyle: 'compact', fewShotExamples: 1 },
-      generation: { maxToolsPerTurn: 12 },
+      generation: { maxToolsPerTurn: 14 },
     },
   },
 
@@ -566,7 +566,7 @@ const FAMILY_PROFILES = {
       sampling: { temperature: 0.48, topP: 0.88, topK: 25, repeatPenalty: 1.10 },
       context: { effectiveContextSize: 32768, maxResponseTokens: 4096 },
       prompt: { style: 'compact', toolPromptStyle: 'compact', fewShotExamples: 1 },
-      generation: { maxToolsPerTurn: 12 },
+      generation: { maxToolsPerTurn: 14 },
     },
   },
 
@@ -592,7 +592,7 @@ const FAMILY_PROFILES = {
       sampling: { temperature: 0.38, topP: 0.82, topK: 18, repeatPenalty: 1.15 },
       context: { effectiveContextSize: 32768, maxResponseTokens: 4096 },
       prompt: { style: 'compact', toolPromptStyle: 'compact', fewShotExamples: 1 },
-      generation: { maxToolsPerTurn: 12 },
+      generation: { maxToolsPerTurn: 14 },
     },
   },
 
@@ -617,7 +617,7 @@ const FAMILY_PROFILES = {
       sampling: { temperature: 0.40, topP: 0.85, topK: 20, repeatPenalty: 1.12, lastTokensPenaltyCount: 512 },
       context: { effectiveContextSize: 32768, maxResponseTokens: 4096 },
       prompt: { style: 'compact', toolPromptStyle: 'compact', fewShotExamples: 1 },
-      generation: { maxToolsPerTurn: 6 },
+      generation: { maxToolsPerTurn: 10 },
     },
   },
 
@@ -639,7 +639,7 @@ const FAMILY_PROFILES = {
     small: {
       context: { effectiveContextSize: 32768, maxResponseTokens: 4096 },
       prompt: { style: 'compact', toolPromptStyle: 'compact' },
-      generation: { maxToolsPerTurn: 8 },
+      generation: { maxToolsPerTurn: 10 },
     },
     large: {
       context: { effectiveContextSize: 65536, maxResponseTokens: 8192 },

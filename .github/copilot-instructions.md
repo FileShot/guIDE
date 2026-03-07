@@ -168,6 +168,58 @@ Before declaring any root cause:
 - If you are uncertain, say so explicitly and ask the user to observe a specific diagnostic behavior, not just "test it."
 
 ---
+
+## DEBUGGING RULES — MANDATORY FOR ALL FAILURE INVESTIGATIONS
+
+These rules were added after repeated instances of shallow mitigations being shipped as root cause fixes (e.g., the v1.7.16 token stall watchdog, which prevented indefinite hangs but did not identify WHY the hang occurred). These rules are non-negotiable.
+
+### Rule 1 — Root Cause Requirement
+When debugging a system failure, you must NOT stop after implementing a mitigation such as a timeout, watchdog, or guard clause. You must identify and document the underlying cause of the failure. A fix is not considered complete until the actual failure mechanism has been identified. A watchdog that masks a hang is NOT a fix — it is a symptom suppressor.
+
+### Rule 2 — Full Pipeline Investigation
+Before proposing ANY fix, you must trace the ENTIRE execution pipeline related to the failure. This includes identifying every stage of the system involved and determining exactly where execution stops progressing.
+
+For the LLM generation pipeline this includes at minimum:
+- request initialization
+- context assembly
+- context summarization
+- context compaction
+- model inference start
+- token generation loop
+- token streaming callbacks
+- buffering logic
+- UI streaming
+- continuation triggers
+- completion detection
+- finalization
+
+You must determine exactly which stage stops progressing. Do NOT stop at the first plausible stage — trace to the actual point of failure.
+
+### Rule 3 — No Minimal Patches Without Proof
+You must NOT propose minimal one-line fixes unless you can demonstrate with logs or code tracing that the issue is truly isolated to that change. For complex systems with multiple interacting subsystems, minimal patches are usually insufficient and must not be assumed to be correct. A one-line fix proposed without a traced call chain is a guess, not a fix.
+
+### Rule 4 — Evidence Requirement
+Every root cause claim must be supported by evidence from logs, execution tracing, or code analysis. Assumptions such as "the GPU likely hung" are not acceptable without verification. Before declaring a root cause:
+- Read the actual log entries that correlate with the failure
+- Read every function in the code path that leads to the failure
+- Find a second independent indicator that confirms the diagnosis
+- Explicitly state what you have NOT confirmed
+
+### Rule 5 — Architectural Fix Requirement
+If a subsystem failure can propagate across multiple components, the fix must address the architecture rather than only adding protective timeouts. Safety guards such as watchdog timers are acceptable AS ADDITIONAL PROTECTION but they must be implemented IN ADDITION TO, not INSTEAD OF, root cause fixes. When a watchdog is the only fix, that is an incomplete fix.
+
+### Rule 6 — Stall Diagnosis
+When a generation stall occurs, you must determine whether the stall occurred in:
+- the model inference engine (C++ layer, node-llama-cpp)
+- the token sampling loop
+- the streaming callback layer
+- the buffering layer
+- the agent execution loop
+- the context management systems
+
+You must determine which subsystem stopped producing forward progress. "The generation hung" is not a diagnosis. "The C++ `chat.generateResponse()` blocked before producing the first token because the sequence KV cache was in an EOS-terminated state and the overlap detection algorithm encountered a degenerate input" IS a diagnosis.
+
+---
 ---
 
 ###**CRITICAL** ALWAYS READ EVERY RULE IN THIS FILE BEFORE RESPONDING. If you miss a rule, you will likely violate it and waste time. If you cannot confirm that all rules are followed, say "I need to review the instructions before proceeding."

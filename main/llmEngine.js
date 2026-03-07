@@ -1060,6 +1060,31 @@ After your brief acknowledgment, output ONLY the tool call blocks — no extra t
           this._kvReuseCooldown--;
           if (this._kvReuseCooldown <= 0) this._kvReuseCooldown = 0;
         }
+
+        // --- EOS-SEQUENCE PROTECTION ---
+        // When not reusing the KV cache (useKvCache=false), node-llama-cpp
+        // runs internal overlap detection against the existing LlamaContextSequence
+        // KV cache to find a common prefix. If the previous generation ended with EOS
+        // (not maxTokens — e.g. truncation mid-JSON block), the sequence's last token
+        // is EOS. The overlap detection algorithm cannot correctly resolve a starting
+        // state from an EOS-terminated sequence when no lastEvaluationContextWindow
+        // boundary hint is provided, causing the C++ thread to hang indefinitely.
+        // Fix: erase the sequence before the call so generateResponse performs a clean
+        // full re-evaluation with no prior cache state to misinterpret.
+        // This only fires when useKvCache=false — normal cache-reuse calls are untouched.
+        if (!useKvCache && this.sequence) {
+          const nToks = this.sequence.nTokens || 0;
+          if (nToks > 0) {
+            try {
+              this.sequence.eraseContextTokenRanges([{ start: 0, end: nToks }]);
+              console.log(`[LLM] Cleared EOS-terminated sequence (${nToks} tokens) before non-KV-reuse generation`);
+            } catch (e) {
+              console.log(`[LLM] Sequence erase non-fatal: ${e.message}`);
+            }
+          }
+        }
+        // --- END EOS-SEQUENCE PROTECTION ---
+
         return await this.chat.generateResponse(this.chatHistory, {
         maxTokens: mergedParams.maxTokens,
         temperature: mergedParams.temperature,

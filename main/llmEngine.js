@@ -300,8 +300,13 @@ class LLMEngine extends EventEmitter {
       let gpuMode = 'auto';
       let flashAttnEnabled = false;
       let success = false;
+      // Tracks best GPU layer count seen from cuda/auto before trying explicit partial.
+      // If the explicit partial offload fails (not enough VRAM for that many layers),
+      // we inject this value before the CPU fallback so we never silently drop to 0 layers.
+      let _bestAutoGpuLayers = 0;
 
-      for (const tryGpuMode of gpuModes) {
+      for (let _modeIdx = 0; _modeIdx < gpuModes.length; _modeIdx++) {
+        const tryGpuMode = gpuModes[_modeIdx];
         if (this.loadAbortController?.signal?.aborted) throw new Error('Model load cancelled');
 
         this.emit('status', {
@@ -394,11 +399,22 @@ class LLMEngine extends EventEmitter {
           // that is still well below what a computed partial offload gives (e.g. 14).
           const _partialFallback = gpuModes.find(m => typeof m === 'number');
           if ((tryGpuMode === 'auto' || tryGpuMode === 'cuda') && _partialFallback !== undefined && gpuLayers < _partialFallback) {
-            console.log(`[LLM] ${tryGpuMode} returned ${gpuLayers} GPU layers (< partial fallback ${_partialFallback}) — trying explicit partial offload`);
+            // Track the best actual layer count seen so far. If the explicit partial
+            // offload fails, we can fall back here instead of dropping to 0 (CPU).
+            if (gpuLayers > _bestAutoGpuLayers) _bestAutoGpuLayers = gpuLayers;
+            console.log(`[LLM] ${tryGpuMode} returned ${gpuLayers} GPU layers (< partial fallback ${_partialFallback}) — tracking ${gpuLayers} as GPU fallback, trying explicit partial offload`);
             continue;
           }
         } catch (loadErr) {
           console.log(`[LLM] Model load (gpu=${tryGpuMode}) failed: ${loadErr.message?.substring(0, 120)}`);
+          // If the explicit partial offload fails but cuda/auto previously loaded with
+          // some GPU layers, inject those layers before CPU (false) so we never silently
+          // drop to 0 layers. Any GPU offload is strictly better than full CPU.
+          if (typeof tryGpuMode === 'number' && _bestAutoGpuLayers > 0) {
+            console.log(`[LLM] Explicit partial (${tryGpuMode} layers) failed — injecting best observed GPU fallback: ${_bestAutoGpuLayers} layers before CPU`);
+            gpuModes.splice(_modeIdx + 1, 0, _bestAutoGpuLayers);
+            _bestAutoGpuLayers = 0; // consumed — only inject once
+          }
           continue;
         }
 
@@ -992,11 +1008,15 @@ After your brief acknowledgment, output ONLY the tool call blocks — no extra t
     // 90s without ANY token is unambiguously a hang, not slow generation.
     const STALL_TIMEOUT_MS = 90_000;
     let stallTimer = null;
+    if (!LLMEngine._genCounter) LLMEngine._genCounter = 0;
+    const _genId = ++LLMEngine._genCounter;
     const resetStallTimer = () => {
       clearTimeout(stallTimer);
       stallTimer = setTimeout(() => {
         const elapsed = Math.round((Date.now() - lastTokenTime) / 1000);
-        console.log(`[LLM] Token stall detected — no tokens for ${elapsed}s — aborting generation to recover`);
+        const _currentGen = LLMEngine._genCounter;
+        const _orphaned = _currentGen !== _genId ? ` — ORPHANED from gen #${_genId}, currently on gen #${_currentGen}` : '';
+        console.log(`[LLM] Token stall gen #${_genId} — no tokens for ${elapsed}s${_orphaned} — aborting generation to recover`);
         this._lastAbortReason = 'timeout';
         this.cancelGeneration('timeout');
       }, STALL_TIMEOUT_MS);
@@ -1007,7 +1027,7 @@ After your brief acknowledgment, output ONLY the tool call blocks — no extra t
     let thinkingTokenCount = 0;
     let lastTokenTime = Date.now();
     resetStallTimer(); // Start stall watchdog — fires if no first token within 90s
-    console.log('[LLM] Generation started');
+    console.log(`[LLM] Generation #${_genId} started — model=${this.modelInfo?.name || 'unknown'} kvReuse=${!!this.lastEvaluation} kvCooldown=${this._kvReuseCooldown || 0}`);
 
     // Thinking model state: suppress content between <think> and </think>
     let insideThinkBlock = false;
@@ -1052,6 +1072,7 @@ After your brief acknowledgment, output ONLY the tool call blocks — no extra t
         // If in KV reuse cooldown (after a retry from empty response),
         // skip cache reuse this time to avoid the same failure pattern.
         const useKvCache = this.lastEvaluation && !this._kvReuseCooldown;
+        console.log(`[LLM] gen #${_genId} runOnce: useKvCache=${useKvCache} lastEval=${!!this.lastEvaluation} kvCooldown=${this._kvReuseCooldown || 0} seqTokens=${this.sequence?.nTokens ?? 'n/a'}`);
         if (this._kvReuseCooldown && this.lastEvaluation) {
           // Only consume the cooldown when lastEvaluation is set (i.e., on a real new call).
           // During retry (where lastEvaluation is null), preserve the cooldown for the NEXT call.
@@ -1242,15 +1263,11 @@ After your brief acknowledgment, output ONLY the tool call blocks — no extra t
 
       let result = await runOnce();
 
-      // Clear generation safety timeout and stall watchdog — completed normally
-      clearTimeout(genTimeoutTimer);
-      clearTimeout(stallTimer);
-      
       // Generation timeout: if generation takes more than 120s, something is wrong.
       // Abort and return what we have (prevents infinite hangs on CPU-bound systems).
       // NOTE: This is implemented via the AbortController signal already passed to
       // generateResponse. The timeout is set up before runOnce() is called.
-      // If we got here, generation completed normally.
+      // Timers are cleared in the finally block below — covers all exit paths.
 
       // Flush any remaining tagBuffer content that was held back for partial tag detection
       // Without this, the last few characters of a response can be silently swallowed
@@ -1276,6 +1293,7 @@ After your brief acknowledgment, output ONLY the tool call blocks — no extra t
         rawResponse = '';
         thinkingTokenCount = 0;
         lastTokenTime = Date.now();
+        console.log(`[LLM] gen #${_genId} retry — restarting stallTimer`);
         resetStallTimer(); // Restart stall watchdog for retry attempt
         insideThinkBlock = false;
         tagBuffer = '';
@@ -1316,10 +1334,6 @@ After your brief acknowledgment, output ONLY the tool call blocks — no extra t
         stopReason: result.metadata?.stopReason || 'eogToken',
       };
     } catch (error) {
-      // Clear generation safety timeout and stall watchdog on error path
-      clearTimeout(genTimeoutTimer);
-      clearTimeout(stallTimer);
-      
       // Invalidate KV cache — chatHistory is about to be mutated in ways that
       // don't match what was evaluated, so lastEvaluation is stale
       this.lastEvaluation = null;
@@ -1368,6 +1382,12 @@ After your brief acknowledgment, output ONLY the tool call blocks — no extra t
         const sanitized = this._sanitizeResponse(fullResponse);
         return { text: sanitized || '[Generation cancelled]', model: this.modelInfo?.name, tokensUsed: 0 };
       }
+      // Log full error details for unknown errors (helps diagnose "Object is disposed" and similar)
+      if (error.name !== 'AbortError') {
+        console.log(`[LLM] gen #${_genId} non-abort error: name=${error.name} msg=${error.message?.substring(0, 200)}`);
+        console.log(`[LLM] gen #${_genId} error state: contextDisposed=${this.context?.disposed ?? 'n/a'} seqTokens=${this.sequence?.nTokens ?? 'n/a'} isReady=${this.isReady}`);
+        if (error.stack) console.log(`[LLM] gen #${_genId} stack: ${error.stack.split('\n').slice(0, 4).join(' | ')}`);
+      }
       // Handle context overflow — summarize & continue, never tell user to "try again"
       if (error.message && (error.message.includes('compress') || error.message.includes('context') || error.message.includes('too long'))) {
         console.log('[LLM] Context overflow in generateStream(), auto-summarizing and resetting');
@@ -1380,6 +1400,14 @@ After your brief acknowledgment, output ONLY the tool call blocks — no extra t
         throw err;
       }
       throw error;
+    } finally {
+      // Always clear timers regardless of exit path — success (first run),
+      // success (after retry), abort (any reason), or error.
+      // Prevents the orphaned stallTimer bug: resetStallTimer() is called for a retry
+      // but when the retry succeeds, catch is never reached and the timer leaks into
+      // the next generation, firing 90s later against a completely different request.
+      clearTimeout(genTimeoutTimer);
+      clearTimeout(stallTimer);
     }
   }
 

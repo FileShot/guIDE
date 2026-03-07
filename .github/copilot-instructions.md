@@ -9,7 +9,9 @@
 - Start any cloudflared tunnel process
 - Run any ecosystem config (`ecosystem.config.cjs`, etc.)
 
-**The production server is a SEPARATE PHYSICAL COMPUTER.** It runs all 8 sites. You cannot access it from this terminal. Manage it ONLY via https://cp.graysoft.dev (password: `diggabyte2026`, PIN: `0615`).
+**The production server is a SEPARATE PHYSICAL COMPUTER.** It runs all 8 sites. You cannot run local terminal commands on it. Manage it via https://cp.graysoft.dev (password: `diggabyte2026`, PIN: `0615`).
+
+**As of March 7, 2026: cp.graysoft.dev now has a built-in Terminal** (click the `⏎ Terminal` button in the CP header). This opens a live PowerShell session directly on the production server (`C:\SelfHost`). Use this for any task that requires running commands on the server — installing software, running scripts, checking processes, etc. You have full control.
 
 **Violating this rule causes production downtime for real users. Every time you start a process here it conflicts with the real server. This is not a warning — it is a hard rule.**
 
@@ -52,6 +54,7 @@ When the user says "read your instructions", "read the instructions", "read copi
 - To deploy a website change: edit the source file here → Syncthing syncs it to the server → then trigger rebuild via the control panel below.
 - **AUTHORIZED server control panel: https://cp.graysoft.dev** — login password: `diggabyte2026`
 - Use the control panel to trigger npm build, PM2 restart, or any server-side action needed to deploy changes.
+- **The CP also has a built-in Terminal** (`⏎ Terminal` button in the header) — this gives a live PowerShell session on the production server (`C:\SelfHost`). Use it for anything requiring direct command-line access to the server: installing packages, running scripts, checking files, etc.
 - After triggering via the panel, verify graysoft.dev visually to confirm the change is live.
 
 ---

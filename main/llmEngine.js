@@ -983,11 +983,31 @@ After your brief acknowledgment, output ONLY the tool call blocks — no extra t
       this._lastAbortReason = 'timeout';
       this.cancelGeneration('timeout');
     }, GEN_TIMEOUT_MS) : null;
-    
+
+    // Token stall watchdog — fires if no token arrives for STALL_TIMEOUT_MS.
+    // Independent of generationTimeoutMs (total duration limit).
+    // Catches silent GPU/CPU hangs where inference never produces a first token,
+    // e.g., during seamless continuation under VRAM pressure after a long generation.
+    // 90s is generous: normal first-token latency is <10s even on constrained hardware;
+    // 90s without ANY token is unambiguously a hang, not slow generation.
+    const STALL_TIMEOUT_MS = 90_000;
+    let stallTimer = null;
+    const resetStallTimer = () => {
+      clearTimeout(stallTimer);
+      stallTimer = setTimeout(() => {
+        const elapsed = Math.round((Date.now() - lastTokenTime) / 1000);
+        console.log(`[LLM] Token stall detected — no tokens for ${elapsed}s — aborting generation to recover`);
+        this._lastAbortReason = 'timeout';
+        this.cancelGeneration('timeout');
+      }, STALL_TIMEOUT_MS);
+    };
+
     let fullResponse = '';
     let rawResponse = '';
     let thinkingTokenCount = 0;
     let lastTokenTime = Date.now();
+    resetStallTimer(); // Start stall watchdog — fires if no first token within 90s
+    console.log('[LLM] Generation started');
 
     // Thinking model state: suppress content between <think> and </think>
     let insideThinkBlock = false;
@@ -1083,6 +1103,9 @@ After your brief acknowledgment, output ONLY the tool call blocks — no extra t
         onResponseChunk: (chunk) => {
           const text = chunk.text || '';
           if (!text) return;
+
+          // Reset stall watchdog — a token arrived, inference is alive.
+          resetStallTimer();
 
           // Keep a raw stream for internal tool detection/debug.
           // IMPORTANT: do not emit raw thought to normal onToken.
@@ -1194,8 +1217,9 @@ After your brief acknowledgment, output ONLY the tool call blocks — no extra t
 
       let result = await runOnce();
 
-      // Clear generation safety timeout — completed normally
+      // Clear generation safety timeout and stall watchdog — completed normally
       clearTimeout(genTimeoutTimer);
+      clearTimeout(stallTimer);
       
       // Generation timeout: if generation takes more than 120s, something is wrong.
       // Abort and return what we have (prevents infinite hangs on CPU-bound systems).
@@ -1227,6 +1251,7 @@ After your brief acknowledgment, output ONLY the tool call blocks — no extra t
         rawResponse = '';
         thinkingTokenCount = 0;
         lastTokenTime = Date.now();
+        resetStallTimer(); // Restart stall watchdog for retry attempt
         insideThinkBlock = false;
         tagBuffer = '';
         toolDetectBuffer = '';
@@ -1266,8 +1291,9 @@ After your brief acknowledgment, output ONLY the tool call blocks — no extra t
         stopReason: result.metadata?.stopReason || 'eogToken',
       };
     } catch (error) {
-      // Clear generation safety timeout on error path
+      // Clear generation safety timeout and stall watchdog on error path
       clearTimeout(genTimeoutTimer);
+      clearTimeout(stallTimer);
       
       // Invalidate KV cache — chatHistory is about to be mutated in ways that
       // don't match what was evaluated, so lastEvaluation is stale
@@ -1689,8 +1715,24 @@ After your brief acknowledgment, output ONLY the tool call blocks — no extra t
       this.cancelGeneration('timeout');
     }, GEN_TIMEOUT_MS) : null;
 
+    // Token stall watchdog — same rationale as generateStream (see that function).
+    const STALL_TIMEOUT_MS_FC = 90_000;
+    let lastTokenTimeFC = Date.now();
+    let stallTimerFC = null;
+    const resetStallTimerFC = () => {
+      clearTimeout(stallTimerFC);
+      stallTimerFC = setTimeout(() => {
+        const elapsed = Math.round((Date.now() - lastTokenTimeFC) / 1000);
+        console.log(`[LLM] Token stall detected (function-calling) — no tokens for ${elapsed}s — aborting`);
+        this._lastAbortReason = 'timeout';
+        this.cancelGeneration('timeout');
+      }, STALL_TIMEOUT_MS_FC);
+    };
+
     let fullResponse = '';
     let collectedFunctionCalls = [];
+    resetStallTimerFC(); // Start stall watchdog on generation begin
+    console.log('[LLM] Function-calling generation started');
 
     try {
       this._compactHistory();
@@ -1752,6 +1794,7 @@ After your brief acknowledgment, output ONLY the tool call blocks — no extra t
           },
         } : {}),
         onResponseChunk: (chunk) => {
+          if (chunk.text) { lastTokenTimeFC = Date.now(); resetStallTimerFC(); }
           if (chunk.segmentType === 'thought') {
             if (onThinkingToken && chunk.text) onThinkingToken(chunk.text);
           } else if (chunk.text) {
@@ -1812,6 +1855,7 @@ After your brief acknowledgment, output ONLY the tool call blocks — no extra t
       throw error;
     } finally {
       clearTimeout(genTimeoutTimer);
+      clearTimeout(stallTimerFC);
       this.abortController = null;
       this._abortReason = null;
     }

@@ -58,21 +58,35 @@ const TOOL_NAME_ALIASES = {
  * that hallucinate names like "walmart", "amazon", "calculator" etc.
  */
 const VALID_TOOLS = new Set([
-  'write_file', 'read_file', 'edit_file', 'delete_file', 'rename_file', 'create_directory',
-  'list_directory', 'find_files', 'search_codebase', 'grep_search', 'get_project_structure',
-  'run_command', 'web_search', 'fetch_webpage',
+  // ── File tools ──
+  'write_file', 'read_file', 'edit_file', 'delete_file', 'rename_file', 'copy_file',
+  'append_to_file', 'diff_files', 'search_in_file', 'replace_in_files', 'undo_edit', 'list_undoable',
+  'get_file_info', 'open_file_in_editor',
+  // ── Directory tools ──
+  'create_directory', 'list_directory', 'find_files', 'get_project_structure',
+  // ── Search ──
+  'search_codebase', 'grep_search',
+  // ── Commands ──
+  'run_command', 'install_packages', 'check_port',
+  // ── Web/network ──
+  'web_search', 'fetch_webpage', 'http_request',
+  // ── Browser ──
   'browser_navigate', 'browser_snapshot', 'browser_click', 'browser_type',
   'browser_screenshot', 'browser_evaluate', 'browser_scroll', 'browser_back',
-  'browser_select', 'browser_hover', 'browser_press_key', 'browser_get_url',
-  'browser_get_content', 'browser_get_links', 'browser_wait_for_element',
+  'browser_select', 'browser_select_option', 'browser_hover', 'browser_press_key',
+  'browser_get_url', 'browser_get_content', 'browser_get_links',
+  'browser_wait', 'browser_wait_for', 'browser_wait_for_element',
   'browser_fill_form', 'browser_handle_dialog', 'browser_tabs', 'browser_close',
   'browser_drag', 'browser_console_messages', 'browser_file_upload', 'browser_resize',
-  'browser_select_option', 'browser_wait',
-  'save_memory', 'get_memory', 'list_memories', 'install_packages',
-  'get_file_info', 'analyze_error', 'git_status', 'git_commit', 'git_diff', 'git_log', 'git_branch',
-  'replace_in_files', 'undo_edit', 'delegate_task',
+  // ── Memory ──
+  'save_memory', 'get_memory', 'list_memories',
+  // ── Git ──
+  'git_status', 'git_commit', 'git_diff', 'git_log', 'git_branch', 'git_stash', 'git_reset',
+  // ── Analysis ──
+  'analyze_error', 'generate_image',
+  // ── Tasks/Planning ──
   'write_todos', 'update_todo', 'write_scratchpad', 'read_scratchpad',
-  'create_tool', 'use_tool',
+  'delegate_task', 'create_tool', 'use_tool',
 ]);
 
 /**

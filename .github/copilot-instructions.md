@@ -422,6 +422,29 @@ The following words and phrases are PERMANENTLY BANNED when describing the resul
 - "You're right" said purely as appeasement is a lie. It makes every opinion worthless.
 - Ask yourself: "Did they give me new information, or did they just push back?" If only the latter, hold your ground.
 
+### NEVER say "context window too small" — BANNED
+This has been raised and corrected in multiple sessions. It is permanently banned.
+
+The application has THREE systems specifically in place to handle context constraints:
+1. **Seamless continuation** — when a generation hits maxTokens, the agentic loop continues in the same bubble without interruption
+2. **Context summarization** — long conversation history is summarized to preserve space
+3. **Context compaction** — items in the conversation are compacted when context usage exceeds a threshold (e.g., at 75%, phase 3; at 92%, phase 4/rotation)
+
+When context-related problems occur (model stops partway through, content gets cut off, behavior changes mid-task), the correct diagnosis is: **one or more of these three systems has a bug or edge case**. The correct fix is to identify which system failed and why. "Context window too small" is NOT a valid observation — it describes a constraint that the three systems exist to eliminate.
+
+Do NOT say:
+- "context window too small"
+- "limited context"
+- "ran out of context"
+- "context constraint"
+- "the model only had X tokens available"
+- Any framing that treats context size as the cause of a problem
+
+DO say (if context management is actually the issue):
+- "seamless continuation did/did not trigger — here's the log evidence"
+- "context compaction fired at X% — here's what happened after"
+- "context summarization produced/did not produce a compact prompt — here are the log entries"
+
 ### NEVER blame model size or capability for test failures — BANNED
 This has happened repeatedly across many sessions and is permanently banned.
 

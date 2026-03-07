@@ -2227,10 +2227,11 @@ class MCPToolServer {
 
     // Always include file tools — every task type needs them
     hint += '### File Operations\n';
-    hint += '- **write_file**(filePath, content) — Create/overwrite a file. USE THIS for code, HTML, scripts.\n';
+    hint += '- **write_file**(filePath, content) — Create/overwrite a file. USE THIS for the FIRST section of any new file.\n';
+    hint += '- **append_to_file**(filePath, content) — Append content to end of a file WITHOUT overwriting. Use for 2nd, 3rd, etc. sections.\n';
     hint += '- **read_file**(filePath, startLine?, endLine?) — Read file contents.\n';
     hint += '- **edit_file**(filePath, oldText, newText) — Replace text in existing file.\n';
-    hint += '- **list_directory**(dirPath) — List files in directory. Call this FIRST — you do not know what files exist until you do.\n';
+    hint += '- **list_directory**(dirPath) — List files in directory.\n';
     hint += '- **run_command**(command) — Run a terminal/shell command.\n';
     hint += '\n';
 

@@ -1277,13 +1277,20 @@ function register(ctx) {
         // Text-mode tool-bubble state — declared at iteration scope so the conditional
         // done:true send after the _wasTruncated check can access them, and so continuations
         // re-attach the bubble by seeding from _pendingPartialBlock.
-        let _tb = _pendingPartialBlock || '';
+        // FIX: Do NOT seed _tb with the full _pendingPartialBlock content.
+        // Previous behaviour loaded 14,000–20,000+ chars into _tb, causing every token
+        // in later continuation passes to fire an IPC message with 20,000+ char paramsText.
+        // This grew unboundedly across passes and crashed the renderer process.
+        // Instead: start _tb empty each pass (only current-pass tokens accumulate),
+        // set _tStart=0 so the very first new token is included in the IPC payload,
+        // and seed _tName from the saved partial so the tool name is still known.
+        let _tb = '';
         let _tIdx = 9000;
         let _tStart = -1;
         let _tName = null;
         if (_pendingPartialBlock) {
           const _seedM = _pendingPartialBlock.match(/\{\s*"tool"\s*:\s*"([^"]+)"/);
-          if (_seedM) { _tStart = _seedM.index; _tName = _seedM[1]; }
+          if (_seedM) { _tStart = 0; _tName = _seedM[1]; } // _tStart=0: send from first new token
         }
 
         try {
@@ -1363,8 +1370,9 @@ function register(ctx) {
                 // Step 2: stream the accumulating content to the renderer
                 if (_tStart !== -1 && _tName && mainWindow && !mainWindow.isDestroyed()) {
                   const raw = _tb.slice(_tStart);
-                  // Pass full raw JSON — no truncation
-                  const paramsText = raw;
+                  // Cap IPC payload: only send a trailing window to prevent large messages
+                  // on the first pass (which can also grow to thousands of chars before EOS).
+                  const paramsText = raw.length > 4000 ? '\u2026' + raw.slice(-4000) : raw;
                   mainWindow.webContents.send('llm-tool-generating', {
                     callIndex: _tIdx,
                     functionName: _tName,
@@ -2389,14 +2397,14 @@ function register(ctx) {
         const executionStateBlock = getExecutionStateSummary() || '';
 
         const hasBrowserAction = toolResults.results.some(tr => tr.tool && tr.tool.startsWith('browser_'));
-        // Context-aware continuation: if all results this iteration were successful file writes,
-        // give the model explicit permission to stop rather than commanding another tool call.
-        const allSuccessfulWrites = toolResults.results.length > 0 &&
-          toolResults.results.every(tr => (tr.tool === 'write_file' || tr.tool === 'create_file') && tr.result?.success === true);
+        // continueInstruction — single unified signal for all non-browser cases.
+        // The allSuccessfulWrites branch was removed: it emitted "if task is complete, summarize"
+        // after ANY successful write batch, which caused small models (0.6B) to falsely stop
+        // after writing only the first of multiple required files. The general fallback below
+        // correctly handles both cases: task incomplete → model calls next tool,
+        // task complete → model provides final summary (per "when ALL steps are fully complete").
         const continueInstruction = hasBrowserAction
           ? `\n\nThe page snapshot above has element [ref=N] numbers. Do NOT call browser_snapshot — you already have it. Use browser_click, browser_type, etc. with [ref=N]. Output your next tool call as a fenced JSON block NOW.`
-          : allSuccessfulWrites
-          ? `\n\nFiles written successfully. If the task is complete, provide a final summary now. Only call another tool if there is genuinely more work remaining that has not been done yet.`
           : `\n\nOutput the next tool call to make progress. Only provide a final summary when ALL steps are fully complete.`;
         
         // Build the iteration prompt with structured context ordering:

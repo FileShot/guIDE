@@ -1557,31 +1557,35 @@ ${e.message}`,
           const writeExt = writeFilePath.includes('.') ? writeFilePath.split('.').pop()?.toLowerCase() || '' : '';
           const writeLangMap: Record<string, string> = { ts: 'typescript', tsx: 'tsx', js: 'javascript', jsx: 'jsx', py: 'python', rs: 'rust', go: 'go', java: 'java', cs: 'csharp', cpp: 'cpp', c: 'c', html: 'html', css: 'css', json: 'json', yaml: 'yaml', yml: 'yaml', md: 'markdown', sh: 'bash', bat: 'batch', txt: 'text', xml: 'xml', sql: 'sql' };
           const writeLang = writeLangMap[writeExt] || writeExt || 'code';
-          if (result) {
+          if (isWriteTool && writeContent) {
+            // Write tools: render flat inline — always visible, no dropdown
+            const isWriteOk = !result || result.isOk;
+            elements.push(
+              <div key={`t-write-${i}`} className="my-1.5">
+                <div className="flex items-center gap-1.5 mb-1 px-0.5">
+                  {isWriteOk ? <Check size={11} className="text-[#89d185] flex-shrink-0" /> : <X size={11} className="text-[#f14c4c] flex-shrink-0" />}
+                  <span className="text-[11px] text-[#d4d4d4] font-medium">{getToolLabel(toolCall, isWriteOk ? 'ok' : 'fail')}</span>
+                </div>
+                <CodeBlock code={writeContent} language={writeLang} onApply={() => onApplyCode(currentFile, writeContent)} isToolCall={true} />
+              </div>
+            );
+          } else if (result) {
             allToolElements.push(
               <CollapsibleToolBlock key={`t-${i}`} label={getToolLabel(toolCall, result.isOk ? 'ok' : 'fail')} icon={result.isOk ? '✓' : '✗'}>
-                {isWriteTool && writeContent ? (
-                  <CodeBlock code={writeContent} language={writeLang} onApply={() => onApplyCode(currentFile, writeContent)} isToolCall={true} />
-                ) : (
-                  <div>
-                    <div className="text-[10px] text-[#858585] mb-1 font-medium tracking-wide">PARAMETERS</div>
-                    <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2 mb-2 max-h-[300px] overflow-y-auto">{code}</pre>
-                    <div className="border-t border-[#333] pt-2">
-                      <div className={`text-[10px] mb-1 font-medium tracking-wide ${result.isOk ? 'text-[#89d185]' : 'text-[#f14c4c]'}`}>RESULT</div>
-                      <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2">{result.text}</pre>
-                    </div>
+                <div>
+                  <div className="text-[10px] text-[#858585] mb-1 font-medium tracking-wide">PARAMETERS</div>
+                  <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2 mb-2 max-h-[300px] overflow-y-auto">{code}</pre>
+                  <div className="border-t border-[#333] pt-2">
+                    <div className={`text-[10px] mb-1 font-medium tracking-wide ${result.isOk ? 'text-[#89d185]' : 'text-[#f14c4c]'}`}>RESULT</div>
+                    <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2">{result.text}</pre>
                   </div>
-                )}
+                </div>
               </CollapsibleToolBlock>
             );
           } else {
             allToolElements.push(
               <CollapsibleToolBlock key={`t-${i}`} label={getToolLabel(toolCall, 'ok')} icon="✓">
-                {isWriteTool && writeContent ? (
-                  <CodeBlock code={writeContent} language={writeLang} onApply={() => onApplyCode(currentFile, writeContent)} isToolCall={true} />
-                ) : (
-                  <div className="text-[11px] text-[#858585]">Completed</div>
-                )}
+                <div className="text-[11px] text-[#858585]">Completed</div>
               </CollapsibleToolBlock>
             );
           }
@@ -1695,31 +1699,35 @@ ${e.message}`,
               const inlineWriteExt = inlineWriteFilePath.includes('.') ? inlineWriteFilePath.split('.').pop()?.toLowerCase() || '' : '';
               const inlineLangMap: Record<string, string> = { ts: 'typescript', tsx: 'tsx', js: 'javascript', jsx: 'jsx', py: 'python', rs: 'rust', go: 'go', java: 'java', cs: 'csharp', cpp: 'cpp', c: 'c', html: 'html', css: 'css', json: 'json', yaml: 'yaml', yml: 'yaml', md: 'markdown', sh: 'bash', bat: 'batch', txt: 'text', xml: 'xml', sql: 'sql' };
               const inlineWriteLang = inlineLangMap[inlineWriteExt] || inlineWriteExt || 'code';
-              if (result) {
+              if (isInlineWriteTool && inlineWriteContent) {
+                // Write tools: render flat inline — always visible, no dropdown
+                const isInlineWriteOk = !result || result.isOk;
+                elements.push(
+                  <div key={`inline-write-${i}-${j}`} className="my-1.5">
+                    <div className="flex items-center gap-1.5 mb-1 px-0.5">
+                      {isInlineWriteOk ? <Check size={11} className="text-[#89d185] flex-shrink-0" /> : <X size={11} className="text-[#f14c4c] flex-shrink-0" />}
+                      <span className="text-[11px] text-[#d4d4d4] font-medium">{getToolLabel(seg.toolCall, isInlineWriteOk ? 'ok' : 'fail')}</span>
+                    </div>
+                    <CodeBlock code={inlineWriteContent} language={inlineWriteLang} onApply={() => onApplyCode(currentFile, inlineWriteContent)} isToolCall={true} />
+                  </div>
+                );
+              } else if (result) {
                 allToolElements.push(
                   <CollapsibleToolBlock key={`inline-${i}-${j}-${allToolElements.length}`} label={getToolLabel(seg.toolCall, result.isOk ? 'ok' : 'fail')} icon={result.isOk ? '✓' : '✗'}>
-                    {isInlineWriteTool && inlineWriteContent ? (
-                      <CodeBlock code={inlineWriteContent} language={inlineWriteLang} onApply={() => onApplyCode(currentFile, inlineWriteContent)} isToolCall={true} />
-                    ) : (
-                      <div>
-                        <div className="text-[10px] text-[#858585] mb-1 font-medium tracking-wide">PARAMETERS</div>
-                        <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2 mb-2 max-h-[300px] overflow-y-auto">{seg.content}</pre>
-                        <div className="border-t border-[#333] pt-2">
-                          <div className={`text-[10px] mb-1 font-medium tracking-wide ${result.isOk ? 'text-[#89d185]' : 'text-[#f14c4c]'}`}>RESULT</div>
-                          <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2">{result.text}</pre>
-                        </div>
+                    <div>
+                      <div className="text-[10px] text-[#858585] mb-1 font-medium tracking-wide">PARAMETERS</div>
+                      <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2 mb-2 max-h-[300px] overflow-y-auto">{seg.content}</pre>
+                      <div className="border-t border-[#333] pt-2">
+                        <div className={`text-[10px] mb-1 font-medium tracking-wide ${result.isOk ? 'text-[#89d185]' : 'text-[#f14c4c]'}`}>RESULT</div>
+                        <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2">{result.text}</pre>
                       </div>
-                    )}
+                    </div>
                   </CollapsibleToolBlock>
                 );
               } else {
                 allToolElements.push(
                   <CollapsibleToolBlock key={`inline-${i}-${j}-${allToolElements.length}`} label={getToolLabel(seg.toolCall, 'ok')} icon="✓">
-                    {isInlineWriteTool && inlineWriteContent ? (
-                      <CodeBlock code={inlineWriteContent} language={inlineWriteLang} onApply={() => onApplyCode(currentFile, inlineWriteContent)} isToolCall={true} />
-                    ) : (
-                      <div className="text-[11px] text-[#858585]">Completed</div>
-                    )}
+                    <div className="text-[11px] text-[#858585]">Completed</div>
                   </CollapsibleToolBlock>
                 );
               }
@@ -1749,32 +1757,51 @@ ${e.message}`,
       // Only add tool group if content parsing didn't already find inline tool calls
       const hasToolGroup = parts.some((p: any) => p?.key === 'tcg-all');
       if (!hasToolGroup) {
-        const toolGroup = (
-          <ToolCallGroup key="msg-tools" count={msg.toolsUsed.length}>
-            {msg.toolsUsed.map((tu, i) => {
-              const isMsgWriteTool = ['write_file', 'create_file', 'edit_file', 'append_to_file'].includes(tu.tool);
-              const msgWriteContent = isMsgWriteTool ? tu.params?.content as string | undefined : undefined;
-              const msgWriteFilePath = (tu.params?.filePath as string || '');
-              const msgWriteExt = msgWriteFilePath.includes('.') ? msgWriteFilePath.split('.').pop()?.toLowerCase() || '' : '';
-              const msgLangMap: Record<string, string> = { ts: 'typescript', tsx: 'tsx', js: 'javascript', jsx: 'jsx', py: 'python', rs: 'rust', go: 'go', java: 'java', cs: 'csharp', cpp: 'cpp', c: 'c', html: 'html', css: 'css', json: 'json', yaml: 'yaml', yml: 'yaml', md: 'markdown', sh: 'bash', bat: 'batch', txt: 'text', xml: 'xml', sql: 'sql' };
-              const msgWriteLang = msgLangMap[msgWriteExt] || msgWriteExt || 'code';
-              return (
-                <CollapsibleToolBlock
-                  key={`msg-tu-${i}`}
-                  label={getToolLabel(tu, tu.result?.success !== false ? 'ok' : 'fail')}
-                  icon={tu.result?.success !== false ? '✓' : '✗'}
-                >
-                  {isMsgWriteTool && msgWriteContent ? (
-                    <CodeBlock code={msgWriteContent} language={msgWriteLang} onApply={() => onApplyCode(currentFile, msgWriteContent)} isToolCall={true} />
-                  ) : (
+        const WRITE_TOOLS_MSG = ['write_file', 'create_file', 'edit_file', 'append_to_file'];
+        const MSG_LANG_MAP: Record<string, string> = { ts: 'typescript', tsx: 'tsx', js: 'javascript', jsx: 'jsx', py: 'python', rs: 'rust', go: 'go', java: 'java', cs: 'csharp', cpp: 'cpp', c: 'c', html: 'html', css: 'css', json: 'json', yaml: 'yaml', yml: 'yaml', md: 'markdown', sh: 'bash', bat: 'batch', txt: 'text', xml: 'xml', sql: 'sql' };
+        const writeFlatNodes: React.ReactNode[] = [];
+        const nonWriteMsgTools: MCPToolResult[] = [];
+        msg.toolsUsed.forEach((tu, i) => {
+          const isMsgWriteTool = WRITE_TOOLS_MSG.includes(tu.tool);
+          const msgWriteContent = isMsgWriteTool ? tu.params?.content as string | undefined : undefined;
+          if (isMsgWriteTool && msgWriteContent) {
+            const msgWriteFilePath = (tu.params?.filePath as string || '');
+            const msgWriteExt = msgWriteFilePath.includes('.') ? msgWriteFilePath.split('.').pop()?.toLowerCase() || '' : '';
+            const msgWriteLang = MSG_LANG_MAP[msgWriteExt] || msgWriteExt || 'code';
+            const isOk = tu.result?.success !== false;
+            writeFlatNodes.push(
+              <div key={`msg-tu-flat-${i}`} className="my-1.5">
+                <div className="flex items-center gap-1.5 mb-1 px-0.5">
+                  {isOk ? <Check size={11} className="text-[#89d185] flex-shrink-0" /> : <X size={11} className="text-[#f14c4c] flex-shrink-0" />}
+                  <span className="text-[11px] text-[#d4d4d4] font-medium">{getToolLabel(tu, isOk ? 'ok' : 'fail')}</span>
+                </div>
+                <CodeBlock code={msgWriteContent} language={msgWriteLang} onApply={() => onApplyCode(currentFile, msgWriteContent)} isToolCall={true} />
+              </div>
+            );
+          } else {
+            nonWriteMsgTools.push(tu);
+          }
+        });
+        const extraNodes: React.ReactNode[] = [...writeFlatNodes];
+        if (nonWriteMsgTools.length > 0) {
+          extraNodes.push(
+            <ToolCallGroup key="msg-tools" count={nonWriteMsgTools.length}>
+              {nonWriteMsgTools.map((tu, i) => {
+                const isOk = tu.result?.success !== false;
+                return (
+                  <CollapsibleToolBlock
+                    key={`msg-tu-${i}`}
+                    label={getToolLabel(tu, isOk ? 'ok' : 'fail')}
+                    icon={isOk ? '✓' : '✗'}
+                  >
                     <div className="text-[11px] text-[#858585]">Completed</div>
-                  )}
-                </CollapsibleToolBlock>
-              );
-            })}
-          </ToolCallGroup>
-        );
-        return [toolGroup, ...parts];
+                  </CollapsibleToolBlock>
+                );
+              })}
+            </ToolCallGroup>
+          );
+        }
+        return [...extraNodes, ...parts];
       }
     }
     return parts;
@@ -2567,103 +2594,152 @@ ${e.message}`,
                         </div>
                       </div>
                     )}
-                    {generatingToolCalls.length > 0 && (
-                      <div className="mt-2">
-                        <ToolCallGroup count={generatingToolCalls.length}>
-                          {generatingToolCalls.map((tc) => {
-                            // Extract meaningful detail from partial params text as it streams
-                            let partialDetail = '';
-                            try {
-                              const fpMatch = tc.paramsText.match(/"filePath"\s*:\s*"([^"]+)"/);
-                              const urlMatch = tc.paramsText.match(/"url"\s*:\s*"([^"]+)"/);
-                              const qMatch = tc.paramsText.match(/"query"\s*:\s*"([^"]+)"/);
-                              if (fpMatch) {
-                                const fp = fpMatch[1];
-                                partialDetail = fp.includes('/') ? fp.split('/').pop() || fp : fp.includes('\\') ? fp.split('\\').pop() || fp : fp;
-                              } else if (urlMatch) {
-                                try { partialDetail = new URL(urlMatch[1]).hostname; } catch { partialDetail = urlMatch[1].substring(0, 30); }
-                              } else if (qMatch) {
-                                partialDetail = qMatch[1].substring(0, 25) + (qMatch[1].length > 25 ? '\u2026' : '');
-                              }
-                            } catch {}
-                            const genLabel = partialDetail ? `${tc.functionName}: ${partialDetail}` : tc.functionName;
+                    {generatingToolCalls.length > 0 && (() => {
+                      const WRITE_TOOLS_GEN = ['write_file', 'create_file', 'edit_file', 'append_to_file'];
+                      const LANG_MAP_GEN: Record<string, string> = { ts: 'typescript', tsx: 'tsx', js: 'javascript', jsx: 'jsx', py: 'python', rs: 'rust', go: 'go', java: 'java', cs: 'csharp', cpp: 'cpp', c: 'c', html: 'html', css: 'css', json: 'json', yaml: 'yaml', yml: 'yaml', md: 'markdown', sh: 'bash', bat: 'batch', txt: 'text', xml: 'xml', sql: 'sql' };
+                      const writeGenTools = generatingToolCalls.filter(tc => WRITE_TOOLS_GEN.includes(tc.functionName));
+                      const nonWriteGenTools = generatingToolCalls.filter(tc => !WRITE_TOOLS_GEN.includes(tc.functionName));
+                      return (
+                        <>
+                          {writeGenTools.map((tc) => {
+                            const fpMatch = tc.paramsText.match(/"filePath"\s*:\s*"([^"]+)"/);
+                            const fp = fpMatch ? fpMatch[1] : '';
+                            const fname = fp.includes('/') ? fp.split('/').pop() || fp : fp.includes('\\') ? fp.split('\\').pop() || fp : fp;
+                            const ext = fp.includes('.') ? fp.split('.').pop()?.toLowerCase() || '' : '';
+                            const lang = LANG_MAP_GEN[ext] || ext || 'code';
+                            const contentMatch = tc.paramsText.match(/"content"\s*:\s*"([\s\S]*)/);
+                            let partialContent = '';
+                            if (contentMatch) {
+                              partialContent = contentMatch[1].replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+                            }
                             return (
-                              <CollapsibleToolBlock key={`gen-${tc.callIndex}`} label={genLabel} icon="\u29d7">
-                                <div>
-                                  <div className="flex items-center gap-2 mb-2">
-                                    <Loader2 size={12} className="animate-spin text-[#007acc]" />
-                                    <span className="text-[11px] text-[#858585]">Generating tool call\u2026</span>
-                                  </div>
-                                  {tc.paramsText && (
-                                    <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2 max-h-[180px] overflow-y-auto">{tc.paramsText}</pre>
-                                  )}
+                              <div key={`gen-${tc.callIndex}`} className="mt-2">
+                                <div className="flex items-center gap-1.5 mb-1 px-0.5">
+                                  <Loader2 size={10} className="animate-spin text-[#007acc] flex-shrink-0" />
+                                  <span className="text-[11px] text-[#dcdcaa] font-medium">{fname || tc.functionName}</span>
+                                  <span className="text-[9px] text-[#858585] animate-pulse ml-1">writing…</span>
                                 </div>
-                              </CollapsibleToolBlock>
+                                {partialContent ? (
+                                  <CodeBlock code={partialContent} language={lang} onApply={() => {}} isToolCall={true} />
+                                ) : tc.paramsText ? (
+                                  <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2 max-h-[300px] overflow-y-auto">{tc.paramsText}</pre>
+                                ) : null}
+                              </div>
                             );
                           })}
-                        </ToolCallGroup>
-                      </div>
-                    )}
-                    {(completedStreamingTools.length > 0 || executingTools.length > 0) && (
-                      <div className="mt-2">
-                        <ToolCallGroup count={completedStreamingTools.length + executingTools.length}>
-                          {completedStreamingTools.map((toolData, i) => {
-                            const isDoneWriteTool = ['write_file', 'create_file', 'edit_file', 'append_to_file'].includes(toolData.tool);
-                            const doneWriteContent = isDoneWriteTool ? toolData.params?.content as string | undefined : undefined;
+                          {nonWriteGenTools.length > 0 && (
+                            <div className="mt-2">
+                              <ToolCallGroup count={nonWriteGenTools.length}>
+                                {nonWriteGenTools.map((tc) => {
+                                  let partialDetail = '';
+                                  try {
+                                    const fpMatch = tc.paramsText.match(/"filePath"\s*:\s*"([^"]+)"/);
+                                    const urlMatch = tc.paramsText.match(/"url"\s*:\s*"([^"]+)"/);
+                                    const qMatch = tc.paramsText.match(/"query"\s*:\s*"([^"]+)"/);
+                                    if (fpMatch) {
+                                      const fp = fpMatch[1];
+                                      partialDetail = fp.includes('/') ? fp.split('/').pop() || fp : fp.includes('\\') ? fp.split('\\').pop() || fp : fp;
+                                    } else if (urlMatch) {
+                                      try { partialDetail = new URL(urlMatch[1]).hostname; } catch { partialDetail = urlMatch[1].substring(0, 30); }
+                                    } else if (qMatch) {
+                                      partialDetail = qMatch[1].substring(0, 25) + (qMatch[1].length > 25 ? '…' : '');
+                                    }
+                                  } catch {}
+                                  const genLabel = partialDetail ? `${tc.functionName}: ${partialDetail}` : tc.functionName;
+                                  return (
+                                    <CollapsibleToolBlock key={`gen-${tc.callIndex}`} label={genLabel} icon="⧗">
+                                      <div>
+                                        <div className="flex items-center gap-2 mb-2">
+                                          <Loader2 size={12} className="animate-spin text-[#007acc]" />
+                                          <span className="text-[11px] text-[#858585]">Generating tool call…</span>
+                                        </div>
+                                        {tc.paramsText && (
+                                          <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2 max-h-[180px] overflow-y-auto">{tc.paramsText}</pre>
+                                        )}
+                                      </div>
+                                    </CollapsibleToolBlock>
+                                  );
+                                })}
+                              </ToolCallGroup>
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
+                    {(completedStreamingTools.length > 0 || executingTools.length > 0) && (() => {
+                      const WRITE_TOOLS_LIVE = ['write_file', 'create_file', 'edit_file', 'append_to_file'];
+                      const LANG_MAP_LIVE: Record<string, string> = { ts: 'typescript', tsx: 'tsx', js: 'javascript', jsx: 'jsx', py: 'python', rs: 'rust', go: 'go', java: 'java', cs: 'csharp', cpp: 'cpp', c: 'c', html: 'html', css: 'css', json: 'json', yaml: 'yaml', yml: 'yaml', md: 'markdown', sh: 'bash', bat: 'batch', txt: 'text', xml: 'xml', sql: 'sql' };
+                      const nonWriteDone = completedStreamingTools.filter(td => !WRITE_TOOLS_LIVE.includes(td.tool));
+                      const nonWriteExec = executingTools.filter(td => !WRITE_TOOLS_LIVE.includes(td.tool));
+                      return (
+                        <>
+                          {completedStreamingTools.filter(td => WRITE_TOOLS_LIVE.includes(td.tool)).map((toolData, i) => {
                             const doneFilePath = ((toolData.params?.filePath || toolData.params?.fileName || '') as string);
                             const doneExt = doneFilePath.includes('.') ? doneFilePath.split('.').pop()?.toLowerCase() || '' : '';
-                            const doneLangMap: Record<string, string> = { ts: 'typescript', tsx: 'tsx', js: 'javascript', jsx: 'jsx', py: 'python', rs: 'rust', go: 'go', java: 'java', cs: 'csharp', cpp: 'cpp', c: 'c', html: 'html', css: 'css', json: 'json', yaml: 'yaml', yml: 'yaml', md: 'markdown', sh: 'bash', bat: 'batch', txt: 'text', xml: 'xml', sql: 'sql' };
-                            const doneLang = doneLangMap[doneExt] || doneExt || 'code';
+                            const doneLang = LANG_MAP_LIVE[doneExt] || doneExt || 'code';
+                            const doneContent = toolData.params?.content as string | undefined;
                             return (
-                              <CollapsibleToolBlock key={`done-${i}`} label={getToolLabel(toolData, 'ok')} icon="✓">
-                                {isDoneWriteTool && doneWriteContent ? (
-                                  <CodeBlock code={doneWriteContent} language={doneLang} onApply={() => onApplyCode(currentFile, doneWriteContent)} isToolCall={true} />
+                              <div key={`done-flat-${i}`} className="mt-2">
+                                <div className="flex items-center gap-1.5 mb-1 px-0.5">
+                                  <Check size={11} className="text-[#89d185] flex-shrink-0" />
+                                  <span className="text-[11px] text-[#d4d4d4] font-medium">{getToolLabel(toolData, 'ok')}</span>
+                                </div>
+                                {doneContent ? (
+                                  <CodeBlock code={doneContent} language={doneLang} onApply={() => onApplyCode(currentFile, doneContent)} isToolCall={true} />
                                 ) : (
-                                  <div className="text-[11px] text-[#858585]">Completed</div>
+                                  <div className="text-[11px] text-[#858585] px-0.5">Completed</div>
                                 )}
-                              </CollapsibleToolBlock>
+                              </div>
                             );
                           })}
-                          {executingTools.map((toolData, i) => {
-                            const isCodeWriteTool = ['write_file', 'create_file', 'edit_file', 'append_to_file'].includes(toolData.tool);
-                            const codeContent = toolData.params?.content as string | undefined;
+                          {executingTools.filter(td => WRITE_TOOLS_LIVE.includes(td.tool)).map((toolData, i) => {
                             const filePath = ((toolData.params?.filePath || toolData.params?.fileName || '') as string);
                             const ext = filePath.includes('.') ? filePath.split('.').pop()?.toLowerCase() || '' : '';
-                            const langMap: Record<string, string> = {
-                              ts: 'typescript', tsx: 'tsx', js: 'javascript', jsx: 'jsx',
-                              py: 'python', rs: 'rust', go: 'go', java: 'java', cs: 'csharp',
-                              cpp: 'cpp', c: 'c', html: 'html', css: 'css', json: 'json',
-                              yaml: 'yaml', yml: 'yaml', md: 'markdown', sh: 'bash',
-                              bat: 'batch', txt: 'text', xml: 'xml', sql: 'sql',
-                            };
-                            const language = langMap[ext] || ext || 'code';
+                            const language = LANG_MAP_LIVE[ext] || ext || 'code';
+                            const codeContent = toolData.params?.content as string | undefined;
                             return (
-                              <CollapsibleToolBlock key={`exec-${i}`} label={getToolLabel(toolData, 'running')} icon="⟳">
-                                <div>
-                                  <div className="flex items-center gap-2 mb-2">
-                                    <Loader2 size={12} className="animate-spin text-[#007acc]" />
-                                    <span className="text-[11px] text-[#858585]">Executing...</span>
-                                  </div>
-                                  {isCodeWriteTool && codeContent ? (
-                                    <CodeBlock
-                                      code={codeContent}
-                                      language={language}
-                                      onApply={() => {}}
-                                      isToolCall={true}
-                                    />
-                                  ) : toolData.params && Object.keys(toolData.params).length > 0 ? (
-                                    <>
-                                      <div className="text-[10px] text-[#858585] mb-1 font-medium tracking-wide">PARAMETERS</div>
-                                      <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2">{JSON.stringify(toolData.params, null, 2)}</pre>
-                                    </>
-                                  ) : null}
+                              <div key={`exec-flat-${i}`} className="mt-2">
+                                <div className="flex items-center gap-1.5 mb-1 px-0.5">
+                                  <Loader2 size={10} className="animate-spin text-[#007acc] flex-shrink-0" />
+                                  <span className="text-[11px] text-[#dcdcaa] font-medium">{getToolLabel(toolData, 'running')}</span>
+                                  <span className="text-[9px] text-[#858585] animate-pulse ml-1">executing…</span>
                                 </div>
-                              </CollapsibleToolBlock>
+                                {codeContent ? (
+                                  <CodeBlock code={codeContent} language={language} onApply={() => {}} isToolCall={true} />
+                                ) : null}
+                              </div>
                             );
                           })}
-                        </ToolCallGroup>
-                      </div>
-                    )}
+                          {(nonWriteDone.length > 0 || nonWriteExec.length > 0) && (
+                            <div className="mt-2">
+                              <ToolCallGroup count={nonWriteDone.length + nonWriteExec.length}>
+                                {nonWriteDone.map((toolData, i) => (
+                                  <CollapsibleToolBlock key={`done-${i}`} label={getToolLabel(toolData, 'ok')} icon="✓">
+                                    <div className="text-[11px] text-[#858585]">Completed</div>
+                                  </CollapsibleToolBlock>
+                                ))}
+                                {nonWriteExec.map((toolData, i) => (
+                                  <CollapsibleToolBlock key={`exec-${i}`} label={getToolLabel(toolData, 'running')} icon="⟳">
+                                    <div>
+                                      <div className="flex items-center gap-2 mb-2">
+                                        <Loader2 size={12} className="animate-spin text-[#007acc]" />
+                                        <span className="text-[11px] text-[#858585]">Executing...</span>
+                                      </div>
+                                      {toolData.params && Object.keys(toolData.params).length > 0 ? (
+                                        <>
+                                          <div className="text-[10px] text-[#858585] mb-1 font-medium tracking-wide">PARAMETERS</div>
+                                          <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2">{JSON.stringify(toolData.params, null, 2)}</pre>
+                                        </>
+                                      ) : null}
+                                    </div>
+                                  </CollapsibleToolBlock>
+                                ))}
+                              </ToolCallGroup>
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
               );

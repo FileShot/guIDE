@@ -1182,6 +1182,20 @@ function register(ctx) {
               _ftRetryText = (currentPrompt.systemContext || '') + (currentPrompt.userMessage || '');
               _ftRetryTokens = estimateTokens(_ftRetryText);
             }
+            // Step 3: If still tight after stripping dynamic context, strip tool
+            // descriptions from the static prompt. Better to respond without tools than
+            // to overflow and truncate mid-tool-call.
+            if (totalCtx - _ftRetryTokens < Math.floor(totalCtx * 0.15)) {
+              _staticPromptCache.clear();
+              currentPrompt = {
+                systemContext: buildStaticPrompt('chat'), // 'chat' skips tool injection
+                userMessage: message
+              };
+              _ftRetryText = (currentPrompt.systemContext || '') + (currentPrompt.userMessage || '');
+              _ftRetryTokens = estimateTokens(_ftRetryText);
+              _staticPromptCache.clear(); // Clear so subsequent iterations get tools back
+              console.log(`[AI Chat] Overflow step 3: stripped tools from static prompt, now ~${_ftRetryTokens} tokens`);
+            }
             if (totalCtx - _ftRetryTokens < 128) {
               // Still too tight — cap effectiveMaxTokens to whatever room remains
               console.log(`[AI Chat] Context extremely constrained: reducing response budget`);
@@ -2142,7 +2156,7 @@ function register(ctx) {
           // No more tool calls - check for code-dump nudge opportunity.
           // If the model produced a long response with code blocks but no formal tool calls,
           // and nudges remain, give it one chance to re-try with proper tool format.
-          const _hasCodeBlocks = /```(?:html?|css|javascript|js|typescript|ts|python|py|json)\s*\n[\s\S]{50,}```/i.test(responseText);
+          const _hasCodeBlocks = /```(?:html?|css|javascript|js|typescript|ts|python|py|json)\s*\n[\s\S]{50,}/i.test(responseText);
           if (_hasCodeBlocks && nudgesRemaining > 0 && iteration < effectiveMaxIterations - 1) {
             nudgesRemaining--;
             console.log(`[AI Chat] Code-dump nudge: model produced code blocks without tool calls. Nudges remaining: ${nudgesRemaining}`);

@@ -405,6 +405,38 @@ function parseToolCalls(text) {
     }
   }
 
+  // Method 1.5: Unclosed code fence recovery for truncated tool calls.
+  // When the model generates ```json\n{"tool":"write_file","params":{...
+  // but the context limit truncates the response before the closing ```,
+  // Method 1's regex never matches (requires closing ```). Detect unclosed
+  // fences at the END of the response and recover partial write_file/create_file content.
+  if (toolCalls.length === 0) {
+    const unclosedFenceMatch = /```(?:tool_call|tool|json)[^\n]*\n([\s\S]+)$/.exec(cleanedText);
+    if (unclosedFenceMatch) {
+      const partial = unclosedFenceMatch[1].trim();
+      // Only recover if it looks like a tool call (has "tool" key)
+      const toolNameMatch = partial.match(/"tool"\s*:\s*"(write_file|create_file)"/);
+      const fpMatch = partial.match(/"filePath"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+      const contentKeyResult = /"content"\s*:\s*"/.exec(partial);
+      let recoveredContent = '';
+      if (contentKeyResult) {
+        const rawTail = partial.substring(contentKeyResult.index + contentKeyResult[0].length);
+        recoveredContent = rawTail
+          .replace(/\\n/g, '\n')
+          .replace(/\\r/g, '\r')
+          .replace(/\\t/g, '\t')
+          .replace(/\\"/g, '"')
+          .replace(/\\\\/g, '\\');
+      }
+      if (toolNameMatch && fpMatch && fpMatch[1] && recoveredContent.length > 50) {
+        const toolName = toolNameMatch[1];
+        const filePath = fpMatch[1];
+        console.log(`[MCP] Method 1.5: unclosed fence recovery: ${toolName} → ${filePath} (${recoveredContent.length} chars from truncated response)`);
+        toolCalls.push({ tool: toolName, params: { filePath, content: recoveredContent } });
+      }
+    }
+  }
+
   // Also try to find raw JSON objects with "tool" or "name" key outside code blocks
   // Handles quoted, single-quoted, and unquoted key formats
   // Skip this expensive O(n) pass if we already found tool calls in fenced blocks
@@ -1080,7 +1112,18 @@ function _detectFallbackFileOperations(responseText, userMessage) {
   // on ANY code block with a language tag (```js, ```python), causing phantom write_file/
   // create_directory calls when the model was explaining concepts or showing code examples.
   // Explicit file-creation intent language is the only reliable signal.
-  if (!hasFileIntent) return results;
+  // However, when the response is PREDOMINANTLY code blocks (>60% by character count),
+  // the model likely intended to create files, not explain concepts. Allow fallback in that case.
+  if (!hasFileIntent && !hasCodeBlocksWithLang) return results;
+  if (!hasFileIntent && hasCodeBlocksWithLang) {
+    // Measure code block ratio to avoid false positives on explanatory code
+    const _cbRegex = /```\w+\s*\n([\s\S]*?)```/g;
+    let _cbMatch, _totalCodeChars = 0;
+    while ((_cbMatch = _cbRegex.exec(responseText)) !== null) _totalCodeChars += _cbMatch[1].length;
+    const _codeRatio = responseText.length > 0 ? _totalCodeChars / responseText.length : 0;
+    if (_codeRatio < 0.6) return results; // Too much prose — likely explaining, not creating
+    console.log('[MCP] Fallback: code blocks compose ' + Math.round(_codeRatio * 100) + '% of response — treating as file creation');
+  }
 
   const codeBlockRegex = /```(\w+)?\s*\n([\s\S]*?)```/g;
   let match;
@@ -1177,6 +1220,26 @@ function _detectFallbackFileOperations(responseText, userMessage) {
       }
       results.push({ tool: 'write_file', params: { filePath, content } });
     }
+  }
+
+  // Dedup write_file calls by filePath — keep longest content per file.
+  // When the model repeats/restarts code blocks, fallback produces multiple
+  // write_file calls for the same file. Only the longest version matters.
+  const _writesByPath = new Map();
+  for (const r of results) {
+    if (r.tool === 'write_file' && r.params?.filePath) {
+      const existing = _writesByPath.get(r.params.filePath);
+      if (!existing || (r.params.content || '').length > (existing.params.content || '').length) {
+        _writesByPath.set(r.params.filePath, r);
+      }
+    }
+  }
+  const _writeCount = results.filter(r => r.tool === 'write_file').length;
+  if (_writesByPath.size > 0 && _writesByPath.size < _writeCount) {
+    const _keepSet = new Set(_writesByPath.values());
+    const _deduped = results.filter(r => r.tool !== 'write_file' || _keepSet.has(r));
+    console.log(`[MCP] Fallback dedup by filePath: ${results.length} → ${_deduped.length} calls`);
+    return _deduped;
   }
 
   return results;

@@ -66,7 +66,11 @@ export function markdownInlineToHTML(text: string): string {
   const output: string[] = [];
   let inList = false;
 
-  for (const line of lines) {
+  for (let line of lines) {
+    // Escape raw HTML tags so model output doesn't render as actual DOM elements.
+    // This runs BEFORE markdown processing, so markdown-generated HTML (from
+    // applyInlineMarkdown) is unaffected. Only raw model-output HTML is escaped.
+    line = line.replace(/</g, '&lt;').replace(/>/g, '&gt;');
     if (/^#{4} /.test(line)) {
       if (inList) { output.push('</ul>'); inList = false; }
       output.push(`<h4>${applyInlineMarkdown(line.slice(5))}</h4>`);

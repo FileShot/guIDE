@@ -108,7 +108,7 @@ function register(ctx) {
   ipcMain.handle('ai-chat', async (_, message, context) => {
     const mainWindow = ctx.getMainWindow();
     const MAX_AGENTIC_ITERATIONS = context?.maxIterations || _readConfig()?.userSettings?.maxAgenticIterations || 100; // Default 100; overridable via Settings UI
-    const STUCK_THRESHOLD = 2; // Same tool+params repeated this many times = stuck
+    const STUCK_THRESHOLD = 3; // Same tool+params repeated this many times = stuck
     const CYCLE_MIN_REPEATS = 3; // A 2-4 tool cycle must repeat this many times to be flagged
     let _completenessCheckedFiles = null; // One-shot guard for post-write completeness checks
     
@@ -518,7 +518,7 @@ function register(ctx) {
             // Enable via Settings → enableLoopDetection: true.
             for (const tr of iterationToolResults) {
               const p = tr.params || {};
-              const paramsHash = `${p.filePath || p.url || p.ref || p.query || p.command || p.selector || ''}:${p.text || ''}`.substring(0, 200);
+              const paramsHash = `${p.filePath || p.dirPath || p.url || p.ref || p.query || p.command || p.selector || ''}:${(p.text || p.content || '').substring(0, 80)}`.substring(0, 200);
               recentCloudToolCalls.push({ tool: tr.tool, paramsHash });
             }
             if (recentCloudToolCalls.length > 20) recentCloudToolCalls = recentCloudToolCalls.slice(-20);
@@ -1182,19 +1182,23 @@ function register(ctx) {
               _ftRetryText = (currentPrompt.systemContext || '') + (currentPrompt.userMessage || '');
               _ftRetryTokens = estimateTokens(_ftRetryText);
             }
-            // Step 3: If still tight after stripping dynamic context, strip tool
-            // descriptions from the static prompt. Better to respond without tools than
-            // to overflow and truncate mid-tool-call.
+            // Step 3: If still tight after stripping dynamic context, use a minimal
+            // tool hint instead of the full tool prompt. The model keeps essential file
+            // tools (write_file, append_to_file, read_file, edit_file, list_directory,
+            // run_command, web_search) but skips browser/memory/planning tools.
             if (totalCtx - _ftRetryTokens < Math.floor(totalCtx * 0.15)) {
+              const minimalToolHint = mcpToolServer.getCompactToolHint('general', { minimal: true });
+              // Build preamble without tools, then append minimal hint
               _staticPromptCache.clear();
+              const preambleOnly = buildStaticPrompt('chat'); // preamble + project instructions, no tools
               currentPrompt = {
-                systemContext: buildStaticPrompt('chat'), // 'chat' skips tool injection
+                systemContext: preambleOnly + '\n' + minimalToolHint + '\n',
                 userMessage: message
               };
               _ftRetryText = (currentPrompt.systemContext || '') + (currentPrompt.userMessage || '');
               _ftRetryTokens = estimateTokens(_ftRetryText);
-              _staticPromptCache.clear(); // Clear so subsequent iterations get tools back
-              console.log(`[AI Chat] Overflow step 3: stripped tools from static prompt, now ~${_ftRetryTokens} tokens`);
+              _staticPromptCache.clear(); // Clear so subsequent iterations get full tools back
+              console.log(`[AI Chat] Overflow step 3: using minimal tool hint, now ~${_ftRetryTokens} tokens`);
             }
             if (totalCtx - _ftRetryTokens < 128) {
               // Still too tight — cap effectiveMaxTokens to whatever room remains
@@ -2459,7 +2463,7 @@ function register(ctx) {
         // STUCK_THRESHOLD=3 consecutive identical calls = stuck.
         for (const tr of toolResults.results) {
           const p = tr.params || {};
-          const paramsHash = `${p.filePath || p.dirPath || p.url || p.ref || p.query || p.command || p.selector || ''}:${p.text || ''}`.substring(0, 200);
+          const paramsHash = `${p.filePath || p.dirPath || p.url || p.ref || p.query || p.command || p.selector || ''}:${(p.text || p.content || '').substring(0, 80)}`.substring(0, 200);
           recentToolCalls.push({ tool: tr.tool, paramsHash });
         }
         if (recentToolCalls.length > 20) recentToolCalls = recentToolCalls.slice(-20);

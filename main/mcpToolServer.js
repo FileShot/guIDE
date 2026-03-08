@@ -1929,11 +1929,43 @@ class MCPToolServer {
   }
 
   async _appendToFile(filePath, content) {
-    const fullPath = path.isAbsolute(filePath) ? filePath : path.join(this.projectPath || '', filePath);
+    if (!this.projectPath) {
+      return {
+        success: false,
+        error: 'No project folder is open. Please open a folder first (File > Open Folder or Ctrl+K Ctrl+O), then retry.',
+      };
+    }
+    const fullPath = path.isAbsolute(filePath) ? filePath : path.join(this.projectPath, filePath);
     try {
+      // Backup existing content for undo (before append)
+      let isNew = true;
+      try {
+        const existingContent = await fs.readFile(fullPath, 'utf8');
+        this._setFileBackup(fullPath, { original: existingContent, timestamp: Date.now(), tool: 'append_to_file', isNew: false });
+        isNew = false;
+      } catch {
+        this._setFileBackup(fullPath, { original: null, timestamp: Date.now(), tool: 'append_to_file', isNew: true });
+      }
+
       await fs.mkdir(path.dirname(fullPath), { recursive: true });
       await fs.appendFile(fullPath, content, 'utf8');
-      return { success: true, path: fullPath, message: `Appended ${content.length} chars to ${path.basename(fullPath)}` };
+
+      // Read full file content after append for UI notification
+      let fullContent = content;
+      try { fullContent = await fs.readFile(fullPath, 'utf8'); } catch { /* use appended content */ }
+
+      // Notify renderer so file tree refreshes and editor shows changes
+      if (this.browserManager?.parentWindow) {
+        this.browserManager.parentWindow.webContents.send('files-changed');
+        this.browserManager.parentWindow.webContents.send('agent-file-modified', {
+          filePath: fullPath,
+          newContent: fullContent,
+          isNew,
+          tool: 'append_to_file',
+        });
+      }
+
+      return { success: true, path: fullPath, isNew, message: `Appended ${content.length} chars to ${path.basename(fullPath)}` };
     } catch (error) {
       return { success: false, error: error.message };
     }

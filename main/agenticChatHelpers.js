@@ -158,11 +158,11 @@ function sendToolExecutionEvents(mainWindow, toolResults, playwrightBrowser, opt
     if (tr.tool?.startsWith('browser_') && !playwrightBrowser?.isLaunched) {
       mainWindow.webContents.send('show-browser', { url: tr.params?.url || '' });
     }
-    const isFileOp = ['write_file', 'create_directory', 'edit_file', 'delete_file', 'rename_file'].includes(tr.tool);
+    const isFileOp = ['write_file', 'append_to_file', 'create_directory', 'edit_file', 'delete_file', 'rename_file'].includes(tr.tool);
     const passed = checkSuccess ? tr.result?.success : true;
     if (isFileOp && passed) {
       filesChanged = true;
-      if (['write_file', 'edit_file'].includes(tr.tool) && tr.params?.filePath) {
+      if (['write_file', 'append_to_file', 'edit_file'].includes(tr.tool) && tr.params?.filePath) {
         mainWindow.webContents.send('open-file', tr.params.filePath);
       }
     }

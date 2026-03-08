@@ -1569,6 +1569,14 @@ ${e.message}`,
                 <CodeBlock code={writeContent} language={writeLang} onApply={() => onApplyCode(currentFile, writeContent)} isToolCall={true} />
               </div>
             );
+          } else if (isWriteTool && !writeContent && !result) {
+            // Write tool was in the response text but had no content and no execution result
+            // — it was dropped by repair (e.g., empty content). Show as skipped, not completed.
+            allToolElements.push(
+              <CollapsibleToolBlock key={`t-${i}`} label={getToolLabel(toolCall, 'fail')} icon="✗">
+                <div className="text-[11px] text-[#858585]">Skipped — no content provided</div>
+              </CollapsibleToolBlock>
+            );
           } else if (result) {
             allToolElements.push(
               <CollapsibleToolBlock key={`t-${i}`} label={getToolLabel(toolCall, result.isOk ? 'ok' : 'fail')} icon={result.isOk ? '✓' : '✗'}>
@@ -1710,6 +1718,12 @@ ${e.message}`,
                     </div>
                     <CodeBlock code={inlineWriteContent} language={inlineWriteLang} onApply={() => onApplyCode(currentFile, inlineWriteContent)} isToolCall={true} />
                   </div>
+                );
+              } else if (isInlineWriteTool && !inlineWriteContent && !result) {
+                allToolElements.push(
+                  <CollapsibleToolBlock key={`inline-${i}-${j}-${allToolElements.length}`} label={getToolLabel(seg.toolCall, 'fail')} icon="✗">
+                    <div className="text-[11px] text-[#858585]">Skipped — no content provided</div>
+                  </CollapsibleToolBlock>
                 );
               } else if (result) {
                 allToolElements.push(

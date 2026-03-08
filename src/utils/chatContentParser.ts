@@ -151,8 +151,26 @@ export function splitInlineToolCalls(text: string): ContentSegment[] {
         const trailingMatch = afterJson.match(/^[\s,\]]+/);
         if (trailingMatch) lastIndex = endIdx + trailingMatch[0].length;
         jsonRegex.lastIndex = lastIndex;
+      } else {
+        // Valid JSON but unrecognised tool name — skip past the blob so it doesn't
+        // leak into "remaining text" and appear as raw JSON in the chat.
+        if (startIdx > lastIndex) {
+          const before = stripToolArtifacts(text.substring(lastIndex, startIdx)).replace(/\[\s*$/, '').trim();
+          if (before) results.push({ type: 'text', content: before });
+        }
+        lastIndex = endIdx;
+        jsonRegex.lastIndex = lastIndex;
       }
-    } catch { /* not valid JSON, skip */ }
+    } catch {
+      // Malformed JSON (e.g. unescaped HTML inside content param) — skip the entire
+      // blob so it doesn't leak into "remaining text" and appear as raw JSON in chat.
+      if (startIdx > lastIndex) {
+        const before = stripToolArtifacts(text.substring(lastIndex, startIdx)).replace(/\[\s*$/, '').trim();
+        if (before) results.push({ type: 'text', content: before });
+      }
+      lastIndex = endIdx;
+      jsonRegex.lastIndex = lastIndex;
+    }
   }
 
   // Remaining text

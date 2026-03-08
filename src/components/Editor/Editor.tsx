@@ -209,6 +209,26 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(({
             editorInstanceRef.current?.setPosition({ lineNumber: line, column: 1 });
           }, 100);
         }
+        // Refresh from disk when not dirty — agent may have updated the file since the tab was opened.
+        // This ensures HtmlPreview gets the latest content without requiring manual Run click.
+        if (!existing.isDirty) {
+          const _api = window.electronAPI;
+          if (_api?.readFile) {
+            _api.readFile(filePath).then((refresh: any) => {
+              if (refresh.success && refresh.content !== undefined && refresh.content !== existing.content) {
+                setTabs(prev => prev.map(t =>
+                  t.id === existing.id
+                    ? { ...t, content: refresh.content, originalContent: refresh.content, pendingChange: undefined }
+                    : t
+                ));
+              }
+            }).catch(() => {});
+          }
+        }
+        // Auto-show HTML preview when the agent opens an HTML file
+        if (isHtmlFile(filePath) && !isTabPreviewing(existing.id)) {
+          setTimeout(() => toggleHtmlPreview(existing.id), 80);
+        }
         return;
       }
 
@@ -538,7 +558,15 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(({
     if (!api?.onAgentFileModified) return;
 
     const handler = (_event: any, data: { filePath: string; newContent: string; originalContent?: string; isNew: boolean; tool: string }) => {
-      const tab = tabsRef.current.find(t => t.filePath === data.filePath);
+      // Normalize paths: data.filePath may be absolute while t.filePath may be relative.
+      // Match if paths are equal after normalization, or if one is a suffix of the other.
+      const normData = data.filePath.replace(/\\/g, '/');
+      const tab = tabsRef.current.find(t => {
+        const normTab = t.filePath.replace(/\\/g, '/');
+        return normTab === normData
+          || normData.endsWith('/' + normTab)
+          || normTab.endsWith('/' + normData);
+      });
       if (tab) {
         // File is currently open — show diff view with green/red highlighting
         const origContent = data.originalContent || tab.content;
@@ -834,7 +862,7 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(({
               <BinaryPreview filePath={activeTab.filePath} fileName={activeTab.fileName} />
             ) : isTabPreviewing(activeTab.id) && isHtmlFile(activeTab.filePath) ? (
               <HtmlPreview
-                content={activeTab.content}
+                content={activeTab.pendingChange?.newContent ?? activeTab.content}
                 filePath={activeTab.filePath}
                 onToggleCode={() => toggleHtmlPreview(activeTab.id)}
               />

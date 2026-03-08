@@ -1,4 +1,4 @@
-﻿/**
+/**
  * guIDE MCP Tools Server - Model Context Protocol tools for browser automation,
  * web search, code execution, and system interaction.
  * Copyright (c) 2025-2026 Brendan Gray (GitHub: FileShot)
@@ -865,7 +865,20 @@ class MCPToolServer {
       }
     }
 
-    // Sanitize file paths â€” small models hallucinate weird absolute paths
+        // Early-reject absolute paths that escape the project -- returns actionable error
+    // instead of silently rewriting to basename (which causes infinite retry loops).
+    const _FP_TOOLS = ['write_file','append_to_file','edit_file','delete_file','read_file','rename_file','get_file_info'];
+    if (_FP_TOOLS.includes(toolName) && params.filePath && path.isAbsolute(params.filePath) && this.projectPath) {
+      const _rn = path.resolve(params.filePath).replace(/\\/g, '/').toLowerCase();
+      const _pn = this.projectPath.replace(/\\/g, '/').toLowerCase();
+      if (!_rn.startsWith(_pn)) {
+        const _sug = path.basename(params.filePath);
+        console.log('[MCPToolServer] Absolute path outside project for ' + toolName + ': ' + params.filePath);
+        return { success: false, error: 'Path outside project. Use relative path ' + JSON.stringify(_sug) + ' instead of ' + JSON.stringify(params.filePath) + '.' };
+      }
+    }
+
+// Sanitize file paths â€” small models hallucinate weird absolute paths
     // If the model generated an absolute path that doesn't exist or looks wrong,
     // extract just the filename/relative part and resolve against projectPath
     // Always sanitize paths (works with or without projectPath now)

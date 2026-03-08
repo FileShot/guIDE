@@ -91,6 +91,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   const [isGenerating, setIsGenerating] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showModelPicker, setShowModelPicker] = useState(false);
+  const [pendingModelName, setPendingModelName] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [executingTools, setExecutingTools] = useState<Array<{tool: string; params: any}>>([]);
   const [completedStreamingTools, setCompletedStreamingTools] = useState<Array<{tool: string; params: any}>>([]);
@@ -1125,6 +1126,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
 
   const switchModel = async (model: AvailableModel) => {
     setShowModelPicker(false);
+    setPendingModelName(model.name); // show model name immediately — avoids 'No model' flicker
     // Selecting an LLM exits image mode — the two are mutually exclusive
     setActiveImageModel(null);
     // BUG-028: capture before cancelAndResetStream — llmCancel (inside) already calls resetSession.
@@ -1186,6 +1188,8 @@ ${result.error || 'Unknown error'}`,
 ${e.message}`,
         timestamp: Date.now(),
       }]);
+    } finally {
+      setPendingModelName(null);
     }
   };
 
@@ -1528,7 +1532,7 @@ ${e.message}`,
 
   // Render content with tool terminal and code block detection
   // Merges tool calls with their results into single collapsible blocks
-  const renderContentParts = (content: string) => {
+  const renderContentParts = (content: string, suppressTools = false) => {
     // Pre-extract tool results for merging
     const toolResultMap = extractToolResults(content);
 
@@ -1549,6 +1553,7 @@ ${e.message}`,
         // Tool call JSON block — collect into allToolElements (never inline)
         const toolCall = (lang === 'json' || lang === 'tool') ? parseToolCall(code) : null;
         if (toolCall) {
+          if (suppressTools) { continue; } // caller (renderMessage) owns tool rendering via msg.toolsUsed
           const queue = toolResultMap.get(toolCall.tool);
           const result = queue?.length ? queue.shift() : undefined;
           const isWriteTool = ['write_file', 'create_file', 'edit_file', 'append_to_file'].includes(toolCall.tool);
@@ -1699,6 +1704,7 @@ ${e.message}`,
           const segments = splitInlineToolCalls(tp);
           for (const seg of segments) {
             if (seg.type === 'tool' && seg.toolCall) {
+              if (suppressTools) { continue; } // caller (renderMessage) owns tool rendering via msg.toolsUsed
               const queue = toolResultMap.get(seg.toolCall.tool);
               const result = queue?.length ? queue.shift() : undefined;
               const isInlineWriteTool = ['write_file', 'create_file', 'edit_file', 'append_to_file'].includes(seg.toolCall.tool);
@@ -1766,12 +1772,12 @@ ${e.message}`,
   };
 
   const renderMessage = (msg: ChatMessage): React.ReactNode[] => {
-    const parts = renderContentParts(msg.content);
-    if (msg.toolsUsed && msg.toolsUsed.length > 0) {
-      // Only add tool group if content parsing didn't already find inline tool calls
-      const hasToolGroup = parts.some((p: any) => p?.key === 'tcg-all');
-      if (!hasToolGroup) {
-        const WRITE_TOOLS_MSG = ['write_file', 'create_file', 'edit_file', 'append_to_file'];
+    const hasMsgTools = !!(msg.toolsUsed && msg.toolsUsed.length > 0);
+    // suppressTools=true: content rendering skips all tool blocks to prevent duplicate write_file
+    // bubbles and wrong failure counts. msg.toolsUsed is the authoritative source for tool UI.
+    const parts = renderContentParts(msg.content, hasMsgTools);
+    if (hasMsgTools) {
+      const WRITE_TOOLS_MSG = ['write_file', 'create_file', 'edit_file', 'append_to_file'];
         const MSG_LANG_MAP: Record<string, string> = { ts: 'typescript', tsx: 'tsx', js: 'javascript', jsx: 'jsx', py: 'python', rs: 'rust', go: 'go', java: 'java', cs: 'csharp', cpp: 'cpp', c: 'c', html: 'html', css: 'css', json: 'json', yaml: 'yaml', yml: 'yaml', md: 'markdown', sh: 'bash', bat: 'batch', txt: 'text', xml: 'xml', sql: 'sql' };
         const writeFlatNodes: React.ReactNode[] = [];
         const nonWriteMsgTools: MCPToolResult[] = [];
@@ -1816,7 +1822,6 @@ ${e.message}`,
           );
         }
         return [...extraNodes, ...parts];
-      }
     }
     return parts;
   };
@@ -3291,8 +3296,8 @@ ${e.message}`,
                         : (cloudProviders.find(p => p.provider === cloudProvider)?.models.find(m => m.id === cloudModel)?.name || cloudModel || '').split(' ')[0])
                       : llmStatus.state === 'ready'
                       ? (llmStatus.modelInfo?.name || 'Model').split('-').slice(0, 2).join('-')
-                      : llmStatus.state === 'loading'
-                      ? 'Loading...'
+                      : (llmStatus.state === 'loading' || pendingModelName)
+                      ? (pendingModelName ? pendingModelName.split('-')[0] + '...' : 'Loading...')
                       : 'No model'
                     }
                   </span>

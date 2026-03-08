@@ -1,6 +1,6 @@
 {
   "name": "guide-ide",
-  "version": "1.7.22",
+  "version": "1.7.23",
   "description": "guIDE - AI-Powered Offline IDE with local LLM, RAG, MCP tools, browser automation, and integrated terminal",
   "author": {
     "name": "Brendan Gray",
@@ -88,7 +88,7 @@
   "build": {
     "appId": "com.guide.ide",
     "productName": "guIDE",
-    "copyright": "Copyright © 2025-2026 Brendan Gray",
+    "copyright": "Copyright Â© 2025-2026 Brendan Gray",
     "directories": {
       "output": "dist-electron"
     },

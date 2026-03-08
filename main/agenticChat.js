@@ -942,6 +942,7 @@ function register(ctx) {
       let iteration = 0;
       // Smart continuation: track tool call patterns for stuck detection
       let recentToolCalls = []; // [{tool, paramsHash}]
+      const writeFileHistory = {}; // Track per-filePath write count + peak content length for regression detection
       const toolFailCounts = {}; // Track per-tool failure counts for enrichErrorFeedback
       let nudgesRemaining = 3; // Allow 3 nudges when model responds with text instead of tool calls
       let contextRotations = 0; // Track how many times we've rotated context
@@ -2407,6 +2408,18 @@ function register(ctx) {
                   toolFeedback += `*File updated (already created earlier). This file is complete. If the original task required OTHER files, create them now. Otherwise, provide a summary of what was built.*\n`;
                 } else {
                   toolFeedback += `*File written. If the task requires MORE FILES to be created, call write_file IMMEDIATELY for the next file. If this file needs more content added, call append_to_file IMMEDIATELY. Do NOT stop until ALL required files and content are fully written.*\n`;
+                }
+                // Regression detection: if same file written 3+ times and content is shrinking, warn model
+                if (tr.result?.success && tr.params?.filePath) {
+                  const _wfKey = tr.params.filePath;
+                  const _wfLen = (tr.params?.content || '').length;
+                  if (!writeFileHistory[_wfKey]) writeFileHistory[_wfKey] = { count: 0, maxLen: 0 };
+                  writeFileHistory[_wfKey].count++;
+                  if (_wfLen > writeFileHistory[_wfKey].maxLen) writeFileHistory[_wfKey].maxLen = _wfLen;
+                  const _wfEntry = writeFileHistory[_wfKey];
+                  if (_wfEntry.count >= 3 && _wfLen < _wfEntry.maxLen * 0.5) {
+                    toolFeedback += `**WARNING: \`${_wfKey}\` has been written ${_wfEntry.count} times and content is shrinking (${_wfLen} chars vs peak ${_wfEntry.maxLen} chars). This indicates a fragmentation loop. STOP writing this file immediately. It is either already complete or you are splitting content incorrectly. Do NOT call write_file for this file again unless you are writing the COMPLETE final version with ALL content included.**\n`;
+                  }
                 }
               } else {
                 toolFeedback += `*Content appended. If more content remains for this file, call append_to_file again immediately. If other files still need to be created, call write_file for the next required file. Stop only when ALL required files and sections are fully written.*\n`;

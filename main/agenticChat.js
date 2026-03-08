@@ -943,6 +943,7 @@ function register(ctx) {
       // Smart continuation: track tool call patterns for stuck detection
       let recentToolCalls = []; // [{tool, paramsHash}]
       const writeFileHistory = {}; // Track per-filePath write count + peak content length for regression detection
+      let _pendingDroppedFilePaths = []; // filePaths from dropped write_file in previous iter — passed as hint to next processResponse
       const toolFailCounts = {}; // Track per-tool failure counts for enrichErrorFeedback
       let nudgesRemaining = 3; // Allow 3 nudges when model responds with text instead of tool calls
       let contextRotations = 0; // Track how many times we've rotated context
@@ -2091,8 +2092,9 @@ function register(ctx) {
           // ── LEGACY TEXT PARSING PATH ──
           // Use _stitchedForMcp (partial block from previous iter + this iter) so MCP can
           // parse the reconstructed complete tool call when a fence was truncated mid-JSON.
-          const textOpts = { toolPaceMs: localToolPace, skipWriteDeferral: modelTier.tier === 'tiny', userMessage: message };
+          const textOpts = { toolPaceMs: localToolPace, skipWriteDeferral: modelTier.tier === 'tiny', userMessage: message, lastDroppedFilePaths: _pendingDroppedFilePaths };
           toolResults = await mcpToolServer.processResponse(_stitchedForMcp, textOpts);
+          _pendingDroppedFilePaths = toolResults.droppedFilePaths || [];
         }
 
         // Cross-turn duplicate call detection — always active.

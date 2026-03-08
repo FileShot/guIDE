@@ -1541,6 +1541,8 @@ ${e.message}`,
     // ALL tool blocks are collected here — appended as a single ToolCallGroup at the
     // bottom of the message. They are NEVER rendered inline in the text flow.
     const allToolElements: React.ReactElement[] = [];
+    let pendingWriteFP: string | null = null; // filePath from write_file json header with no content — reconnects to next code block
+    let pendingWriteLang = ''; // mapped language for the pending filePath extension
 
     for (let i = 0; i < parts.length; i++) {
       const part = parts[i];
@@ -1575,13 +1577,12 @@ ${e.message}`,
               </div>
             );
           } else if (isWriteTool && !writeContent && !result) {
-            // Write tool was in the response text but had no content and no execution result
-            // — it was dropped by repair (e.g., empty content). Show as skipped, not completed.
-            allToolElements.push(
-              <CollapsibleToolBlock key={`t-${i}`} label={getToolLabel(toolCall, 'fail')} icon="✗">
-                <div className="text-[11px] text-[#858585]">Skipped — no content provided</div>
-              </CollapsibleToolBlock>
-            );
+            // Write tool had no content — model likely emitted json header then code separately.
+            // Track the filePath so the next code block can be rendered as a write_file widget.
+            if (writeFilePath) {
+              pendingWriteFP = writeFilePath;
+              pendingWriteLang = writeLang;
+            }
           } else if (result) {
             allToolElements.push(
               <CollapsibleToolBlock key={`t-${i}`} label={getToolLabel(toolCall, result.isOk ? 'ok' : 'fail')} icon={result.isOk ? '✓' : '✗'}>
@@ -1633,8 +1634,26 @@ ${e.message}`,
           continue;
         }
 
-        // Regular code block
-        elements.push(<CodeBlock key={i} code={code} language={lang} onApply={() => onApplyCode(currentFile, code)} />);
+        // Regular code block — check if preceding write_file json header gave a filePath hint
+        if (pendingWriteFP && (!lang || pendingWriteLang === lang)) {
+          const pFp = pendingWriteFP;
+          const pLang = pendingWriteLang || lang;
+          pendingWriteFP = null;
+          pendingWriteLang = '';
+          const pWriteCall = { tool: 'write_file', params: { filePath: pFp } };
+          elements.push(
+            <div key={`pending-write-${i}`} className="my-1.5">
+              <div className="flex items-center gap-1.5 mb-1 px-0.5">
+                <Check size={11} className="text-[#89d185] flex-shrink-0" />
+                <span className="text-[11px] text-[#d4d4d4] font-medium">{getToolLabel(pWriteCall, 'ok')}</span>
+              </div>
+              <CodeBlock code={code} language={pLang} onApply={() => onApplyCode(currentFile, code)} isToolCall={true} />
+            </div>
+          );
+        } else {
+          pendingWriteFP = null;
+          elements.push(<CodeBlock key={i} code={code} language={lang} onApply={() => onApplyCode(currentFile, code)} />);
+        }
         continue;
       }
 

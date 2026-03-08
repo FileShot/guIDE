@@ -625,6 +625,7 @@ function parseToolCalls(text) {
 function repairToolCalls(toolCalls, responseText) {
   const repaired = [];
   const issues = [];
+  const droppedFilePaths = []; // filePaths from dropped write_file (empty content) — for cross-iter fallback
 
   for (const call of toolCalls) {
     if (!call || typeof call.tool !== 'string') continue;
@@ -645,6 +646,7 @@ function repairToolCalls(toolCalls, responseText) {
         }
         // Unrecoverable — drop it instead of executing an empty write_file
         issues.push(`Dropped write_file: empty content for "${filePath || '(no path)'}" and no recoverable code found in response.`);
+        if (filePath) droppedFilePaths.push(filePath); // track for cross-iter fallback
         continue;
       }
 
@@ -704,7 +706,7 @@ function repairToolCalls(toolCalls, responseText) {
     console.log(`[MCP Repair] ${issues.length} issue(s): ${issues.join(' | ')}`);
   }
 
-  return { repaired, issues };
+  return { repaired, issues, droppedFilePaths };
 }
 
 /**
@@ -903,8 +905,10 @@ async function processResponse(responseText, options = {}) {
   // Fix malformed calls BEFORE execution — recover empty write_file params,
   // drop unrecoverable calls, fix URLs, etc. This prevents tool errors from
   // polluting context and confusing the model for the rest of the session.
+  let _repairDropped = []; // filePaths dropped here — threaded to fallback and returned for next-iter
   if (toolCalls.length > 0) {
-    const { repaired, issues } = repairToolCalls(toolCalls, responseText);
+    const { repaired, issues, droppedFilePaths: _rd } = repairToolCalls(toolCalls, responseText);
+    _repairDropped = _rd || [];
     if (issues.length > 0) {
       console.log(`[MCP] Repair dropped/fixed ${issues.length} call(s)`);
     }
@@ -953,7 +957,7 @@ async function processResponse(responseText, options = {}) {
       toolCalls.push(...proseCommands);
     }
 
-    const fallbackCalls = this._detectFallbackFileOperations(responseText, options.userMessage);
+    const fallbackCalls = this._detectFallbackFileOperations(responseText, options.userMessage, [..._repairDropped, ...(options.lastDroppedFilePaths || [])]);
     if (fallbackCalls.length > 0) {
       console.log('[MCP] Found fallback tool calls:', fallbackCalls.length);
       let effectiveFallbackCalls = fallbackCalls;
@@ -973,10 +977,10 @@ async function processResponse(responseText, options = {}) {
         const result = await this.executeTool(call.tool, call.params || {});
         results.push({ tool: call.tool, params: call.params, result });
       }
-      return { hasToolCalls: true, results, capped: fbCapped, skippedToolCalls: fbSkipped, formalCallCount: 0 };
+      return { hasToolCalls: true, results, capped: fbCapped, skippedToolCalls: fbSkipped, formalCallCount: 0, droppedFilePaths: [] };
     }
     console.log('[MCP] No fallback tool calls either');
-    return { hasToolCalls: false, results: [], formalCallCount: 0 };
+    return { hasToolCalls: false, results: [], formalCallCount: 0, droppedFilePaths: _repairDropped };
   }
 
   // ── Browser Tool Capping ──
@@ -1062,14 +1066,14 @@ async function processResponse(responseText, options = {}) {
     console.log(`[MCP] Browser cap enforced: executed ${browserStateChanges} state-changing actions, skipped ${browserSkipped}`);
   }
 
-  return { hasToolCalls: true, results, capped: capped || browserCapped, skippedToolCalls: skippedCount + browserSkipped, formalCallCount: toolCalls.length };
+  return { hasToolCalls: true, results, capped: capped || browserCapped, skippedToolCalls: skippedCount + browserSkipped, formalCallCount: toolCalls.length, droppedFilePaths: _repairDropped };
 }
 
 /**
  * Fallback detection for file operations when model doesn't use formal tool syntax.
  * Looks for patterns like "```html\n<!DOCTYPE...```" with context suggesting file creation.
  */
-function _detectFallbackFileOperations(responseText, userMessage) {
+function _detectFallbackFileOperations(responseText, userMessage, lastDroppedFilePaths = []) {
   const results = [];
 
   // ── Phase 1: Bash/shell/cmd code blocks → run_command recovery ──
@@ -1114,7 +1118,22 @@ function _detectFallbackFileOperations(responseText, userMessage) {
   // Explicit file-creation intent language is the only reliable signal.
   // However, when the response is PREDOMINANTLY code blocks (>60% by character count),
   // the model likely intended to create files, not explain concepts. Allow fallback in that case.
-  if (!hasFileIntent && !hasCodeBlocksWithLang) return results;
+  // Fix D: Detect large raw HTML/code blobs without backtick fences
+  // (e.g., models that dump HTML directly without tool structure after context rotation)
+  const _isLargeRawCodeBlob = !hasCodeBlocksWithLang && responseText.length > 1500 && (
+    /<html[\s>]|<!doctype\s+html/i.test(responseText) ||
+    (responseText.length > 4000 && /<\/html\s*>/i.test(responseText))
+  );
+  if (!hasFileIntent && !hasCodeBlocksWithLang && !_isLargeRawCodeBlob) return results;
+  if (!hasFileIntent && !hasCodeBlocksWithLang && _isLargeRawCodeBlob) {
+    const _recovered = _recoverWriteFileContent(responseText,
+      lastDroppedFilePaths.length > 0 ? lastDroppedFilePaths[0] : undefined);
+    if (_recovered) {
+      console.log(`[MCP] Fallback: raw code blob (${responseText.length} chars) → write_file "${_recovered.params.filePath}"`);
+      results.push(_recovered);
+    }
+    return results;
+  }
   if (!hasFileIntent && hasCodeBlocksWithLang) {
     // Measure code block ratio to avoid false positives on explanatory code
     const _cbRegex = /```\w+\s*\n([\s\S]*?)```/g;
@@ -1127,6 +1146,7 @@ function _detectFallbackFileOperations(responseText, userMessage) {
 
   const codeBlockRegex = /```(\w+)?\s*\n([\s\S]*?)```/g;
   let match;
+  const _hintMap = {}; // ext→filePath hints extracted from same-response write_file json headers
 
   const filePathPatterns = [
     /(?:(?:create|write|save|make|generate).*?(?:file|document).*?(?:named?|called?|at)?)\s*[`"']([^`"'\n]+\.\w+)[`"']/gi,
@@ -1149,7 +1169,20 @@ function _detectFallbackFileOperations(responseText, userMessage) {
     if (!content || content.length < 10) continue;
 
     // Skip code blocks that look like tool call JSON (already handled by parseToolCalls)
-    if (lang === 'json' && /^\s*\{\s*["']?(?:tool|name)["']?\s*:/.test(content)) continue;
+    // But extract filePath hints from write_file/create_file headers with no content
+    if (lang === 'json' && /^\s*\{\s*["']?(?:tool|name)["']?\s*:/.test(content)) {
+      try {
+        const _jp = JSON.parse(content);
+        const _jt = _jp.tool || _jp.name;
+        const _jfp = _jp.params?.filePath || _jp.params?.file_path || _jp.filePath;
+        if ((_jt === 'write_file' || _jt === 'create_file') && _jfp &&
+            (!_jp.params?.content || String(_jp.params.content).length < 5)) {
+          const _jext = _jfp.includes('.') ? _jfp.split('.').pop().toLowerCase() : '';
+          if (_jext) _hintMap['.' + _jext] = _jfp;
+        }
+      } catch (_e) { /* ignore parse errors */ }
+      continue;
+    }
 
     if (lang === 'python' || lang === 'py') {
       if (/import os|open\s*\(|os\.makedirs|fs\.write/.test(content)) continue;
@@ -1199,6 +1232,23 @@ function _detectFallbackFileOperations(responseText, userMessage) {
             break;
           }
         }
+      }
+    }
+
+    // Use hints: 1) same-response json header (_hintMap), 2) cross-iter dropped filePaths
+    if (!filePath && lang && langToExt[lang] && _hintMap[langToExt[lang]]) {
+      filePath = _hintMap[langToExt[lang]];
+      delete _hintMap[langToExt[lang]]; // consume hint
+      console.log(`[MCP] Fallback: same-response hint "${filePath}" for ${lang} block`);
+    }
+    if (!filePath && lang && langToExt[lang] && lastDroppedFilePaths.length > 0) {
+      const _crossFp = lastDroppedFilePaths.find(fp => {
+        const _fext = fp.includes('.') ? '.' + fp.split('.').pop().toLowerCase() : '';
+        return langToExt[lang] === _fext;
+      });
+      if (_crossFp) {
+        filePath = _crossFp;
+        console.log(`[MCP] Fallback: cross-iter hint "${filePath}" for ${lang} block`);
       }
     }
 

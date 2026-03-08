@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Agentic AI Chat Handler — the core conversational loop with RAG, MCP tools, memory, and browser automation.
  * Also contains the find-bug analysis handler.
  */
@@ -715,14 +715,17 @@ function register(ctx) {
       // ── Context budget viability check ──
       // On extremely constrained contexts (e.g., 3840 ctx models), verify the generation
       // budget is viable. If system prompt alone leaves < 512 tokens for response + user
-      // message, log a diagnostic warning and cap rotation count to prevent the
-      // "rotate → forget → re-emit → rotate" death spiral.
+      // message, log a diagnostic warning.
       const _viableResponseBudget = totalCtx - sysPromptReserve;
       if (_viableResponseBudget < 512) {
-        console.log(`[AI Chat] Context budget WARNING: totalCtx=${totalCtx}, sysReserve=${sysPromptReserve}, viable response budget=${_viableResponseBudget} tokens (<512). Reducing max rotations to prevent death spiral.`);
+        console.log(`[AI Chat] Context budget WARNING: totalCtx=${totalCtx}, sysReserve=${sysPromptReserve}, viable response budget=${_viableResponseBudget} tokens (<512).`);
       }
-      // Scale max rotations based on context size to prevent oscillation on tiny contexts
-      const effectiveMaxRotations = totalCtx < 4096 ? 3 : (totalCtx < 8192 ? 5 : MAX_CONTEXT_ROTATIONS);
+      // Max context rotations — high default so large tasks (10K+ lines of code) can
+      // rotate many times. For tiny contexts (<4096) we cap lower to prevent the
+      // "rotate → forget → re-emit → rotate" death spiral where each rotation produces
+      // essentially the same prompt.
+      const MAX_CONTEXT_ROTATIONS = 50;
+      const effectiveMaxRotations = totalCtx < 4096 ? 5 : (totalCtx < 8192 ? 15 : MAX_CONTEXT_ROTATIONS);
 
       // Task-type routing is handled by the model via system prompt — always return 'general'
       // so the model receives full tool context. The regex classifier was removed because
@@ -959,7 +962,6 @@ function register(ctx) {
       const toolFailCounts = {}; // Track per-tool failure counts for enrichErrorFeedback
       let nudgesRemaining = 3; // Allow 3 nudges when model responds with text instead of tool calls
       let contextRotations = 0; // Track how many times we've rotated context
-      const MAX_CONTEXT_ROTATIONS = 10; // Allow up to 10 rotations for long tasks
       let lastConvSummary = ''; // Conversation summary from last rotation
       let sessionJustRotated = false; // Flag to rebuild prompt after rotation
       let overflowResponseBudgetReduced = false; // Flag: already tried reducing response budget on first-turn overflow
@@ -1878,10 +1880,58 @@ function register(ctx) {
             }
             _contContextPct = _contUsed / totalCtx;
           } catch (_) {}
-          if (_contContextPct > 0.70) {
-            console.log(`[AI Chat] Seamless continuation aborted: context at ${Math.round(_contContextPct * 100)}% (>70% budget). Rotating instead.`);
+          // Use a higher budget threshold when mid-tool-call (unclosed fence).
+          // Continuation prompts for unclosed fences are only ~200 chars of tail,
+          // so the NEXT iteration's context will be much smaller than current usage.
+          // Aborting at 70% while the model is mid-JSON loses the entire tool call.
+          // For maxTokens truncation (no fence), keep the conservative 70% limit.
+          const _contBudgetLimit = _hasUnclosedToolFence ? 0.92 : 0.70;
+          if (_contContextPct > _contBudgetLimit) {
+            console.log(`[AI Chat] Seamless continuation aborted: context at ${Math.round(_contContextPct * 100)}% (>${Math.round(_contBudgetLimit * 100)}% budget${_hasUnclosedToolFence ? ', mid-tool-call' : ''}). Rotating instead.`);
             continuationCount = 0;
-            // Fall through to normal post-generation compaction / rotation below
+            // ── Salvage partial tool call content on forced abort ──
+            // When aborting with an unclosed tool fence, the accumulated content in
+            // _stitchedForMcp contains a partial write_file JSON that processResponse
+            // can't parse. Instead of losing all content, attempt to extract the
+            // filePath and content from the partial JSON and inject a salvaged tool call.
+            if (_hasUnclosedToolFence && _stitchedForMcp) {
+              const _salvageFenceContent = _stitchedForMcp.slice(_fenceIdx);
+              // Try to extract filePath and content from incomplete JSON
+              const _fpMatch = _salvageFenceContent.match(/"filePath"\s*:\s*"([^"]+)"/);
+              const _ctMatch = _salvageFenceContent.match(/"content"\s*:\s*"([\s\S]+)/);
+              if (_fpMatch && _ctMatch && _ctMatch[1].length > 100) {
+                // Extract content: unescape what we can, trim the trailing incomplete part
+                let _salvageContent = _ctMatch[1];
+                // Remove trailing incomplete escape sequences or unterminated strings
+                // Find the last complete line (before any dangling quote/brace)
+                const _lastNewline = _salvageContent.lastIndexOf('\\n');
+                if (_lastNewline > 50) {
+                  _salvageContent = _salvageContent.substring(0, _lastNewline);
+                }
+                // Unescape JSON string escapes
+                try {
+                  _salvageContent = JSON.parse('"' + _salvageContent + '"');
+                } catch (_) {
+                  // Manual unescape for common cases
+                  _salvageContent = _salvageContent.replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+                }
+                if (_salvageContent.length > 100) {
+                  console.log(`[AI Chat] Salvaged ${_salvageContent.length} chars of write_file content for "${_fpMatch[1]}" from aborted continuation`);
+                  // Close the fence and reconstruct as a complete tool call for processResponse
+                  const _salvageJson = JSON.stringify({
+                    tool: 'write_file',
+                    params: { filePath: _fpMatch[1], content: _salvageContent }
+                  });
+                  // Replace responseText with the reconstructed complete tool call
+                  // so processResponse can parse and execute it
+                  _pendingPartialBlock = null; // Clear stale partial
+                  // Inject as a fenced block that processResponse can parse
+                  responseText = '```json\n' + _salvageJson + '\n```';
+                  fullResponseText = fullResponseText.slice(0, fullResponseText.length - (result.text || '').length) + responseText;
+                }
+              }
+            }
+            // Fall through to normal post-generation compaction / rotation below
           } else {
             continuationCount++;
             // Forward-progress guard: if the last 3 consecutive continuations each

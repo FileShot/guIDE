@@ -712,6 +712,18 @@ function register(ctx) {
       );
       const maxPromptTokens = Math.max(totalCtx - sysPromptReserve - maxResponseTokens, 256);
       
+      // ── Context budget viability check ──
+      // On extremely constrained contexts (e.g., 3840 ctx models), verify the generation
+      // budget is viable. If system prompt alone leaves < 512 tokens for response + user
+      // message, log a diagnostic warning and cap rotation count to prevent the
+      // "rotate → forget → re-emit → rotate" death spiral.
+      const _viableResponseBudget = totalCtx - sysPromptReserve;
+      if (_viableResponseBudget < 512) {
+        console.log(`[AI Chat] Context budget WARNING: totalCtx=${totalCtx}, sysReserve=${sysPromptReserve}, viable response budget=${_viableResponseBudget} tokens (<512). Reducing max rotations to prevent death spiral.`);
+      }
+      // Scale max rotations based on context size to prevent oscillation on tiny contexts
+      const effectiveMaxRotations = totalCtx < 4096 ? 3 : (totalCtx < 8192 ? 5 : MAX_CONTEXT_ROTATIONS);
+
       // Task-type routing is handled by the model via system prompt — always return 'general'
       // so the model receives full tool context. The regex classifier was removed because
       // keyword matching is unreliable across phrasing, typos, and multi-part messages.
@@ -1141,6 +1153,9 @@ function register(ctx) {
       // Seamless continuation counter — tracks how many times we've continued a
       // truncated response in the same bubble. Reset to 0 each new user message.
       let continuationCount = 0;
+      // Track consecutive low-progress continuations to detect death spirals
+      // (model emitting near-zero tokens per pass, causing 40+ loops of nothing).
+      let _contLowProgressCount = 0;
       // When EOS fires mid-tool-fence, save the partial block here so the next
       // continuation iteration can prepend it for MCP to reconstruct the full tool call.
       let _pendingPartialBlock = null;
@@ -1238,7 +1253,7 @@ function register(ctx) {
                 fullResponseText = preCompaction.newFullResponseText;
                 console.log(`[AI Chat] Pre-generation compaction: phase ${preCompaction.phase}, ${preCompaction.pruned} items at ${Math.round(preGenPct * 100)}%`);
               }
-              if (preCompaction.shouldRotate && contextRotations < MAX_CONTEXT_ROTATIONS) {
+              if (preCompaction.shouldRotate && contextRotations < effectiveMaxRotations) {
                 // Detect if rotation is firing during seamless continuation (no completed steps yet).
                 // In that case fullResponseText holds partial tool-call JSON that never completed.
                 // Injecting it via lastConvSummary causes the model to emit HTML inline after
@@ -1250,7 +1265,7 @@ function register(ctx) {
                   continuationCount = 0;
                 }
                 contextRotations++;
-                console.log(`[AI Chat] Pre-generation rotation ${contextRotations}/${MAX_CONTEXT_ROTATIONS}`);
+                console.log(`[AI Chat] Pre-generation rotation ${contextRotations}/${effectiveMaxRotations}`);
                 summarizer.markRotation();
                 lastConvSummary = summarizer.generateQuickSummary();
                 await llmEngine.resetSession(true);
@@ -1490,7 +1505,7 @@ function register(ctx) {
           // Only rotate context on actual context overflow. Previously, ANY generation
           // error could trigger rotation, which looked like the app was "summarizing"
           // on the very first turn.
-          if (isContextOverflow && contextRotations < MAX_CONTEXT_ROTATIONS) {
+          if (isContextOverflow && contextRotations < effectiveMaxRotations) {
             // If the model overflowed mid-generation during a seamless continuation pass,
             // the _pendingPartialBlock is unusable (generation ended in error, not valid EOS).
             // Clear it so the rotation produces a clean fresh prompt instead of injecting
@@ -1568,7 +1583,7 @@ function register(ctx) {
               break;
             }
             contextRotations++;
-            console.log(`[AI Chat] Context rotation ${contextRotations}/${MAX_CONTEXT_ROTATIONS} — summarizing and continuing`);
+            console.log(`[AI Chat] Context rotation ${contextRotations}/${effectiveMaxRotations} — summarizing and continuing`);
             // Do NOT send rotation status via llm-thinking-token — internal detail that pollutes the reasoning panel (see line 1610 comment).
             
             try {
@@ -1869,8 +1884,23 @@ function register(ctx) {
             // Fall through to normal post-generation compaction / rotation below
           } else {
             continuationCount++;
+            // Forward-progress guard: if the last 3 consecutive continuations each
+            // produced < 20 chars, the model is in a death spiral (emitting near-zero
+            // tokens per pass). Abort to prevent 40+ loops of nothing.
+            if (responseText.length < 20) {
+              _contLowProgressCount++;
+            } else {
+              _contLowProgressCount = 0;
+            }
+            if (_contLowProgressCount >= 3) {
+              console.log(`[AI Chat] Seamless continuation aborted: no forward progress (${_contLowProgressCount} consecutive passes < 20 chars). Sending accumulated content to parser.`);
+              continuationCount = 0;
+              _contLowProgressCount = 0;
+              // Fall through to normal processResponse below
+            } else {
             const _truncReason = _hasUnclosedToolFence ? 'unclosed tool fence (EOS mid-block)' : 'maxTokens';
-            console.log(`[AI Chat] Seamless continuation ${continuationCount}/50 — ${_truncReason}, continuing in same bubble`);
+            const _textPreview = responseText.length > 0 ? responseText.substring(0, 80).replace(/\n/g, '\\n') : '(empty)';
+            console.log(`[AI Chat] Seamless continuation ${continuationCount}/50 — ${_truncReason}, continuing in same bubble (this pass: ${responseText.length} chars, accumulated: ${fullResponseText.length} chars, preview: "${_textPreview}")`);
             iteration--; // Continuation is not a new agentic step
           let _continuationUserMsg;
           if (_hasUnclosedToolFence) {
@@ -1901,6 +1931,7 @@ function register(ctx) {
             userMessage: _continuationUserMsg,
           };
           continue;
+          } // close forward-progress else block
           } // close else block from context budget check
         }
         // Natural stop or max continuations reached — reset counter for next response
@@ -1958,9 +1989,9 @@ function register(ctx) {
           }
 
           // Phase 4: Hard rotation as absolute last resort
-          if (compaction.shouldRotate && contextRotations < MAX_CONTEXT_ROTATIONS) {
+          if (compaction.shouldRotate && contextRotations < effectiveMaxRotations) {
             contextRotations++;
-            console.log(`[AI Chat] Context rotation ${contextRotations}/${MAX_CONTEXT_ROTATIONS} at ${Math.round((contextUsed / totalCtx) * 100)}% (compaction phase 4)`);
+            console.log(`[AI Chat] Context rotation ${contextRotations}/${effectiveMaxRotations} at ${Math.round((contextUsed / totalCtx) * 100)}% (compaction phase 4)`);
             // Do NOT send context% status via llm-thinking-token — pollutes reasoning panel.
             
             summarizer.markRotation();
@@ -2061,6 +2092,15 @@ function register(ctx) {
               // Normalize params same as processResponse does
               if (call.tool.startsWith('browser_')) call.params = mcpToolServer._normalizeBrowserParams(call.tool, call.params);
               else call.params = mcpToolServer._normalizeFsParams(call.tool, call.params);
+              // Cross-iteration write dedup: block writes to files already written 2+ times
+              if (DATA_WRITE_TOOLS.has(call.tool) && call.tool === 'write_file') {
+                const _wfPath = call.params?.filePath || call.params?.path || call.params?.file_path;
+                if (_wfPath && writeFileHistory[_wfPath] && writeFileHistory[_wfPath].count >= 2) {
+                  console.log(`[AI Chat] Write dedup: blocking ${call.tool} to "${_wfPath}" (already written ${writeFileHistory[_wfPath].count}x)`);
+                  results.push({ tool: call.tool, params: call.params, result: { success: false, error: `BLOCKED: "${_wfPath}" has already been written ${writeFileHistory[_wfPath].count} times this conversation. The file is COMPLETE. Do NOT write to it again. Move on to the next part of the task or provide a summary of what was accomplished.` } });
+                  continue;
+                }
+              }
               // Write deferral: skip writes when co-batched with data-gathering tools
               if (shouldDeferNativeWrites && DATA_WRITE_TOOLS.has(call.tool)) {
                 console.log(`[AI Chat] Native write deferred: ${call.tool} (re-issue next turn with real data)`);
@@ -2092,7 +2132,7 @@ function register(ctx) {
           // ── LEGACY TEXT PARSING PATH ──
           // Use _stitchedForMcp (partial block from previous iter + this iter) so MCP can
           // parse the reconstructed complete tool call when a fence was truncated mid-JSON.
-          const textOpts = { toolPaceMs: localToolPace, skipWriteDeferral: modelTier.tier === 'tiny', userMessage: message, lastDroppedFilePaths: _pendingDroppedFilePaths };
+          const textOpts = { toolPaceMs: localToolPace, skipWriteDeferral: modelTier.tier === 'tiny', userMessage: message, lastDroppedFilePaths: _pendingDroppedFilePaths, writeFileHistory };
           toolResults = await mcpToolServer.processResponse(_stitchedForMcp, textOpts);
           _pendingDroppedFilePaths = toolResults.droppedFilePaths || [];
         }

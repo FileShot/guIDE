@@ -845,9 +845,33 @@ After your brief acknowledgment, output ONLY the tool call blocks — no extra t
     return this._getSystemPrompt();
   }
 
+  /**
+   * Wait for model to finish loading. If model is mid-load, awaits the
+   * _initializingPromise with a timeout. If no load in progress, throws.
+   */
+  async _waitForReady(timeoutMs = 30000) {
+    if (this.isReady && this.chat) return;
+    if (!this.isLoading || !this._initializingPromise) {
+      throw new Error('Model not loaded. Please load a model first.');
+    }
+    console.log(`[LLM] Generation requested while model is loading — waiting up to ${timeoutMs}ms...`);
+    const timeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Model load timed out while waiting to generate. Please try again after the model finishes loading.')), timeoutMs)
+    );
+    try {
+      await Promise.race([this._initializingPromise, timeout]);
+    } catch (err) {
+      throw new Error(err.message || 'Model not loaded. Please load a model first.');
+    }
+    if (!this.isReady || !this.chat) {
+      throw new Error('Model failed to load. Please try loading the model again.');
+    }
+    console.log('[LLM] Model finished loading — proceeding with generation');
+  }
+
   async generate(prompt, params = {}) {
     if (!this.isReady || !this.chat) {
-      throw new Error('Model not loaded. Please load a model first.');
+      await this._waitForReady();
     }
 
     const modelOverrides = this._getModelSpecificParams();
@@ -946,7 +970,7 @@ After your brief acknowledgment, output ONLY the tool call blocks — no extra t
 
   async generateStream(input, params = {}, onToken, onThinkingToken) {
     if (!this.isReady || !this.chat) {
-      throw new Error('Model not loaded. Please load a model first.');
+      await this._waitForReady();
     }
 
     // Accept either a string (legacy/utility) or structured { systemContext, userMessage }
@@ -1726,7 +1750,7 @@ After your brief acknowledgment, output ONLY the tool call blocks — no extra t
    */
   async generateWithFunctions(input, functions, params = {}, onToken, onThinkingToken, onFunctionCall) {
     if (!this.isReady || !this.chat) {
-      throw new Error('Model not loaded. Please load a model first.');
+      await this._waitForReady();
     }
 
     let systemContext, userMessage;

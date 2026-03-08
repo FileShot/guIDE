@@ -974,6 +974,15 @@ async function processResponse(responseText, options = {}) {
         if (toolPaceMs > 0 && results.length > 0) {
           await new Promise(r => setTimeout(r, toolPaceMs));
         }
+        // Cross-iteration write dedup: block writes to files already written 2+ times
+        if (options.writeFileHistory && call.tool === 'write_file') {
+          const _wfPath = call.params?.filePath || call.params?.path || call.params?.file_path;
+          if (_wfPath && options.writeFileHistory[_wfPath] && options.writeFileHistory[_wfPath].count >= 2) {
+            console.log(`[MCP] Write dedup: blocking ${call.tool} to "${_wfPath}" (already written ${options.writeFileHistory[_wfPath].count}x)`);
+            results.push({ tool: call.tool, params: call.params, result: { success: false, error: `BLOCKED: "${_wfPath}" has already been written ${options.writeFileHistory[_wfPath].count} times this conversation. The file is COMPLETE. Do NOT write to it again.` } });
+            continue;
+          }
+        }
         const result = await this.executeTool(call.tool, call.params || {});
         results.push({ tool: call.tool, params: call.params, result });
       }
@@ -1051,6 +1060,15 @@ async function processResponse(responseText, options = {}) {
     if (call && typeof call.tool === 'string') {
       if (call.tool.startsWith('browser_')) call.params = this._normalizeBrowserParams(call.tool, call.params || {});
       else call.params = this._normalizeFsParams(call.tool, call.params || {});
+    }
+    // Cross-iteration write dedup: block writes to files already written 2+ times
+    if (options.writeFileHistory && call.tool === 'write_file') {
+      const _wfPath = call.params?.filePath || call.params?.path || call.params?.file_path;
+      if (_wfPath && options.writeFileHistory[_wfPath] && options.writeFileHistory[_wfPath].count >= 2) {
+        console.log(`[MCP] Write dedup: blocking ${call.tool} to "${_wfPath}" (already written ${options.writeFileHistory[_wfPath].count}x)`);
+        results.push({ tool: call.tool, params: call.params, result: { success: false, error: `BLOCKED: "${_wfPath}" has already been written ${options.writeFileHistory[_wfPath].count} times this conversation. The file is COMPLETE. Do NOT write to it again.` } });
+        continue;
+      }
     }
     const result = await this.executeTool(call.tool, call.params || {});
     console.log('[MCP] Executed tool:', call.tool, 'result:', result.success ? 'success' : 'failed');

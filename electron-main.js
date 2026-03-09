@@ -692,7 +692,7 @@ app.on('before-quit', () => {
   try { log.close(); } catch (_) {} // Flush persistent log file
   // Fire-and-forget async cleanup with a hard deadline
   const cleanupDone = Promise.all([
-    memoryStore.dispose().catch(() => {}),
+    Promise.resolve(memoryStore.dispose()).catch(() => {}),
     llmEngine.dispose().catch(() => {}),
   ]);
   // Give async cleanup 3 seconds max, then force exit

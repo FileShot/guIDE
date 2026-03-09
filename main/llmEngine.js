@@ -22,7 +22,7 @@ const TOOL_DETECT_BUFFER_MAX = 60_000;
 const KV_REUSE_COOLDOWN_TURNS = 2;
 const MAX_PARALLEL_FUNCTION_CALLS = 4;
 const CONTEXT_ABSOLUTE_CEILING = 131_072;
-const VRAM_PADDING_FLOOR_MB = 800;
+const VRAM_PADDING_FLOOR_MB = 0;
 
 let _genCounter = 0;
 
@@ -92,7 +92,7 @@ class LLMEngine extends EventEmitter {
       const modelSizeGB = (modelSizeBytes || 0) / (1024 ** 3);
       // Heuristic: estimate layers from model size
       const estLayers = modelSizeGB < 2 ? 32 : modelSizeGB < 8 ? 40 : modelSizeGB < 20 ? 48 : 80;
-      const usableVram = Math.max(0, vramGB - 0.8); // reserve ~800MB
+      const usableVram = Math.max(0, vramGB - VRAM_PADDING_FLOOR_MB / 1024);
       const fitsRatio = Math.min(1, usableVram / Math.max(0.1, modelSizeGB));
       const roughMaxLayers = Math.floor(estLayers * fitsRatio);
       return { roughMaxLayers, estimatedLayers: estLayers, vramGB, modelSizeGB };
@@ -226,9 +226,10 @@ class LLMEngine extends EventEmitter {
       const modelStats = fs.statSync(modelPath);
       const gpuConfig = this._getGPUConfig(modelStats.size);
 
-      // GPU mode fallback chain
+      // GPU mode fallback chain — model LOAD + CONTEXT creation together
       const gpuModes = this._buildGpuModeList(gpuConfig);
       let loadedModel = null;
+      let loadedContext = null;
       let usedGpuMode = false;
       let bestAutoGpuLayers = 0;
 
@@ -236,26 +237,20 @@ class LLMEngine extends EventEmitter {
         if (loadSignal.aborted) throw new Error('Load cancelled');
         try {
           // Create or reuse Llama backend instance
-          if (!this.llamaInstance || this._lastGpuMode !== mode) {
+          const backendMode = mode === false ? false : (typeof mode === 'number' ? 'cuda' : mode);
+          if (!this.llamaInstance || this._lastGpuMode !== backendMode) {
             if (this.llamaInstance) {
               // Don't dispose — reuse for CUDA kernel caching
             }
             this.llamaInstance = await this._withTimeout(
               getLlama({
-                gpu: mode === false ? false : mode,
-                vramPadding: (ctx) => {
-                  const padding = Math.max(VRAM_PADDING_FLOOR_MB * 1024 * 1024, ctx.totalVram * 0.05);
-                  return padding;
-                },
-                ramPadding: () => {
-                  const totalRam = os.totalmem();
-                  return Math.min(totalRam * 0.08, 2 * 1024 ** 3);
-                },
+                gpu: backendMode,
+                vramPadding: 0,
               }),
               GPU_INIT_TIMEOUT,
               'GPU initialization',
             );
-            this._lastGpuMode = mode;
+            this._lastGpuMode = backendMode;
           }
 
           this.emit('status', { state: 'loading', message: `Trying GPU mode: ${mode}...` });
@@ -274,14 +269,37 @@ class LLMEngine extends EventEmitter {
             'Model loading',
           );
 
-          // Check if auto mode returned fewer layers than partial fallback
+          // Track auto mode GPU layer usage (do not reject — auto mode optimizes layer split)
           if (mode === 'auto' && loadedModel.gpuLayers != null) {
             bestAutoGpuLayers = loadedModel.gpuLayers;
-            if (gpuConfig.roughMaxLayers > 0 && loadedModel.gpuLayers < gpuConfig.roughMaxLayers) {
-              loadedModel.dispose?.();
-              loadedModel = null;
-              continue;
-            }
+          }
+
+          // Now try to create context on this model
+          const ctxTimeout = mode === false ? CTX_CREATE_TIMEOUT_CPU : CTX_CREATE_TIMEOUT_GPU;
+          let maxCtx = this._computeMaxContext(gpuConfig.modelSizeGB);
+          // CPU mode: cap context for responsive generation
+          if (mode === false) maxCtx = Math.min(maxCtx, 8192);
+          loadedContext = await this._withTimeout(
+            loadedModel.createContext({
+              contextSize: { min: 512, max: maxCtx },
+              flashAttention: true,
+              ignoreMemorySafetyChecks: true,
+              failedCreationRemedy: { retries: 4, autoContextSizeShrink: 0.5 },
+            }),
+            ctxTimeout,
+            'Context creation',
+          );
+
+          // Verify context is usable (at least 512 tokens after system prompt)
+          const actualCtx = loadedContext.contextSize || 0;
+          if (actualCtx < 1024 && mode !== false) {
+            const log = require('./logger');
+            log.warn(`GPU mode ${mode} context too small (${actualCtx}), trying next mode`);
+            loadedContext.dispose?.();
+            loadedContext = null;
+            loadedModel.dispose?.();
+            loadedModel = null;
+            continue;
           }
 
           usedGpuMode = mode;
@@ -289,30 +307,17 @@ class LLMEngine extends EventEmitter {
         } catch (err) {
           const log = require('./logger');
           log.warn(`GPU mode ${mode} failed: ${err.message}`);
-          loadedModel = null;
+          if (loadedModel) { loadedModel.dispose?.(); loadedModel = null; }
+          if (loadedContext) { loadedContext.dispose?.(); loadedContext = null; }
         }
       }
 
-      if (!loadedModel) throw new Error(`Failed to load model from ${modelPath} on any GPU mode`);
-      if (loadSignal.aborted) { loadedModel.dispose?.(); throw new Error('Load cancelled'); }
+      if (!loadedModel || !loadedContext) throw new Error(`Failed to load model from ${modelPath} on any GPU mode`);
+      if (loadSignal.aborted) { loadedContext.dispose?.(); loadedModel.dispose?.(); throw new Error('Load cancelled'); }
 
       this.model = loadedModel;
+      this.context = loadedContext;
       this.currentModelPath = modelPath;
-
-      // Context creation with retry/shrink
-      const ctxTimeout = usedGpuMode === false ? CTX_CREATE_TIMEOUT_CPU : CTX_CREATE_TIMEOUT_GPU;
-      const maxCtx = this._computeMaxContext(gpuConfig.modelSizeGB);
-
-      this.context = await this._withTimeout(
-        this.model.createContext({
-          contextSize: { min: 2048, max: maxCtx },
-          flashAttention: true,
-          ignoreMemorySafetyChecks: usedGpuMode === false,
-          failedCreationRemedy: { retries: 8, autoContextSizeShrink: 0.5 },
-        }),
-        ctxTimeout,
-        'Context creation',
-      );
 
       // Reject GPU context if too small
       if (this.requireMinContextForGpu && usedGpuMode !== false) {
@@ -415,6 +420,11 @@ class LLMEngine extends EventEmitter {
     const modes = ['cuda', 'auto'];
     if (gpuConfig.roughMaxLayers > 0) {
       modes.push(gpuConfig.roughMaxLayers);
+      // Add partial GPU modes (half layers, quarter layers) for small VRAM GPUs
+      const half = Math.floor(gpuConfig.roughMaxLayers / 2);
+      const quarter = Math.floor(gpuConfig.roughMaxLayers / 4);
+      if (half >= 4) modes.push(half);
+      if (quarter >= 4 && quarter !== half) modes.push(quarter);
     }
     modes.push(false); // CPU fallback
     return modes;
@@ -711,7 +721,9 @@ class LLMEngine extends EventEmitter {
 
     // Context overflow detection
     const msg = (err.message || '').toLowerCase();
+    console.error(`[LLM] Generation error (non-abort): name=${err.name}, message=${err.message}, stack=${err.stack?.split('\n').slice(0,3).join(' | ')}`);
     if (msg.includes('compress') || msg.includes('context') || msg.includes('too long')) {
+      console.error(`[LLM] Treating as CONTEXT_OVERFLOW (matched: ${msg.includes('compress') ? 'compress' : msg.includes('context') ? 'context' : 'too long'})`);
       const summary = this.getConversationSummary();
       this.resetSession(true);
       const overflowErr = new Error(`CONTEXT_OVERFLOW:${summary}`);
@@ -1012,17 +1024,23 @@ class LLMEngine extends EventEmitter {
 
   // ─── Session Management ───
   async resetSession(useCompactPrompt = false) {
+    // Wait for any in-flight model load to finish first
+    if (this._initializingPromise) {
+      try { await this._initializingPromise; } catch {}
+    }
+
+    if (!this.model || !this.isReady) {
+      throw new Error('Cannot reset session — no model loaded');
+    }
+
     // Check if context is still usable
     if (!this.context || this.context._disposed) {
-      if (this.model) {
-        this.context = await this.model.createContext({
-          contextSize: { min: 2048, max: this._computeMaxContext(0) },
-          flashAttention: true,
-          failedCreationRemedy: { retries: 4, autoContextSizeShrink: 0.5 },
-        });
-      } else {
-        throw new Error('Cannot reset session — no model loaded');
-      }
+      this.context = await this.model.createContext({
+        contextSize: { min: 512, max: this._computeMaxContext(0) },
+        flashAttention: true,
+        ignoreMemorySafetyChecks: true,
+        failedCreationRemedy: { retries: 4, autoContextSizeShrink: 0.5 },
+      });
     }
 
     // Dispose old chat

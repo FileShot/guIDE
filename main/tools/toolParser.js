@@ -488,9 +488,12 @@ function _detectFallbackFileOperations(responseText, userMessage, lastDroppedFil
     if (content.length < 20) continue;
 
     // Look for a file path reference near or before this code block
+    // Use the LAST match (closest to code block) — earlier matches may be from prior blocks
     const beforeBlock = responseText.slice(Math.max(0, m.index - 300), m.index);
-    const pathRe = /\b([\w/\\.-]+\.(?:js|ts|jsx|tsx|py|html|css|json|md|yaml|yml))\b/i;
-    const pathMatch = beforeBlock.match(pathRe);
+    const pathReG = /\b([\w/\\.-]+\.(?:js|ts|jsx|tsx|py|html|css|json|md|yaml|yml))\b/gi;
+    let pathMatch = null;
+    let _pm;
+    while ((_pm = pathReG.exec(beforeBlock)) !== null) pathMatch = _pm;
 
     if (pathMatch) {
       calls.push({ tool: 'write_file', params: { filePath: pathMatch[1], content } });

@@ -43,31 +43,30 @@ function _writeJson(filePath, data) {
 /* ------------------------------------------------------------------ */
 
 function createSettingsManager(ctx) {
-  const mgr = {
-    save(settings) {
-      try {
-        _writeJson(_settingsPath(), settings);
-        log.info('Settings', 'Saved');
-        return { success: true };
-      } catch (e) {
-        log.error('Settings', 'Save failed:', e.message);
-        return { success: false, error: e.message };
-      }
-    },
+  function _readConfig() {
+    const data = _readJson(_settingsPath());
+    return data || {};
+  }
 
-    load() {
-      const data = _readJson(_settingsPath());
-      return data || {};
-    },
-  };
-  return mgr;
+  function _writeConfig(settings) {
+    try {
+      _writeJson(_settingsPath(), settings);
+      log.info('Settings', 'Saved');
+      return { success: true };
+    } catch (e) {
+      log.error('Settings', 'Save failed:', e.message);
+      return { success: false, error: e.message };
+    }
+  }
+
+  return { _readConfig, _writeConfig };
 }
 
 function registerSettingsHandlers(ctx) {
-  const mgr = createSettingsManager(ctx);
+  const { _readConfig, _writeConfig } = createSettingsManager(ctx);
 
-  ipcMain.handle('save-settings', (_evt, settings) => mgr.save(settings));
-  ipcMain.handle('load-settings', () => mgr.load());
+  ipcMain.handle('save-settings', (_evt, settings) => _writeConfig(settings));
+  ipcMain.handle('load-settings', () => _readConfig());
 
   ipcMain.handle('get-system-prompt-preview', (_evt, opts) => {
     // Return the effective system prompt that would be sent to the model

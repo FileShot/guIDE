@@ -1054,7 +1054,22 @@ function register(ctx) {
       const _stitchedForMcp = _pendingPartialBlock ? _pendingPartialBlock + responseText : responseText;
       _pendingPartialBlock = null;
       const _fenceIdx = _stitchedForMcp.search(/```(?:json|tool_call|tool)\b/);
-      const _hasUnclosedToolFence = _fenceIdx !== -1 && !_stitchedForMcp.slice(_fenceIdx).includes('\n```');
+      let _hasUnclosedToolFence = _fenceIdx !== -1 && !_stitchedForMcp.slice(_fenceIdx).includes('\n```');
+
+      // If the unclosed fence contains a complete JSON tool call, don't treat as truncated
+      if (_hasUnclosedToolFence) {
+        const fenceContent = _stitchedForMcp.slice(_fenceIdx);
+        const jsonMatch = fenceContent.match(/```(?:json|tool_call|tool)\s*\n?([\s\S]*)/);
+        if (jsonMatch) {
+          try {
+            const parsed = JSON.parse(jsonMatch[1].trim());
+            if (parsed && typeof parsed.tool === 'string') {
+              _hasUnclosedToolFence = false;
+            }
+          } catch {}
+        }
+      }
+
       const _wasTruncated = (
         (result?.stopReason === 'maxTokens' || result?.stopReason === 'max-tokens') ||
         _hasUnclosedToolFence
@@ -1219,8 +1234,9 @@ function register(ctx) {
           break;
         }
 
-        // Code-dump nudge
-        const hasCodeBlocks = /```(?:html?|css|javascript|js|typescript|ts|python|py|json)\s*\n[\s\S]{50,}/i.test(responseText);
+        // Code-dump nudge — only for large blocks likely to be full files
+        const _codeBlockMatch = responseText.match(/```(?:html?|css|javascript|js|typescript|ts|python|py|json)\s*\n([\s\S]*?)```/i);
+        const hasCodeBlocks = _codeBlockMatch && _codeBlockMatch[1].length > 500;
         if (hasCodeBlocks && nudgesRemaining > 0 && iteration < MAX_AGENTIC_ITERATIONS - 1) {
           nudgesRemaining--;
           currentPrompt = {
@@ -1325,7 +1341,7 @@ function register(ctx) {
       const hasBrowserAction = toolResults.results.some(tr => tr.tool?.startsWith('browser_'));
       const continueInstruction = hasBrowserAction
         ? '\n\nThe snapshot above has [ref=N]. Use browser_click/type with ref. Output next tool call now.'
-        : '\n\nOutput the next tool call to make progress. Only summarize when ALL steps are complete.';
+        : '\n\nIf more steps are needed, output the next tool call. If the task is complete, summarize what was done — do not call more tools.';
 
       const iterContext = executionBlock + stepDirective + taskReminder;
       const allFeedback = toolFeedback + snapFeedback;

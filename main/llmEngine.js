@@ -620,13 +620,19 @@ class LLMEngine extends EventEmitter {
       if (this._kvReuseCooldown > 0) this._kvReuseCooldown--;
 
       const sanitized = this._sanitizeResponse(fullResponse);
+      // Pass through node-llama-cpp's stopReason when it indicates maxTokens
+      let finalStopReason = detectedToolBlock ? 'tool_call' : 'natural';
+      if (result?.metadata?.stopReason === 'maxTokens') {
+        finalStopReason = 'maxTokens';
+        console.log(`[LLM] Generation stopped at maxTokens (${fullResponse.length} chars)`);
+      }
       return {
         text: sanitized,
         rawText: fullResponse,
         model: this.modelInfo?.name || 'unknown',
         tokensUsed: this.sequence?.nTokens || 0,
         contextUsed: this.context?.contextSize || 0,
-        stopReason: detectedToolBlock ? 'tool_call' : 'natural',
+        stopReason: finalStopReason,
       };
     } catch (err) {
       return this._handleGenerationError(err, fullResponse, detectedToolBlock);
@@ -917,11 +923,14 @@ class LLMEngine extends EventEmitter {
         if (!dup) collectedCalls.push({ functionName: rc.functionName, params: rc.params });
       }
 
+      // Pass through node-llama-cpp's stopReason when it indicates maxTokens
+      let finalStopReason = collectedCalls.length > 0 ? 'function_call' : 'natural';
+      if (result?.metadata?.stopReason === 'maxTokens') finalStopReason = 'maxTokens';
       return {
         text: this._sanitizeResponse(fullResponse),
         response: fullResponse,
         functionCalls: collectedCalls,
-        stopReason: collectedCalls.length > 0 ? 'function_call' : 'natural',
+        stopReason: finalStopReason,
       };
     } catch (err) {
       if (err.name === 'AbortError' || err.message?.includes('aborted')) {

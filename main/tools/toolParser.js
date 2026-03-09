@@ -124,7 +124,17 @@ function fixQuoting(raw) {
 
 function fixBackticks(raw) {
   if (!raw) return raw;
-  return raw.replace(/`([^`]*)`/g, '"$1"');
+  // Replace backtick-delimited strings with properly escaped JSON double-quoted strings
+  return raw.replace(/`([\s\S]*?)`/g, (match, inner) => {
+    // Escape characters that are invalid in JSON strings
+    const escaped = inner
+      .replace(/\\/g, '\\\\')
+      .replace(/"/g, '\\"')
+      .replace(/\n/g, '\\n')
+      .replace(/\r/g, '\\r')
+      .replace(/\t/g, '\\t');
+    return '"' + escaped + '"';
+  });
 }
 
 function tryParseJson(raw) {

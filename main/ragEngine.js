@@ -137,6 +137,18 @@ class RAGEngine {
       }
     }
 
+    // Apply temporal recency boost — recently modified files score higher
+    const now = Date.now();
+    for (const [docId, score] of scores) {
+      const doc = this.documents.get(docId);
+      if (doc) {
+        const mtime = this.fileMtimes.get(doc.path) || 0;
+        const ageHours = (now - mtime) / 3600000;
+        const recencyBoost = 1 + 0.3 * Math.exp(-ageHours / 24);
+        scores.set(docId, score * recencyBoost);
+      }
+    }
+
     return [...scores.entries()]
       .sort((a, b) => b[1] - a[1])
       .slice(0, maxResults)
@@ -282,33 +294,85 @@ class RAGEngine {
     const lines = content.split('\n');
     const docIds = [];
 
-    for (let start = 0; start < lines.length; start += CHUNK_SIZE - CHUNK_OVERLAP) {
-      const end = Math.min(start + CHUNK_SIZE, lines.length);
-      const chunk = lines.slice(start, end).join('\n');
-      const id = `${fp}:${start}-${end}`;
-
-      this.documents.set(id, { path: fp, relativePath: path.relative(this.projectPath, fp), startLine: start, endLine: end, lineCount: lines.length });
-      this._putCache(id, chunk);
-
-      const terms = _tokenize(chunk);
-      this.docLengths.set(id, terms.length);
-
-      const freq = new Map();
-      terms.forEach((t, pos) => {
-        const e = freq.get(t) || { count: 0, positions: [] };
-        e.count++; e.positions.push(pos);
-        freq.set(t, e);
-      });
-
-      for (const [term, { count, positions }] of freq) {
-        if (!this.index.has(term)) this.index.set(term, new Map());
-        this.index.get(term).set(id, { tf: count, positions });
-      }
-
-      docIds.push(id);
-      if (start + CHUNK_SIZE >= lines.length) break;
+    // Try function-boundary chunking for code files
+    const ext = path.extname(fp).toLowerCase();
+    const codeExts = ['.js', '.ts', '.tsx', '.jsx', '.py', '.java', '.cs', '.go', '.rs', '.c', '.cpp', '.h'];
+    let boundaries = null;
+    if (codeExts.includes(ext) && lines.length > CHUNK_SIZE) {
+      boundaries = this._findFunctionBoundaries(lines);
     }
+
+    if (boundaries && boundaries.length > 1) {
+      // Semantic chunking: split at function boundaries, merge small adjacent chunks
+      for (let i = 0; i < boundaries.length; i++) {
+        let start = boundaries[i];
+        let end = (i + 1 < boundaries.length) ? boundaries[i + 1] : lines.length;
+        // Merge small chunks with next boundary
+        while (end - start < 30 && i + 1 < boundaries.length) {
+          i++;
+          end = (i + 1 < boundaries.length) ? boundaries[i + 1] : lines.length;
+        }
+        // Split oversized chunks
+        if (end - start > CHUNK_SIZE) {
+          for (let s = start; s < end; s += CHUNK_SIZE - CHUNK_OVERLAP) {
+            const e = Math.min(s + CHUNK_SIZE, end);
+            this._addChunk(fp, lines, s, e, docIds);
+            if (s + CHUNK_SIZE >= end) break;
+          }
+        } else {
+          this._addChunk(fp, lines, start, end, docIds);
+        }
+      }
+    } else {
+      // Fallback: fixed-size line-based chunking
+      for (let start = 0; start < lines.length; start += CHUNK_SIZE - CHUNK_OVERLAP) {
+        const end = Math.min(start + CHUNK_SIZE, lines.length);
+        this._addChunk(fp, lines, start, end, docIds);
+        if (start + CHUNK_SIZE >= lines.length) break;
+      }
+    }
+
     this.fileIndex.set(fp, docIds);
+  }
+
+  _addChunk(fp, lines, start, end, docIds) {
+    const chunk = lines.slice(start, end).join('\n');
+    const id = `${fp}:${start}-${end}`;
+
+    this.documents.set(id, { path: fp, relativePath: path.relative(this.projectPath, fp), startLine: start, endLine: end, lineCount: lines.length });
+    this._putCache(id, chunk);
+
+    const terms = _tokenize(chunk);
+    this.docLengths.set(id, terms.length);
+
+    const freq = new Map();
+    terms.forEach((t, pos) => {
+      const e = freq.get(t) || { count: 0, positions: [] };
+      e.count++; e.positions.push(pos);
+      freq.set(t, e);
+    });
+
+    for (const [term, { count, positions }] of freq) {
+      if (!this.index.has(term)) this.index.set(term, new Map());
+      this.index.get(term).set(id, { tf: count, positions });
+    }
+
+    docIds.push(id);
+  }
+
+  _findFunctionBoundaries(lines) {
+    // Detect function/class/method start lines via common patterns
+    const boundaryRe = /^(?:export\s+)?(?:async\s+)?(?:function\s+\w|class\s+\w|(?:const|let|var)\s+\w+\s*=\s*(?:async\s+)?\(|(?:const|let|var)\s+\w+\s*=\s*(?:async\s+)?function|\w+\s*\([^)]*\)\s*\{|(?:public|private|protected|static)\s+(?:async\s+)?\w+\s*\(|def\s+\w+|func\s+\w+)/;
+    const boundaries = [0];
+    for (let i = 1; i < lines.length; i++) {
+      const trimmed = lines[i].trimStart();
+      if (trimmed.length > 0 && boundaryRe.test(trimmed)) {
+        // Only add if at top-level indentation (0-1 levels) or if line starts at col 0-4
+        const indent = lines[i].length - trimmed.length;
+        if (indent <= 4) boundaries.push(i);
+      }
+    }
+    return boundaries.length > 1 ? boundaries : null;
   }
 
   /* ── LRU content cache ─────────────────────────────────────────── */

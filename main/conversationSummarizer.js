@@ -20,6 +20,8 @@ class ConversationSummarizer {
     this.importantContext = [];   // [{type, content, timestamp}]
     this.rotationCount = 0;
     this.totalToolCalls = 0;
+    this._warmTierResults = []; // Recent tool results carried across rotation
+    this._previousSummaries = []; // Compacted summaries from prior rotations
   }
 
   // ─── Goal ───
@@ -205,11 +207,28 @@ class ConversationSummarizer {
   // ─── Rotation ───
   markRotation() {
     this.rotationCount++;
+
+    // Capture warm tier — last 5 significant tool results before rotation
+    const recentResults = this.completedSteps.slice(-5).map(s => {
+      const out = s.outcome ? `: ${s.outcome}` : '';
+      return `${s.success ? '+' : '-'} ${s.tool}${out}`;
+    });
+    this._warmTierResults = recentResults;
+
+    // Compact current summary into previousSummaries for layered recall
+    if (this.completedSteps.length > 0) {
+      const compact = `Rotation ${this.rotationCount - 1}: ${this.completedSteps.length} tool calls. ` +
+        (this.keyFindings.length > 0 ? `Findings: ${this.keyFindings.slice(-3).join('; ')}` : 'No key findings.');
+      this._previousSummaries.push(compact);
+      // Keep max 5 rotation summaries
+      if (this._previousSummaries.length > 5) this._previousSummaries.shift();
+    }
   }
 
   // ─── Summary Generation ───
   generateSummary(options = {}) {
     const maxTokens = options.maxTokens || 2000;
+    const activeTodos = options.activeTodos || [];
     const maxChars = maxTokens * 4; // ~4 chars per token estimate
     const sections = [];
 
@@ -246,11 +265,30 @@ class ConversationSummarizer {
       sections.push(`## KEY FINDINGS\n${findings}`);
     }
 
+    // 5b. Previous rotation summaries (layered memory)
+    if (this._previousSummaries.length > 0) {
+      sections.push(`## PRIOR CONTEXT ROTATIONS\n${this._previousSummaries.join('\n')}`);
+    }
+
+    // 5c. Warm tier — recent tool results from just before rotation
+    if (this._warmTierResults.length > 0) {
+      sections.push(`## RECENT RESULTS (pre-rotation)\n${this._warmTierResults.join('\n')}`);
+    }
+
     // 6. Remaining plan steps
     const remaining = this.taskPlan.filter(s => !s.completed);
     if (remaining.length > 0) {
       const steps = remaining.map(s => `${s.index}. ${s.description}`).join('\n');
       sections.push(`## REMAINING STEPS\n${steps}`);
+    }
+
+    // 6b. Active TODOs (injected from mcpToolServer)
+    if (activeTodos.length > 0) {
+      const todoLines = activeTodos
+        .filter(t => t.status !== 'done')
+        .map(t => `- [${t.status === 'in-progress' ? 'IN PROGRESS' : 'PENDING'}] ${t.text}`)
+        .join('\n');
+      if (todoLines) sections.push(`## ACTIVE TASKS\n${todoLines}`);
     }
 
     // 7. Instruction
@@ -264,8 +302,8 @@ class ConversationSummarizer {
     return summary;
   }
 
-  generateQuickSummary() {
-    return this.generateSummary({ maxTokens: 1200 });
+  generateQuickSummary(activeTodos) {
+    return this.generateSummary({ maxTokens: 1200, activeTodos: activeTodos || [] });
   }
 
   _formatProgress() {

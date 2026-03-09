@@ -181,7 +181,7 @@ function extractJsonObjects(text) {
     const partial = text.slice(start);
     // Try to recover write_file with partial content
     const pathMatch = partial.match(/"(?:filePath|path)"\s*:\s*"([^"]+)"/);
-    const contentMatch = partial.match(/"content"\s*:\s*"([\s\S]{100,})$/);
+    const contentMatch = partial.match(/"content"\s*:\s*"([\s\S]{20,})$/);
     if (pathMatch && contentMatch) {
       objects.push({
         tool: 'write_file',

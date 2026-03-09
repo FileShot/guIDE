@@ -55,6 +55,7 @@ class LLMEngine extends EventEmitter {
     this._cachedNvidiaDedicatedVramBytes = null;
     this._lastGpuMode = null;
     this._kvReuseCooldown = 0;
+    this._activeGenerationPromise = null;
     this.defaultParams = {
       maxTokens: 4096,
       temperature: 0.5,
@@ -216,6 +217,10 @@ class LLMEngine extends EventEmitter {
       // Cancel any in-flight generation
       if (this.abortController) {
         this.cancelGeneration('model-switch');
+      }
+      // Wait for generation to settle before disposing (prevents "Object is disposed" race)
+      if (this._activeGenerationPromise) {
+        try { await this._activeGenerationPromise; } catch {}
       }
       await this._dispose();
 
@@ -585,6 +590,10 @@ class LLMEngine extends EventEmitter {
 
     resetStallTimer();
 
+    // Track generation so model-switch can await settlement before disposal
+    let resolveGenDone;
+    this._activeGenerationPromise = new Promise(r => { resolveGenDone = r; });
+
     try {
       const result = await this._runGeneration(merged, onResponseChunk);
 
@@ -639,6 +648,8 @@ class LLMEngine extends EventEmitter {
     } finally {
       if (stallTimer) clearTimeout(stallTimer);
       if (genTimeoutTimer) clearTimeout(genTimeoutTimer);
+      resolveGenDone();
+      this._activeGenerationPromise = null;
     }
   }
 

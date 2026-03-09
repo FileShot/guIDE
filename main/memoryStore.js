@@ -123,6 +123,11 @@ class MemoryStore {
     this._scheduleSave();
   }
 
+  clearConversations() {
+    this.conversations = [];
+    this._scheduleSave();
+  }
+
   dispose() {
     if (this._saveTimer) {
       clearTimeout(this._saveTimer);

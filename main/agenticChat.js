@@ -446,7 +446,7 @@ function register(ctx) {
       if (Math.ceil(historyAfterPrune / 4) > 30000 && cloudHistory.length > 6) {
         console.log('[Cloud] History rotation — compressing with summarizer');
         summarizer.markRotation();
-        const summary = summarizer.generateSummary({ maxTokens: 3000 });
+        const summary = summarizer.generateSummary({ maxTokens: 3000, activeTodos: mcpToolServer?._todos || [] });
         const recentExchanges = cloudHistory.slice(-4);
         cloudHistory = [
           { role: 'user', content: summary },
@@ -539,7 +539,8 @@ function register(ctx) {
       // Preamble
       const savedSettings = _readConfig()?.userSettings;
       const userPreamble = savedSettings?.systemPrompt?.trim();
-      const isSmallModel = modelProfile.prompt.style === 'compact';
+      const contextIsConstrained = totalCtx < 4096;
+      const isSmallModel = modelProfile.prompt.style === 'compact' || contextIsConstrained;
       const defaultPreamble = isSmallModel ? (DEFAULT_COMPACT_PREAMBLE || DEFAULT_SYSTEM_PREAMBLE) : DEFAULT_SYSTEM_PREAMBLE;
       const preamble = userPreamble || defaultPreamble;
       appendIfBudget(preamble + '\n\n');
@@ -548,7 +549,7 @@ function register(ctx) {
       const effectiveTaskType = taskTypeOverride || 'general';
       if (effectiveTaskType !== 'chat') {
         const toolPromptStyle = modelProfile.prompt.toolPromptStyle;
-        const useCompactTools = toolPromptStyle === 'grammar-only' || toolPromptStyle === 'compact';
+        const useCompactTools = toolPromptStyle === 'grammar-only' || toolPromptStyle === 'compact' || contextIsConstrained;
         if (useCompactTools) {
           const compactHint = totalCtx < 4096
             ? mcpToolServer.getCompactToolHint(effectiveTaskType, { minimal: true })
@@ -755,7 +756,7 @@ function register(ctx) {
           llmEngine, totalCtx, currentPrompt, fullResponseText,
           allToolResults, contextRotations, MAX_CONTEXT_ROTATIONS: MAX_CONTEXT_ROTATIONS,
           summarizer, buildStaticPrompt, buildDynamicContext, maxPromptTokens, message,
-          continuationCount, _pendingPartialBlock,
+          continuationCount, _pendingPartialBlock, mcpToolServer,
         });
         if (preGenResult) {
           if (preGenResult.shouldContinue) {
@@ -932,7 +933,19 @@ function register(ctx) {
           contextRotations++;
           try {
             summarizer.markRotation();
-            const convSummary = summarizer.generateSummary({ maxTokens: Math.min(Math.floor(totalCtx * 0.25), 3000) });
+            // Auto-checkpoint on rotation — persist state for recovery
+            try {
+              const checkpoint = {
+                todos: mcpToolServer?._todos || [],
+                lastFile: summarizer.currentState.lastFile || null,
+                lastAction: summarizer.completedSteps.length > 0 ? summarizer.completedSteps[summarizer.completedSteps.length - 1] : null,
+                rotationCount: summarizer.rotationCount,
+                goal: summarizer.originalGoal,
+                timestamp: Date.now(),
+              };
+              await mcpToolServer._saveMemory('_checkpoint', JSON.stringify(checkpoint));
+            } catch (_) {}
+            const convSummary = summarizer.generateSummary({ maxTokens: Math.min(Math.floor(totalCtx * 0.25), 3000), activeTodos: mcpToolServer?._todos || [] });
             if (genError.partialResponse) fullResponseText += genError.partialResponse;
             await llmEngine.resetSession(true);
             await ensureLlmChat(llmEngine, getNodeLlamaCppPath);
@@ -1121,16 +1134,17 @@ function register(ctx) {
             iteration--;
 
             let continuationMsg;
+            const taskHint = message ? `[Task: ${message.substring(0, 100)}${message.length > 100 ? '...' : ''}]\n` : '';
             if (_hasUnclosedToolFence) {
               const partialFence = _stitchedForMcp.slice(_fenceIdx);
               _pendingPartialBlock = partialFence;
               // FIX-B: Only send short tail (500 chars) to prevent prompt bloat
               const tail = partialFence.length > 500 ? '\u2026' + partialFence.slice(-500) : partialFence;
-              continuationMsg = `[Continue the tool call JSON from exactly where it was cut. Output ONLY the JSON continuation. Do NOT restart the tool call. Continue from:\n${tail}]`;
+              continuationMsg = `${taskHint}[Continue the tool call JSON from exactly where it was cut. Output ONLY the JSON continuation. Do NOT restart the tool call. Continue from:\n${tail}]`;
             } else {
               // FIX: Use 500 chars of tail (not 200) for better continuation context
               const tail = responseText.length > 500 ? '\u2026' + responseText.slice(-500) : responseText;
-              continuationMsg = `[Continue your response exactly where you left off. Do not restart or repeat content. Here is the end of what you wrote:\n${tail}]`;
+              continuationMsg = `${taskHint}[Continue your response exactly where you left off. Do not restart or repeat content. Here is the end of what you wrote:\n${tail}]`;
             }
 
             currentPrompt = {
@@ -1173,7 +1187,7 @@ function register(ctx) {
         if (compaction.shouldRotate && contextRotations < MAX_CONTEXT_ROTATIONS) {
           contextRotations++;
           summarizer.markRotation();
-          lastConvSummary = summarizer.generateQuickSummary();
+          lastConvSummary = summarizer.generateQuickSummary(mcpToolServer?._todos);
           await llmEngine.resetSession(true);
           sessionJustRotated = true;
         }
@@ -1407,6 +1421,10 @@ function register(ctx) {
     let cleanResponse = displayResponseText;
     cleanResponse = cleanResponse.replace(/<think(?:ing)?>\s*[\s\S]*?<\/think(?:ing)?>/gi, '');
     cleanResponse = cleanResponse.replace(/<\/?think(?:ing)?>/gi, '');
+    // Strip any tool call fence artifacts that leaked through continuation boundaries
+    cleanResponse = cleanResponse.replace(/\n?```(?:json|tool_call|tool)\b[\s\S]*?```\n?/g, '');
+    cleanResponse = cleanResponse.replace(/\n?```(?:json|tool_call|tool)\b[\s\S]*/g, '');
+    cleanResponse = cleanResponse.replace(/^\s*```\s*$/gm, '');
     cleanResponse = cleanResponse.replace(/\n{3,}/g, '\n\n').trim();
 
     if (!cleanResponse) {
@@ -1498,7 +1516,7 @@ function guardFirstTurnOverflow(currentPrompt, totalCtx, estimateTokens, buildSt
 function preGenerationContextCheck(opts) {
   const { llmEngine, totalCtx, currentPrompt, fullResponseText, allToolResults,
     contextRotations, MAX_CONTEXT_ROTATIONS, summarizer, buildStaticPrompt,
-    buildDynamicContext, maxPromptTokens, message, continuationCount, _pendingPartialBlock } = opts;
+    buildDynamicContext, maxPromptTokens, message, continuationCount, _pendingPartialBlock, mcpToolServer } = opts;
 
   let used = 0;
   try { if (llmEngine.sequence?.nTokens) used = llmEngine.sequence.nTokens; } catch (_) {}
@@ -1521,7 +1539,19 @@ function preGenerationContextCheck(opts) {
   const isContinuationRotation = continuationCount > 0 && summarizer.completedSteps.length === 0;
 
   summarizer.markRotation();
-  const summary = summarizer.generateQuickSummary();
+  // Auto-checkpoint on rotation
+  try {
+    const ckpt = {
+      todos: mcpToolServer?._todos || [],
+      lastFile: summarizer.currentState.lastFile || null,
+      lastAction: summarizer.completedSteps.length > 0 ? summarizer.completedSteps[summarizer.completedSteps.length - 1] : null,
+      rotationCount: summarizer.rotationCount,
+      goal: summarizer.originalGoal,
+      timestamp: Date.now(),
+    };
+    mcpToolServer?._saveMemory?.('_checkpoint', JSON.stringify(ckpt));
+  } catch (_) {}
+  const summary = summarizer.generateQuickSummary(mcpToolServer?._todos);
 
   if (isContinuationRotation) {
     return {
@@ -1688,7 +1718,10 @@ function salvagePartialToolCall(text, fenceIdx) {
   const fpMatch = fenceContent.match(/"filePath"\s*:\s*"([^"]+)"/);
   const ctMatch = fenceContent.match(/"content"\s*:\s*"([\s\S]+)/);
 
-  if (!fpMatch || !ctMatch || ctMatch[1].length < 100) return null;
+  if (!fpMatch || !ctMatch || ctMatch[1].length < 20) {
+    if (fpMatch) console.warn(`[AI Chat] Salvage dropped: "${fpMatch[1]}" — content too short (${ctMatch ? ctMatch[1].length : 0} chars)`);
+    return null;
+  }
 
   let content = ctMatch[1];
   const lastNewline = content.lastIndexOf('\\n');
@@ -1700,7 +1733,7 @@ function salvagePartialToolCall(text, fenceIdx) {
     content = content.replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\"/g, '"').replace(/\\\\/g, '\\');
   }
 
-  if (content.length < 100) return null;
+  if (content.length < 20) return null;
 
   console.log(`[AI Chat] Salvaged ${content.length} chars for "${fpMatch[1]}"`);
   const json = JSON.stringify({ tool: 'write_file', params: { filePath: fpMatch[1], content } });

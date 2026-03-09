@@ -2100,7 +2100,12 @@ class MCPToolServer {
     try {
       const memDir = path.join(this.projectPath || require('os').homedir(), '.guide-memory');
       await fs.mkdir(memDir, { recursive: true });
-      await fs.writeFile(path.join(memDir, `${key.replace(/[^a-zA-Z0-9_-]/g, '_')}.txt`), value, 'utf8');
+      const safeKey = key.replace(/[^a-zA-Z0-9_-]/g, '_');
+      const metadata = { key, savedAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+      const payload = JSON.stringify({ metadata, content: value });
+      await fs.writeFile(path.join(memDir, `${safeKey}.json`), payload, 'utf8');
+      // Also write plain text for backward compat
+      await fs.writeFile(path.join(memDir, `${safeKey}.txt`), value, 'utf8');
       return { success: true, message: `Memory saved: "${key}"` };
     } catch (error) {
       return { success: false, error: error.message };
@@ -2111,11 +2116,39 @@ class MCPToolServer {
     if (!key) return { success: false, error: 'Key is required' };
     try {
       const memDir = path.join(this.projectPath || require('os').homedir(), '.guide-memory');
-      const filePath = path.join(memDir, `${key.replace(/[^a-zA-Z0-9_-]/g, '_')}.txt`);
-      const content = await fs.readFile(filePath, 'utf8');
-      return { success: true, key, value: content };
+      const safeKey = key.replace(/[^a-zA-Z0-9_-]/g, '_');
+
+      // Try exact match first (JSON then txt)
+      for (const ext of ['.json', '.txt']) {
+        const filePath = path.join(memDir, `${safeKey}${ext}`);
+        try {
+          const raw = await fs.readFile(filePath, 'utf8');
+          if (ext === '.json') {
+            const parsed = JSON.parse(raw);
+            return { success: true, key, value: parsed.content, metadata: parsed.metadata };
+          }
+          return { success: true, key, value: raw };
+        } catch (_) {}
+      }
+
+      // Fuzzy match: find closest key by substring
+      try {
+        const files = await fs.readdir(memDir);
+        const lowerKey = safeKey.toLowerCase();
+        const match = files.find(f => f.toLowerCase().includes(lowerKey));
+        if (match) {
+          const raw = await fs.readFile(path.join(memDir, match), 'utf8');
+          const matchKey = match.replace(/\.(json|txt)$/, '');
+          if (match.endsWith('.json')) {
+            const parsed = JSON.parse(raw);
+            return { success: true, key: matchKey, value: parsed.content, metadata: parsed.metadata, fuzzyMatch: true };
+          }
+          return { success: true, key: matchKey, value: raw, fuzzyMatch: true };
+        }
+      } catch (_) {}
+
+      return { success: false, error: `No memory found for key: "${key}"` };
     } catch (error) {
-      if (error.code === 'ENOENT') return { success: false, error: `No memory found for key: "${key}"` };
       return { success: false, error: error.message };
     }
   }
@@ -2125,8 +2158,38 @@ class MCPToolServer {
       const memDir = path.join(this.projectPath || require('os').homedir(), '.guide-memory');
       try { await fs.access(memDir); } catch { return { success: true, keys: [], message: 'No memories saved yet.' }; }
       const files = await fs.readdir(memDir);
-      const keys = files.filter(f => f.endsWith('.txt')).map(f => f.replace('.txt', '').replace(/_/g, ' '));
-      return { success: true, keys, message: `${keys.length} memories found` };
+      // Prefer .json files, fall back to .txt
+      const jsonFiles = files.filter(f => f.endsWith('.json'));
+      const txtOnlyFiles = files.filter(f => f.endsWith('.txt') && !jsonFiles.includes(f.replace('.txt', '.json')));
+
+      const entries = [];
+      for (const f of jsonFiles) {
+        try {
+          const raw = await fs.readFile(path.join(memDir, f), 'utf8');
+          const parsed = JSON.parse(raw);
+          entries.push({ key: f.replace('.json', '').replace(/_/g, ' '), updatedAt: parsed.metadata?.updatedAt || null });
+        } catch (_) {
+          entries.push({ key: f.replace('.json', '').replace(/_/g, ' '), updatedAt: null });
+        }
+      }
+      for (const f of txtOnlyFiles) {
+        try {
+          const st = await fs.stat(path.join(memDir, f));
+          entries.push({ key: f.replace('.txt', '').replace(/_/g, ' '), updatedAt: st.mtime.toISOString() });
+        } catch (_) {
+          entries.push({ key: f.replace('.txt', '').replace(/_/g, ' '), updatedAt: null });
+        }
+      }
+
+      // Sort by most recently updated
+      entries.sort((a, b) => {
+        if (!a.updatedAt && !b.updatedAt) return 0;
+        if (!a.updatedAt) return 1;
+        if (!b.updatedAt) return -1;
+        return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+      });
+
+      return { success: true, keys: entries.map(e => e.key), entries, message: `${entries.length} memories found` };
     } catch (error) {
       return { success: false, error: error.message };
     }
@@ -2541,7 +2604,7 @@ class MCPToolServer {
     if (minimal) {
       hint += '### Web\n';
       hint += '- **web_search**(query) — Search the internet.\n\n';
-      hint += 'ALWAYS use write_file for code — NEVER output code as chat text.\n';
+      hint += 'ALWAYS use the appropriate tool for action — NEVER output file content as code blocks in chat.\n';
       return hint;
     }
 
@@ -2581,7 +2644,7 @@ class MCPToolServer {
     hint += '\n### Planning\n';
     hint += '- **write_todos**(items) — Create task list for complex multi-step work.\n';
     hint += '- **update_todo**(index, status) — Mark a task done/in-progress.\n';
-    hint += '\nYour browser is REAL Chromium. Never say you can\'t browse. ALWAYS use write_file for code — NEVER output code as chat text.\n';
+    hint += '\nYour browser is REAL Chromium. Never say you can\'t browse. ALWAYS use the appropriate tool for action — NEVER output file content as code blocks in chat.\n';
     return hint;
   }
 
@@ -2694,6 +2757,7 @@ Then to see the page:
 - You HAVE tools — use them. NEVER say "I can't browse" or "I don't have internet"
 - Your browser is REAL Chromium — no CAPTCHA restrictions
 - NEVER provide manual instructions — USE the tools to do the work
+- NEVER output full file content as code blocks in chat — use write_file, edit_file, or append_to_file
 - If an error occurs, retry with a different approach — do NOT give up
 `;
     return prompt;

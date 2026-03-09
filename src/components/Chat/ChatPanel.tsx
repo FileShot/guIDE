@@ -1814,7 +1814,7 @@ ${e.message}`,
                   {isOk ? <Check size={11} className="text-[#89d185] flex-shrink-0" /> : <X size={11} className="text-[#f14c4c] flex-shrink-0" />}
                   <span className="text-[11px] text-[#d4d4d4] font-medium">{getToolLabel(tu, isOk ? 'ok' : 'fail')}</span>
                 </div>
-                <CodeBlock code={msgWriteContent} language={msgWriteLang} onApply={() => onApplyCode(currentFile, msgWriteContent)} isToolCall={true} />
+                <CodeBlock code={msgWriteContent} language={msgWriteLang} onApply={() => onApplyCode(currentFile, msgWriteContent)} isToolCall={true} isAlreadyWritten={isOk} />
               </div>
             );
           } else {

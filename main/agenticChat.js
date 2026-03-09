@@ -1211,13 +1211,23 @@ function register(ctx) {
 
       // Route planning text to thinking panel
       if (toolResults.hasToolCalls && toolResults.results.length > 0 && mainWindow) {
-        const toolIndicators = ['{"tool":', '```tool_call', '```json\n{"tool"', '<tool_call>'];
-        let splitIdx = responseText.length;
-        for (const ind of toolIndicators) {
-          const idx = responseText.indexOf(ind);
-          if (idx >= 0 && idx < splitIdx) splitIdx = idx;
+        let planningText;
+        if (toolResults.formalCallCount > 0) {
+          // Formal tool calls — strip from tool indicators onward
+          const toolIndicators = ['{"tool":', '```tool_call', '```json\n{"tool"', '<tool_call>'];
+          let splitIdx = responseText.length;
+          for (const ind of toolIndicators) {
+            const idx = responseText.indexOf(ind);
+            if (idx >= 0 && idx < splitIdx) splitIdx = idx;
+          }
+          planningText = responseText.substring(0, splitIdx).trim();
+        } else {
+          // Fallback-detected tool calls — strip large code blocks (they appear in tool result panels)
+          planningText = responseText
+            .replace(/```[^\n]*\n([\s\S]*?)```/g, (match, content) => content.length > 200 ? '' : match)
+            .replace(/\n{3,}/g, '\n\n')
+            .trim();
         }
-        const planningText = responseText.substring(0, splitIdx).trim();
         if (planningText) {
           mainWindow.webContents.send('llm-thinking-token', planningText);
           mainWindow.webContents.send('llm-replace-last', planningText);
@@ -1341,7 +1351,7 @@ function register(ctx) {
       const hasBrowserAction = toolResults.results.some(tr => tr.tool?.startsWith('browser_'));
       const continueInstruction = hasBrowserAction
         ? '\n\nThe snapshot above has [ref=N]. Use browser_click/type with ref. Output next tool call now.'
-        : '\n\nIf more steps are needed, output the next tool call. If the task is complete, summarize what was done — do not call more tools.';
+        : '\n\nSummarize what was accomplished. Only call another tool if the user\'s request clearly requires additional steps not yet started.';
 
       const iterContext = executionBlock + stepDirective + taskReminder;
       const allFeedback = toolFeedback + snapFeedback;

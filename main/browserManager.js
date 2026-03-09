@@ -157,6 +157,10 @@ class BrowserManager {
     this._resizeHandler = null;
   }
 
+  initialize(parentWindow) {
+    this.parentWindow = parentWindow;
+  }
+
   // ── Navigation ──
 
   async navigate(url, parentWindow) {

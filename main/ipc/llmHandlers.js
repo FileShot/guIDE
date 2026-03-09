@@ -19,8 +19,8 @@ function register(ctx) {
   });
 
   // ─── GPU Monitoring & Preference ──────────────────────────────────
-  ipcMain.handle('gpu-get-info', () => {
-    try { return { success: true, gpu: ctx.llmEngine.getGPUInfo() }; }
+  ipcMain.handle('gpu-get-info', async () => {
+    try { return { success: true, gpu: await ctx.llmEngine.getGPUInfo() }; }
     catch (e) { return { success: false, error: e.message, gpu: null }; }
   });
 

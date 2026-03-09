@@ -1,12 +1,13 @@
 /**
- * Shared constants for the guIDE main process.
+ * guIDE — System Prompt Constants
+ * 
+ * Three preambles for different contexts:
+ *   DEFAULT_SYSTEM_PREAMBLE  — medium/large models (full tool list + detailed guidance)
+ *   DEFAULT_COMPACT_PREAMBLE — small models ≤4B (shorter, more explicit instructions)
+ *   DEFAULT_CHAT_PREAMBLE    — pure conversation turns (no tool references)
  */
+'use strict';
 
-/**
- * Full system preamble — used for medium/large/xlarge models on browser, code, and general tasks.
- * Identity-forward, tool-aware, no executor/NEVER-refuse language.
- * Goal: model responds naturally to conversation AND uses tools confidently when tasks require it.
- */
 const DEFAULT_SYSTEM_PREAMBLE = `You are a local AI coding assistant with tools. Use them to take real action — don't describe what you'd do, just do it.
 
 ## Tools
@@ -60,11 +61,6 @@ const DEFAULT_SYSTEM_PREAMBLE = `You are a local AI coding assistant with tools.
 - Browser: browser_navigate → browser_snapshot → browser_click/type using refs from snapshot
 - Multi-step tasks (3+ steps): use write_todos to plan, update_todo as each step completes`;
 
-/**
- * Compact preamble for small local models (tiny/small tier, ≤4B params).
- * Shorter than the full preamble to preserve token budget on limited context windows.
- * Same philosophy — identity-forward, helpful, no executor language.
- */
 const DEFAULT_COMPACT_PREAMBLE = `You are a local AI coding assistant with tools. Use them to take real action — never just describe what you'd do.
 
 ## Tools
@@ -115,12 +111,6 @@ const DEFAULT_COMPACT_PREAMBLE = `You are a local AI coding assistant with tools
 - Tool format: {"tool":"read_file","params":{"filePath":"src/app.js"}}
 - For conversational messages — greetings, casual chat, simple questions — respond directly with text. No tools needed.`;
 
-/**
- * Minimal preamble for pure conversational turns (greetings, knowledge questions, casual chat).
- * Used when detectTaskType() returns 'chat' — no tools are injected, so this preamble
- * should NOT reference workflows, executor roles, or tool formats.
- * Goal: model responds like a competent assistant, not an agent primed to do tasks.
- */
 const DEFAULT_CHAT_PREAMBLE = `Answer questions, help with code and concepts, and have normal conversations.
 Be concise, direct, and helpful.`;
 

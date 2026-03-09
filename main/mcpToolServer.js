@@ -1,22 +1,30 @@
 /**
- * guIDE MCP Tools Server - Model Context Protocol tools for browser automation,
+ * guIDE MCP Tools Server — Model Context Protocol tools for browser automation,
  * web search, code execution, and system interaction.
  * Copyright (c) 2025-2026 Brendan Gray (GitHub: FileShot)
  * All Rights Reserved. See LICENSE for terms.
  *
  * Provides tool definitions + execution for the LLM to use autonomously.
  */
-const { exec, spawn } = require('child_process');
+const { exec } = require('child_process');
 const path = require('path');
 const fs = require('fs').promises;
 const https = require('https');
 const http = require('http');
 const vm = require('vm');
 
-// Extracted tool modules (ARCH-03 split)
+// Extracted tool modules
 const mcpBrowserTools = require('./tools/mcpBrowserTools');
 const mcpGitTools = require('./tools/mcpGitTools');
-const mcpToolParser = require('./tools/mcpToolParser');
+const {
+  parseToolCalls: standaloneParseToolCalls,
+  repairToolCalls,
+  _recoverWriteFileContent,
+  _detectProseCommands,
+  _detectFallbackFileOperations: standaloneFallbackDetect,
+  TOOL_NAME_ALIASES,
+  VALID_TOOLS,
+} = require('./tools/toolParser');
 
 class MCPToolServer {
   constructor(options = {}) {
@@ -24,64 +32,62 @@ class MCPToolServer {
     this.ragEngine = options.ragEngine || null;
     this.terminalManager = options.terminalManager || null;
     this.projectPath = options.projectPath || null;
-    this.browserManager = null;   // Embedded BrowserView (fallback)
-    this.playwrightBrowser = null; // Playwright automation engine (primary)
+    this.browserManager = null;
+    this.playwrightBrowser = null;
     this.gitManager = null;
-    
-    // Tool execution history for context
+    this.imageGen = null;
+
     this.toolHistory = [];
-    
-    // File change backups for undo (maps filePath -> { original, timestamp, tool, isNew })
-    this._fileBackups = new Map();
-    this._maxFileBackups = 200; // Prevent unbounded growth in long sessions
     this.maxHistory = 50;
 
-    // Checkpoint turn tracking — persistent ring buffer (survives Keep/Undo)
-    this._turnSnapshots = []; // [{ turnId, timestamp, userMessage, files: [{filePath, fileName, isNew, original}] }]
+    // File change backups for undo (filePath → { original, timestamp, tool, isNew })
+    this._fileBackups = new Map();
+    this._maxFileBackups = 200;
+
+    // Checkpoint turn tracking
+    this._turnSnapshots = [];
     this._maxTurnSnapshots = 20;
     this._currentTurnId = null;
-    this._currentTurnCapture = new Map(); // filePath → {original, isNew} — first write per file per turn
+    this._currentTurnCapture = new Map();
 
-    // Cache for tool definitions and prompt (they never change at runtime)
+    // Caches
     this._toolDefsCache = null;
     this._toolPromptCache = null;
 
-    // ── TODO list (visible to user) ──────────────────────
-    this._todos = [];  // [{ id, text, status: 'pending'|'in-progress'|'done', created }]
+    // TODO list
+    this._todos = [];
     this._todoNextId = 1;
-    this.onTodoUpdate = null; // Callback: (todos) => void
+    this.onTodoUpdate = null;
 
-    // ── Scratchpad files for context overflow ─────────────
-    this._scratchDir = options.projectPath ? require('path').join(options.projectPath, '.guide-scratch') : null;
+    // Scratchpad
+    this._scratchDir = options.projectPath ? path.join(options.projectPath, '.guide-scratch') : null;
 
-    // ── Custom tools created by the agent ─────────────────
-    this._customTools = new Map(); // name → { description, code (JS function body), created }
+    // Custom tools
+    this._customTools = new Map();
 
-    // ── Subagent spawning ─────────────────────────────────
-    this._spawnSubagent = null; // callback: async (task, maxIter) => resultString
+    // Subagent spawning
+    this._spawnSubagent = null;
 
-    // ── Permission gates for destructive operations ──────
-    this.onPermissionRequest = null; // callback: async (tool, params, reason) => boolean
+    // Permission gates for destructive operations
+    this.onPermissionRequest = null;
     this._destructiveTools = new Set([
       'delete_file', 'replace_in_file', 'write_file', 'terminal_run',
-      'git_commit', 'git_push', 'git_reset', 'git_branch_delete'
+      'git_commit', 'git_push', 'git_reset', 'git_branch_delete',
     ]);
   }
+
+  // ─── Parameter Normalization ─────────────────────────────────────────────
 
   _normalizeBrowserParams(toolName, params) {
     if (!params || typeof params !== 'object') return params;
     const normalized = { ...params };
 
-    // Common small-model schema drift:
-    // - uses `selector` where our tools expect `ref`
-    // - passes values like "[ref=27]" instead of "27"
     if (toolName === 'browser_click' || toolName === 'browser_type' || toolName === 'browser_hover') {
+      // Common small-model schema drift: selector/element_ref/elementRef → ref
       if (normalized.ref == null && normalized.selector != null) {
         normalized.ref = normalized.selector;
         delete normalized.selector;
       }
-
-      // More drift: element_ref/elementRef instead of ref
       if (normalized.ref == null && normalized.element_ref != null) {
         normalized.ref = normalized.element_ref;
         delete normalized.element_ref;
@@ -90,9 +96,7 @@ class MCPToolServer {
         normalized.ref = normalized.elementRef;
         delete normalized.elementRef;
       }
-
-      // For clicks, sometimes models try to provide visible text instead of a ref.
-      // PlaywrightBrowser.click already supports text fallback if ref is non-numeric.
+      // For clicks: accept visible text as ref
       if (toolName === 'browser_click' && normalized.ref == null && typeof normalized.element_text === 'string') {
         normalized.ref = normalized.element_text;
         delete normalized.element_text;
@@ -101,17 +105,15 @@ class MCPToolServer {
         normalized.ref = normalized.elementText;
         delete normalized.elementText;
       }
-
-      // Normalize numeric refs to strings (PlaywrightBrowser refs are stringy)
+      // Normalize numeric refs to strings
       if (typeof normalized.ref === 'number') normalized.ref = String(normalized.ref);
-
+      // Strip [ref=N] wrapper
       if (typeof normalized.ref === 'string') {
         const m = normalized.ref.match(/\[ref\s*=\s*(\d+)\]/i) || normalized.ref.match(/^ref\s*=\s*(\d+)$/i);
         if (m) normalized.ref = m[1];
       }
     }
 
-    // Sometimes models use `value` for typed text.
     if (toolName === 'browser_type') {
       if (normalized.text == null && normalized.value != null) {
         normalized.text = normalized.value;
@@ -119,7 +121,6 @@ class MCPToolServer {
       }
     }
 
-    // Sometimes models use `href`, `link`, `ref`, `src`, or `page` for navigation.
     if (toolName === 'browser_navigate') {
       if (normalized.url == null && typeof normalized.href === 'string') normalized.url = normalized.href;
       if (normalized.url == null && typeof normalized.link === 'string') normalized.url = normalized.link;
@@ -136,15 +137,11 @@ class MCPToolServer {
     if (!params || typeof params !== 'object') return params;
     const normalized = { ...params };
 
-    // Common schema drift across models:
-    // - uses `path` instead of `filePath`/`dirPath`
-    // - uses `dir` or `directory` instead of `dirPath`
-    if (toolName === 'write_file' || toolName === 'read_file' || toolName === 'delete_file' || toolName === 'rename_file' || toolName === 'edit_file' || toolName === 'get_file_info' || toolName === 'git_diff') {
+    if (['write_file', 'read_file', 'delete_file', 'rename_file', 'edit_file', 'get_file_info', 'git_diff'].includes(toolName)) {
       if (normalized.filePath == null && typeof normalized.path === 'string') {
         normalized.filePath = normalized.path;
         delete normalized.path;
       }
-      // snake_case drift: small models use file_path, file_name instead of filePath
       if (normalized.filePath == null && typeof normalized.file_path === 'string') {
         normalized.filePath = normalized.file_path;
         delete normalized.file_path;
@@ -162,7 +159,6 @@ class MCPToolServer {
         delete normalized.file;
       }
       if (normalized.filePath == null && typeof normalized.key === 'string') {
-        // Defense: model confused generic {key,value} example with real params
         normalized.filePath = normalized.key;
         delete normalized.key;
         delete normalized.value;
@@ -172,7 +168,6 @@ class MCPToolServer {
     if (toolName === 'list_directory') {
       if (normalized.dirPath == null) {
         if (typeof normalized.filePath === 'string') {
-          // Models copy filePath from the system prompt example and use it for all tools
           normalized.dirPath = normalized.filePath;
           delete normalized.filePath;
         } else if (typeof normalized.path === 'string') {
@@ -185,7 +180,6 @@ class MCPToolServer {
           normalized.dirPath = normalized.directory;
           delete normalized.directory;
         } else if (typeof normalized.key === 'string') {
-          // Defense: model confused generic {key,value} example with real params
           normalized.dirPath = normalized.key;
           delete normalized.key;
           delete normalized.value;
@@ -210,10 +204,8 @@ class MCPToolServer {
     return normalized;
   }
 
-  /**
-   * Wrap a promise with a timeout. Returns a timed-out error result if the promise
-   * doesn't resolve within the given ms (default 60s).
-   */
+  // ─── Timeout Wrapper ─────────────────────────────────────────────────────
+
   _withTimeout(promise, ms = 60000, label = 'operation') {
     return Promise.race([
       promise,
@@ -223,16 +215,11 @@ class MCPToolServer {
     ]);
   }
 
-  /**
-   * Sanitize a file path from LLM output.
-   * Small models hallucinate paths like "D:/models/models/tst/test/output/10-browsers/file.md"
-   * when the project is actually at "C:/Users/brend/test".
-   * This extracts the meaningful filename/relative portion and uses it relative to projectPath.
-   */
+  // ─── Path Sanitization ───────────────────────────────────────────────────
+
   _sanitizeFilePath(filePath) {
     if (!filePath) return filePath;
-    
-    // When no project is open, only allow relative paths — block all absolute paths
+
     if (!this.projectPath) {
       if (path.isAbsolute(filePath)) {
         console.log(`[MCPToolServer] Absolute path blocked (no project): "${filePath}"`);
@@ -240,65 +227,52 @@ class MCPToolServer {
       }
       return filePath;
     }
-    
-    // Resolve against project root and verify it stays within bounds
+
     const resolved = path.resolve(this.projectPath, filePath);
     const resolvedNorm = resolved.replace(/\\/g, '/').toLowerCase();
     const projNorm = this.projectPath.replace(/\\/g, '/').toLowerCase();
-    
+
     if (!resolvedNorm.startsWith(projNorm)) {
-      console.log(`[MCPToolServer] Path traversal blocked: "${filePath}" â†’ "${resolved}" escapes project`);
+      console.log(`[MCPToolServer] Path traversal blocked: "${filePath}" → "${resolved}" escapes project`);
       return path.basename(filePath);
     }
-    
+
     const normalized = filePath.replace(/\\/g, '/');
     const projNormalized = this.projectPath.replace(/\\/g, '/');
-    
-    // If it's already relative (and validated above), return as-is
+
     if (!path.isAbsolute(filePath)) return filePath;
 
-    // Detect doubled project root — common model error: model appends projectName to projectPath
-    // e.g. projectPath = /Users/brend/my-app, model provides /Users/brend/my-app/my-app/src/file.js
+    // Detect doubled project root
     const projBasename = path.basename(this.projectPath).toLowerCase();
-    const afterProj = resolvedNorm.substring(projNorm.length); // e.g. "/my-app" or "/my-app/src/file.js"
+    const afterProj = resolvedNorm.substring(projNorm.length);
     if (afterProj === '/' + projBasename || afterProj.startsWith('/' + projBasename + '/')) {
-      const rest = afterProj.substring(('/' + projBasename).length); // e.g. "" or "/src/file.js"
+      const rest = afterProj.substring(('/' + projBasename).length);
       const corrected = this.projectPath + rest.replace(/\//g, path.sep);
       console.log(`[MCPToolServer] Doubled project root corrected: "${filePath}" → "${corrected}"`);
       return corrected;
     }
 
-    // If it starts with the actual project path, it's fine
     if (normalized.toLowerCase().startsWith(projNormalized.toLowerCase())) return filePath;
-    
-    // Hallucinated absolute path â€” extract just the filename or last meaningful segments
+
     const basename = path.basename(filePath);
     if (basename) {
-      console.log(`[MCPToolServer] Sanitized hallucinated path "${filePath}" â†’ "${basename}"`);
+      console.log(`[MCPToolServer] Sanitized hallucinated path "${filePath}" → "${basename}"`);
       return basename;
     }
     return filePath;
   }
 
-  /**
-   * Sanitize a string for safe interpolation into shell commands.
-   * Strips characters that could enable command injection.
-   */
   _sanitizeShellArg(str) {
     if (!str || typeof str !== 'string') return '';
-    // Only strip genuinely dangerous injection vectors. PowerShell operators ($, |, >, <, ;,
-    // &, %, ^, !, (), ") are intentionally preserved — stripping them breaks legitimate
-    // PowerShell commands. Sandboxing via projectPath is the real security boundary.
     return str
-      .replace(/[\x00]/g, '')           // null bytes — always dangerous
-      .replace(/[`]/g, '')              // backtick — PowerShell command substitution
-      .replace(/[\n\r]/g, ' ')          // newline injection — always dangerous
+      .replace(/[\x00]/g, '')
+      .replace(/[`]/g, '')
+      .replace(/[\n\r]/g, ' ')
       .trim();
   }
 
-  /**
-   * Get all available tool definitions (for LLM function calling)
-   */
+  // ─── Tool Definitions ────────────────────────────────────────────────────
+
   getToolDefinitions() {
     if (this._toolDefsCache) return this._toolDefsCache;
     this._toolDefsCache = [
@@ -329,7 +303,6 @@ class MCPToolServer {
       {
         name: 'write_file',
         description: 'Write or create a file — OVERWRITES the entire file with the content provided. Use for new files or when replacing the full content. If you need to add to a file without losing existing content, use append_to_file instead. Always use this to save file content — never output file content as raw text. Format: {"tool":"write_file","params":{"filePath":"src/app.js","content":"..."}}',
-
         parameters: {
           filePath: { type: 'string', description: 'File path', required: true },
           content: { type: 'string', description: 'File content', required: true },
@@ -375,6 +348,7 @@ class MCPToolServer {
           stackTrace: { type: 'string', description: 'Stack trace', required: false },
         },
       },
+      // ── Browser Tools ──
       {
         name: 'browser_navigate',
         description: 'Navigate to a URL in an external Chrome browser controlled by Playwright. Auto-launches Chrome if needed. After navigation, call browser_snapshot to see the page.',
@@ -453,7 +427,7 @@ class MCPToolServer {
         description: 'Execute JavaScript code in the browser page context. The code is evaluated as a page function. Returns the result.',
         parameters: {
           code: { type: 'string', description: 'JavaScript code to evaluate (e.g. "document.title" or "() => document.querySelectorAll(\'a\').length")', required: true },
-          ref: { type: 'string', description: 'Optional element ref â€” code receives the element as argument', required: false },
+          ref: { type: 'string', description: 'Optional element ref — code receives the element as argument', required: false },
         },
       },
       {
@@ -564,6 +538,7 @@ class MCPToolServer {
         description: 'Close the browser and clean up all resources.',
         parameters: {},
       },
+      // ── File & Project Tools ──
       {
         name: 'get_project_structure',
         description: 'Get an overview of the project file structure.',
@@ -607,6 +582,7 @@ class MCPToolServer {
           filePath: { type: 'string', description: 'Path to the file', required: true },
         },
       },
+      // ── Memory Tools ──
       {
         name: 'save_memory',
         description: 'Save a piece of information for future reference across chat sessions.',
@@ -627,6 +603,7 @@ class MCPToolServer {
         description: 'List all saved memory keys.',
         parameters: {},
       },
+      // ── Git Tools ──
       {
         name: 'git_status',
         description: 'Get current git status: changed files, current branch.',
@@ -675,9 +652,10 @@ class MCPToolServer {
         description: 'Unstage files or reset changes.',
         parameters: {
           filePath: { type: 'string', description: 'File to unstage (omit for all)', required: false },
-          hard: { type: 'boolean', description: 'Hard reset â€” discard changes (default false)', required: false },
+          hard: { type: 'boolean', description: 'Hard reset — discard changes (default false)', required: false },
         },
       },
+      // ── Search Tools ──
       {
         name: 'grep_search',
         description: 'Search for text or regex patterns across all project files. Returns matching lines with file paths and line numbers.',
@@ -697,6 +675,7 @@ class MCPToolServer {
           isRegex: { type: 'boolean', description: 'Treat as regex', required: false },
         },
       },
+      // ── More File Tools ──
       {
         name: 'copy_file',
         description: 'Copy a file or directory to a new location.',
@@ -707,7 +686,7 @@ class MCPToolServer {
       },
       {
         name: 'append_to_file',
-        description: 'Append content to the end of an existing file WITHOUT overwriting it. Use this when building a large file across multiple tool calls: write_file for the opening section, then append_to_file for every subsequent section. This is the correct pattern for generating large HTML, code, or documents that exceed one tool call. Creates the file if it does not exist.',
+        description: 'Append content to the end of an existing file WITHOUT overwriting it. Use this when building a large file across multiple tool calls: write_file for the opening section, then append_to_file for every subsequent section. Creates the file if it does not exist.',
         parameters: {
           filePath: { type: 'string', description: 'File path', required: true },
           content: { type: 'string', description: 'Content to append', required: true },
@@ -748,7 +727,7 @@ class MCPToolServer {
       },
       {
         name: 'undo_edit',
-        description: 'Undo a file change made by a previous tool (write_file, edit_file). Restores the file to its state before the tool modified it. Use when the model made a mistake.',
+        description: 'Undo a file change made by a previous tool (write_file, edit_file). Restores the file to its state before the tool modified it.',
         parameters: {
           filePath: { type: 'string', description: 'Path of the file to undo (use list_undoable to see available files)', required: false },
           all: { type: 'boolean', description: 'Undo ALL file changes at once', required: false },
@@ -778,7 +757,7 @@ class MCPToolServer {
       },
       {
         name: 'generate_image',
-        description: 'Generate an image from a text prompt using AI image generation (Pollinations AI / Google Gemini). Returns base64-encoded image data. Use when the user asks to create, draw, generate, or make an image, picture, or illustration.',
+        description: 'Generate an image from a text prompt using AI image generation. Returns base64-encoded image data.',
         parameters: {
           prompt: { type: 'string', description: 'Description of the image to generate', required: true },
           width: { type: 'number', description: 'Image width in pixels (default 1024)', required: false },
@@ -803,7 +782,7 @@ class MCPToolServer {
           text: { type: 'string', description: 'New text (optional)', required: false },
         },
       },
-      // ── Scratchpad Tools (context overflow) ──
+      // ── Scratchpad Tools ──
       {
         name: 'write_scratchpad',
         description: 'Save intermediate data to scratchpad file. Use to avoid filling context with large data.',
@@ -850,9 +829,8 @@ class MCPToolServer {
     return this._toolDefsCache;
   }
 
-  /**
-   * Execute a tool by name with parameters
-   */
+  // ─── Tool Execution Dispatch ──────────────────────────────────────────────
+
   async executeTool(toolName, params = {}) {
     const startTime = Date.now();
     let result;
@@ -865,28 +843,22 @@ class MCPToolServer {
       }
     }
 
-        // Early-reject absolute paths that escape the project -- returns actionable error
-    // instead of silently rewriting to basename (which causes infinite retry loops).
-    const _FP_TOOLS = ['write_file','append_to_file','edit_file','delete_file','read_file','rename_file','get_file_info'];
-    if (_FP_TOOLS.includes(toolName) && params.filePath && path.isAbsolute(params.filePath) && this.projectPath) {
-      const _rn = path.resolve(params.filePath).replace(/\\/g, '/').toLowerCase();
-      const _pn = this.projectPath.replace(/\\/g, '/').toLowerCase();
-      if (!_rn.startsWith(_pn)) {
-        const _sug = path.basename(params.filePath);
+    // Early-reject absolute paths that escape the project
+    const FP_TOOLS = ['write_file', 'append_to_file', 'edit_file', 'delete_file', 'read_file', 'rename_file', 'get_file_info'];
+    if (FP_TOOLS.includes(toolName) && params.filePath && path.isAbsolute(params.filePath) && this.projectPath) {
+      const rn = path.resolve(params.filePath).replace(/\\/g, '/').toLowerCase();
+      const pn = this.projectPath.replace(/\\/g, '/').toLowerCase();
+      if (!rn.startsWith(pn)) {
+        const sug = path.basename(params.filePath);
         console.log('[MCPToolServer] Absolute path outside project for ' + toolName + ': ' + params.filePath);
-        return { success: false, error: 'Path outside project. Use relative path ' + JSON.stringify(_sug) + ' instead of ' + JSON.stringify(params.filePath) + '.' };
+        return { success: false, error: 'Path outside project. Use relative path ' + JSON.stringify(sug) + ' instead of ' + JSON.stringify(params.filePath) + '.' };
       }
     }
 
-// Sanitize file paths â€” small models hallucinate weird absolute paths
-    // If the model generated an absolute path that doesn't exist or looks wrong,
-    // extract just the filename/relative part and resolve against projectPath
-    // Always sanitize paths (works with or without projectPath now)
-    {
-      for (const key of ['filePath', 'dirPath', 'path', 'oldPath', 'newPath', 'source', 'destination', 'searchPath']) {
-        if (params[key]) {
-          params[key] = this._sanitizeFilePath(params[key]);
-        }
+    // Sanitize all file path params
+    for (const key of ['filePath', 'dirPath', 'path', 'oldPath', 'newPath', 'source', 'destination', 'searchPath']) {
+      if (params[key]) {
+        params[key] = this._sanitizeFilePath(params[key]);
       }
     }
 
@@ -931,6 +903,7 @@ class MCPToolServer {
         case 'analyze_error':
           result = await this._analyzeError(params.errorMessage, params.stackTrace);
           break;
+        // Browser tools (with timeout wrappers)
         case 'browser_navigate':
           result = await this._withTimeout(this._browserNavigate(params.url), 60000, 'browser_navigate');
           break;
@@ -959,7 +932,6 @@ class MCPToolServer {
           result = await this._withTimeout(this._browserEvaluate(params.code, params.ref), 30000, 'browser_evaluate');
           break;
         case 'browser_list_elements':
-          // Deprecated â€” redirect to snapshot
           result = await this._withTimeout(this._browserSnapshot(), 30000, 'browser_list_elements');
           break;
         case 'browser_wait_for_element':
@@ -1014,15 +986,19 @@ class MCPToolServer {
           result = await this._withTimeout(this._browserClose(), 15000, 'browser_close');
           break;
         case 'browser_select':
-          // Legacy â€” redirect to selectOption
           result = await this._withTimeout(this._browserSelectOption(params.ref || params.selector, params.value ? [params.value] : []), 30000, 'browser_select');
           break;
+        // Memory tools
         case 'save_memory':
           result = await this._saveMemory(params.key, params.value);
           break;
         case 'get_memory':
           result = await this._getMemory(params.key);
           break;
+        case 'list_memories':
+          result = await this._listMemories();
+          break;
+        // File ops
         case 'delete_file':
           result = await this._deleteFile(params.filePath);
           break;
@@ -1035,9 +1011,7 @@ class MCPToolServer {
         case 'get_file_info':
           result = await this._getFileInfo(params.filePath);
           break;
-        case 'list_memories':
-          result = await this._listMemories();
-          break;
+        // Git tools
         case 'git_status':
           result = await this._gitStatus();
           break;
@@ -1059,12 +1033,14 @@ class MCPToolServer {
         case 'git_reset':
           result = await this._gitReset(params.filePath, params.hard);
           break;
+        // Search
         case 'grep_search':
           result = await this._grepSearch(params.pattern, params.filePattern, params.isRegex, params.maxResults);
           break;
         case 'search_in_file':
           result = await this._searchInFile(params.filePath, params.pattern, params.isRegex);
           break;
+        // File ops continued
         case 'copy_file':
           result = await this._copyFile(params.source, params.destination);
           break;
@@ -1074,6 +1050,7 @@ class MCPToolServer {
         case 'diff_files':
           result = await this._diffFiles(params.fileA, params.fileB);
           break;
+        // Network
         case 'http_request':
           result = await this._httpRequest(params.url, params.method, params.headers, params.body);
           break;
@@ -1083,6 +1060,7 @@ class MCPToolServer {
         case 'install_packages':
           result = await this._installPackages(params.packages, params.manager);
           break;
+        // Undo
         case 'undo_edit':
           if (params.all) {
             result = await this.undoAllFileChanges();
@@ -1104,28 +1082,28 @@ class MCPToolServer {
         case 'generate_image':
           result = await this._generateImage(params.prompt, params.width, params.height, params.savePath);
           break;
-        // ── Planning / TODO Tools ──
+        // TODO tools
         case 'write_todos':
           result = this._writeTodos(params);
           break;
         case 'update_todo':
           result = this._updateTodo(params);
           break;
-        // ── Scratchpad Tools ──
+        // Scratchpad
         case 'write_scratchpad':
           result = this._writeScratchpad(params);
           break;
         case 'read_scratchpad':
           result = this._readScratchpad(params);
           break;
-        // ── Self-tool-creation ──
+        // Custom tools
         case 'create_tool':
           result = this._createCustomTool(params);
           break;
         case 'use_tool':
           result = await this._useCustomTool(params);
           break;
-        // ── Subagent Spawning ──
+        // Subagent
         case 'delegate_task':
           result = await this._delegateTask(params);
           break;
@@ -1136,7 +1114,7 @@ class MCPToolServer {
       result = { success: false, error: error.message };
     }
 
-    // Truncate oversized results to prevent context window blow-up (50KB cap)
+    // Truncate oversized results (50KB cap)
     if (result && typeof result === 'object') {
       const resultStr = JSON.stringify(result);
       if (resultStr.length > 50000) {
@@ -1166,15 +1144,14 @@ class MCPToolServer {
     return result;
   }
 
-  // Bounded backup insertion â€” evicts oldest entries when limit exceeded
+  // ─── Backup & Undo System ────────────────────────────────────────────────
+
   _setFileBackup(filePath, backup) {
     this._fileBackups.set(filePath, backup);
-    // Capture into current turn snapshot (first write per file wins -- preserves true before-state)
     if (this._currentTurnId && !this._currentTurnCapture.has(filePath)) {
       this._currentTurnCapture.set(filePath, { original: backup.original, isNew: backup.isNew });
     }
     if (this._fileBackups.size > this._maxFileBackups) {
-      // Evict oldest by timestamp
       let oldestKey = null, oldestTime = Infinity;
       for (const [key, val] of this._fileBackups) {
         if (val.timestamp < oldestTime) { oldestTime = val.timestamp; oldestKey = key; }
@@ -1183,19 +1160,6 @@ class MCPToolServer {
     }
   }
 
-  // â”€â”€ Tool Implementations â”€â”€
-
-  async _webSearch(query, maxResults = 5) {
-    if (!this.webSearch) return { success: false, error: 'Web search not available' };
-    const raw = await this.webSearch.search(query, maxResults);
-    // webSearch.search returns { results: [...], error? } — normalize to standard format
-    if (raw && raw.error) return { success: false, error: raw.error };
-    const results = Array.isArray(raw) ? raw : (raw?.results || []);
-    if (results.length === 0) return { success: false, error: 'No results found' };
-    return { success: true, results };
-  }
-
-  /** Get list of files that have backups available for undo, with line diff counts */
   async getUndoableFiles() {
     const files = [];
     for (const [filePath, backup] of this._fileBackups) {
@@ -1205,35 +1169,28 @@ class MCPToolServer {
         const currentContent = await fs.readFile(filePath, 'utf8');
         currentLines = currentContent.split('\n').length;
       } catch {
-        // File may have been deleted or moved
         currentLines = 0;
       }
-      const linesAdded = Math.max(0, currentLines - originalLines);
-      const linesRemoved = Math.max(0, originalLines - currentLines);
       files.push({
         filePath,
         fileName: path.basename(filePath),
         timestamp: backup.timestamp,
         tool: backup.tool,
         isNew: backup.isNew,
-        linesAdded,
-        linesRemoved,
+        linesAdded: Math.max(0, currentLines - originalLines),
+        linesRemoved: Math.max(0, originalLines - currentLines),
       });
     }
     return files;
   }
 
-  /** Undo a specific file change â€” restore from backup */
   async undoFileChange(filePath) {
     const backup = this._fileBackups.get(filePath);
     if (!backup) return { success: false, error: 'No backup found for this file' };
-
     try {
       if (backup.isNew) {
-        // File was newly created â€” delete it
         await fs.unlink(filePath);
       } else {
-        // Restore original content
         await fs.writeFile(filePath, backup.original, 'utf8');
       }
       this._fileBackups.delete(filePath);
@@ -1243,7 +1200,6 @@ class MCPToolServer {
     }
   }
 
-  /** Undo ALL file changes â€” restore everything */
   async undoAllFileChanges() {
     const results = [];
     for (const [filePath] of this._fileBackups) {
@@ -1252,7 +1208,6 @@ class MCPToolServer {
     return results;
   }
 
-  /** Accept file changes â€” clear backups (no more undo) */
   acceptFileChanges(filePaths) {
     if (!filePaths || filePaths.length === 0) {
       this._fileBackups.clear();
@@ -1264,13 +1219,13 @@ class MCPToolServer {
     return { success: true, cleared: filePaths.length };
   }
 
-  /** Start a new checkpoint turn -- called at the beginning of each ai-chat request */
+  // ─── Checkpoint System ───────────────────────────────────────────────────
+
   startTurn(turnId) {
     this._currentTurnId = turnId;
     this._currentTurnCapture = new Map();
   }
 
-  /** Finalize the current turn -- returns snapshot if files were touched, null otherwise */
   finalizeCurrentTurn(userMessage) {
     if (!this._currentTurnId || this._currentTurnCapture.size === 0) {
       this._currentTurnId = null;
@@ -1292,7 +1247,6 @@ class MCPToolServer {
     return snapshot;
   }
 
-  /** Get checkpoint list (metadata only -- no file content) */
   getCheckpointList() {
     return this._turnSnapshots.map(s => ({
       turnId: s.turnId,
@@ -1302,7 +1256,6 @@ class MCPToolServer {
     }));
   }
 
-  /** Restore all files from a checkpoint turn to their before-state */
   async restoreCheckpoint(turnId) {
     const snapshot = this._turnSnapshots.find(s => s.turnId === turnId);
     if (!snapshot) return { success: false, error: 'Checkpoint not found' };
@@ -1320,10 +1273,20 @@ class MCPToolServer {
         results.push({ filePath: file.filePath, action: 'failed', error: err.message });
       }
     }
-    // Remove this and all later snapshots (can't restore forward after rolling back)
     const idx = this._turnSnapshots.findIndex(s => s.turnId === turnId);
     if (idx !== -1) this._turnSnapshots.splice(idx);
     return { success: true, results, restoredCount: results.filter(r => r.action !== 'failed').length };
+  }
+
+  // ─── Tool Implementations ────────────────────────────────────────────────
+
+  async _webSearch(query, maxResults = 5) {
+    if (!this.webSearch) return { success: false, error: 'Web search not available' };
+    const raw = await this.webSearch.search(query, maxResults);
+    if (raw && raw.error) return { success: false, error: raw.error };
+    const results = Array.isArray(raw) ? raw : (raw?.results || []);
+    if (results.length === 0) return { success: false, error: 'No results found' };
+    return { success: true, results };
   }
 
   async _fetchWebpage(url) {
@@ -1334,15 +1297,13 @@ class MCPToolServer {
   async _readFile(filePath, startLine, endLine) {
     const fullPath = path.isAbsolute(filePath) ? filePath : path.join(this.projectPath || '', filePath);
     try {
-      // Check file size before reading to prevent OOM on huge files
       const stats = await fs.stat(fullPath);
-      if (stats.size > 10 * 1024 * 1024) { // 10MB limit
+      if (stats.size > 10 * 1024 * 1024) {
         return { success: false, error: `File too large (${Math.round(stats.size / 1024 / 1024)}MB). Max 10MB for read_file.` };
       }
       let content = await fs.readFile(fullPath, 'utf8');
-      let totalLines = content.split('\n').length;
-      
-      // Support partial reads via line range
+      const totalLines = content.split('\n').length;
+
       if (startLine || endLine) {
         const lines = content.split('\n');
         const start = Math.max(0, (startLine || 1) - 1);
@@ -1350,7 +1311,7 @@ class MCPToolServer {
         content = lines.slice(start, end).join('\n');
         return { success: true, content, path: fullPath, totalLines, readRange: `${start + 1}-${end}` };
       }
-      
+
       return { success: true, content, path: fullPath, totalLines };
     } catch (error) {
       return { success: false, error: error.message };
@@ -1358,7 +1319,6 @@ class MCPToolServer {
   }
 
   async _writeFile(filePath, content) {
-    // Fail clearly when no project folder is open instead of writing to CWD
     if (!this.projectPath) {
       return {
         success: false,
@@ -1367,24 +1327,20 @@ class MCPToolServer {
     }
     const fullPath = path.isAbsolute(filePath) ? filePath : path.join(this.projectPath, filePath);
     try {
-      // Backup existing content for undo
       let isNew = true;
       try {
         const existingContent = await fs.readFile(fullPath, 'utf8');
         this._setFileBackup(fullPath, { original: existingContent, timestamp: Date.now(), tool: 'write_file', isNew: false });
         isNew = false;
       } catch {
-        // File doesn't exist - mark as new (undo = delete)
         this._setFileBackup(fullPath, { original: null, timestamp: Date.now(), tool: 'write_file', isNew: true });
       }
 
       await fs.mkdir(path.dirname(fullPath), { recursive: true });
       await fs.writeFile(fullPath, content, 'utf8');
 
-      // Notify renderer so file tree refreshes
       if (this.browserManager?.parentWindow) {
         this.browserManager.parentWindow.webContents.send('files-changed');
-        // Notify renderer of agent file modification for diff highlighting
         this.browserManager.parentWindow.webContents.send('agent-file-modified', {
           filePath: fullPath,
           newContent: content,
@@ -1399,21 +1355,193 @@ class MCPToolServer {
     }
   }
 
+  async _editFile(filePath, oldText, newText) {
+    const fullPath = path.isAbsolute(filePath) ? filePath : path.join(this.projectPath || '', filePath);
+    try {
+      let content = await fs.readFile(fullPath, 'utf8');
+      const originalContent = content;
+
+      const normLF = s => s.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+      const trimLines = s => s.split('\n').map(l => l.trimEnd()).join('\n');
+      const collapseWS = s => s.replace(/\s+/g, ' ').trim();
+      let matched = false;
+
+      if (content.includes(oldText)) {
+        matched = true;
+      } else if (normLF(content).includes(normLF(oldText))) {
+        content = normLF(content);
+        oldText = normLF(oldText);
+        matched = true;
+      } else if (trimLines(normLF(content)).includes(trimLines(normLF(oldText)))) {
+        content = trimLines(normLF(content));
+        oldText = trimLines(normLF(oldText));
+        matched = true;
+      } else {
+        const contentNorm = normLF(content);
+        const oldNorm = normLF(oldText);
+        const contentCollapsed = collapseWS(contentNorm);
+        const oldCollapsed = collapseWS(oldNorm);
+        if (contentCollapsed.includes(oldCollapsed) && oldCollapsed.length >= 20) {
+          const lines = contentNorm.split('\n');
+          let accumulated = '';
+          let startLine = -1, endLine = -1;
+          for (let i = 0; i < lines.length; i++) {
+            accumulated += (accumulated ? ' ' : '') + lines[i].trim();
+            if (startLine < 0 && accumulated.includes(oldCollapsed)) {
+              endLine = i;
+              let charCount = 0;
+              for (let j = i; j >= 0; j--) {
+                charCount += lines[j].trim().length + (j < i ? 1 : 0);
+                if (charCount >= oldCollapsed.length) {
+                  startLine = j;
+                  break;
+                }
+              }
+              break;
+            }
+          }
+          if (startLine >= 0 && endLine >= 0) {
+            const before = lines.slice(0, startLine).join('\n');
+            const after = lines.slice(endLine + 1).join('\n');
+            content = before + (before ? '\n' : '') + newText + (after ? '\n' : '') + after;
+            matched = true;
+            console.log(`[MCPToolServer] edit_file: whitespace-collapsed match at lines ${startLine + 1}-${endLine + 1}`);
+          }
+        }
+      }
+
+      if (!matched) {
+        const contentLines = normLF(content).split('\n');
+        const oldLines = normLF(oldText).split('\n');
+        const firstOldLine = oldLines[0].trim();
+        let closestLine = -1, closestSim = 0;
+        for (let i = 0; i < contentLines.length; i++) {
+          const trimmed = contentLines[i].trim();
+          if (trimmed === firstOldLine) { closestLine = i + 1; closestSim = 1; break; }
+          if (firstOldLine.length > 5) {
+            const shorter = Math.min(trimmed.length, firstOldLine.length);
+            const longer = Math.max(trimmed.length, firstOldLine.length);
+            if (shorter > 0 && longer > 0) {
+              let m = 0;
+              for (let j = 0; j < shorter; j++) { if (trimmed[j] === firstOldLine[j]) m++; }
+              const sim = m / longer;
+              if (sim > closestSim) { closestSim = sim; closestLine = i + 1; }
+            }
+          }
+        }
+        let hint = 'oldText not found in file.';
+        if (closestLine > 0 && closestSim > 0.5) {
+          const start = Math.max(0, closestLine - 4);
+          const end = Math.min(contentLines.length, closestLine + oldLines.length + 3);
+          const ctx = contentLines.slice(start, end).map((l, i) => `${start + i + 1}| ${l}`).join('\n');
+          hint += ` Closest match at line ${closestLine}.\nRelevant section (lines ${start + 1}-${end}):\n${ctx}`;
+        } else {
+          const identifiers = oldText.match(/[a-zA-Z_$][a-zA-Z0-9_$]{3,}/g) || [];
+          const uniqueIds = [...new Set(identifiers)].slice(0, 5);
+          const foundLines = [];
+          for (const id of uniqueIds) {
+            for (let i = 0; i < contentLines.length; i++) {
+              if (contentLines[i].includes(id) && !foundLines.some(f => f.line === i + 1)) {
+                foundLines.push({ line: i + 1, text: contentLines[i].substring(0, 120), keyword: id });
+              }
+            }
+          }
+          if (foundLines.length > 0) {
+            hint += '\nKeyword matches in file:';
+            for (const f of foundLines.slice(0, 8)) {
+              hint += `\n  Line ${f.line} (${f.keyword}): ${f.text}`;
+            }
+          } else {
+            hint += '\nNone of the identifiers in your oldText exist in the file. The code may not have been written yet, or was already changed.';
+          }
+        }
+        hint += '\nCopy oldText EXACTLY from the lines above — do not retype.';
+        return { success: false, error: hint };
+      }
+
+      if (!this._fileBackups.has(fullPath)) {
+        this._setFileBackup(fullPath, { original: originalContent, timestamp: Date.now(), tool: 'edit_file', isNew: false });
+      }
+      let totalOccurrences = 0;
+      if (content.includes(oldText)) {
+        totalOccurrences = (content.split(oldText).length - 1);
+        content = content.replace(oldText, newText);
+      }
+      await fs.writeFile(fullPath, content, 'utf8');
+
+      if (this.browserManager?.parentWindow) {
+        this.browserManager.parentWindow.webContents.send('files-changed');
+        this.browserManager.parentWindow.webContents.send('agent-file-modified', {
+          filePath: fullPath,
+          newContent: content,
+          originalContent,
+          isNew: false,
+          tool: 'edit_file',
+        });
+      }
+
+      const editMsg = totalOccurrences > 1
+        ? `Edited ${path.basename(fullPath)}: replaced 1 of ${totalOccurrences} occurrences (use replace_in_files for bulk replace)`
+        : `Edited ${path.basename(fullPath)}: 1 replacement made`;
+      return { success: true, path: fullPath, message: editMsg, replacements: 1 };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  async _deleteFile(filePath) {
+    const fullPath = path.isAbsolute(filePath) ? filePath : path.join(this.projectPath || '', filePath);
+    try {
+      await fs.unlink(fullPath);
+      return { success: true, path: fullPath, message: `File deleted: ${fullPath}` };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  async _renameFile(oldPath, newPath) {
+    const fullOld = path.isAbsolute(oldPath) ? oldPath : path.join(this.projectPath || '', oldPath);
+    const fullNew = path.isAbsolute(newPath) ? newPath : path.join(this.projectPath || '', newPath);
+    try {
+      await fs.mkdir(path.dirname(fullNew), { recursive: true });
+      await fs.rename(fullOld, fullNew);
+      return { success: true, oldPath: fullOld, newPath: fullNew, message: `Renamed: ${path.basename(fullOld)} → ${path.basename(fullNew)}` };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  async _getFileInfo(filePath) {
+    const fullPath = path.isAbsolute(filePath) ? filePath : path.join(this.projectPath || '', filePath);
+    try {
+      const stats = await fs.stat(fullPath);
+      return {
+        success: true,
+        path: fullPath,
+        name: path.basename(fullPath),
+        extension: path.extname(fullPath),
+        size: stats.size,
+        sizeFormatted: stats.size < 1024 ? `${stats.size}B` : stats.size < 1048576 ? `${(stats.size / 1024).toFixed(1)}KB` : `${(stats.size / 1048576).toFixed(1)}MB`,
+        modified: stats.mtime.toISOString(),
+        created: stats.birthtime.toISOString(),
+        isDirectory: stats.isDirectory(),
+        isFile: stats.isFile(),
+      };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
   async _createDirectory(dirPath) {
     if (!this.projectPath) {
-      return {
-        success: false,
-        error: 'No project folder is open. Please open a folder first (File > Open Folder or Ctrl+K Ctrl+O).',
-      };
+      return { success: false, error: 'No project folder is open. Please open a folder first.' };
     }
     const fullPath = path.isAbsolute(dirPath) ? dirPath : path.join(this.projectPath, dirPath);
     try {
       await fs.mkdir(fullPath, { recursive: true });
-
       if (this.browserManager?.parentWindow) {
         this.browserManager.parentWindow.webContents.send('files-changed');
       }
-
       return { success: true, path: fullPath, message: `Directory created: ${fullPath}` };
     } catch (error) {
       return { success: false, error: error.message };
@@ -1436,7 +1564,6 @@ class MCPToolServer {
   }
 
   async _runCommand(command, cwd, timeout) {
-    // Dangerous command blocklist
     const dangerousPatterns = [
       /\brm\s+(-[a-z]*\s+)*-[a-z]*r[a-z]*\s+(\/|~|\$HOME|C:\\|%USERPROFILE%)/i,
       /\bformat\s+[A-Z]:/i,
@@ -1458,19 +1585,17 @@ class MCPToolServer {
       }
     }
 
-    // Sanitize cwd â€” model may hallucinate paths; always default to projectPath
     let workDir = this.projectPath || process.cwd();
     if (cwd && path.isAbsolute(cwd)) {
       const cwdNorm = cwd.replace(/\\/g, '/').toLowerCase();
       const projNorm = (this.projectPath || '').replace(/\\/g, '/').toLowerCase();
-      // Only use the provided cwd if it's within the project
       if (projNorm && cwdNorm.startsWith(projNorm)) {
         workDir = cwd;
       } else {
         console.log(`[MCPToolServer] Ignoring hallucinated cwd "${cwd}", using project path`);
       }
     }
-    const timeoutMs = Math.min(Math.max(timeout || 60000, 5000), 300000); // 5s-5min, default 60s
+    const timeoutMs = Math.min(Math.max(timeout || 60000, 5000), 300000);
     return new Promise((resolve) => {
       exec(command, { cwd: workDir, timeout: timeoutMs, maxBuffer: 1024 * 1024 * 5 }, (error, stdout, stderr) => {
         const output = (stdout?.toString() || '') + (stderr?.toString() || '');
@@ -1487,9 +1612,6 @@ class MCPToolServer {
   }
 
   async _listDirectory(dirPath, recursive = false) {
-    // FIX 3: Default to project root when dirPath is absent.
-    // When a model calls list_directory with no path argument, dirPath is undefined.
-    // path.isAbsolute(undefined) throws TypeError: must be type string.
     const resolvedDir = dirPath || this.projectPath || '.';
     const fullPath = path.isAbsolute(resolvedDir) ? resolvedDir : path.join(this.projectPath || '', resolvedDir);
     try {
@@ -1527,7 +1649,6 @@ class MCPToolServer {
       const results = this.ragEngine.searchFiles(pattern, 20);
       return { success: true, files: results };
     }
-    // Fallback: basic glob (sanitize pattern for shell safety)
     const safePattern = this._sanitizeShellArg(pattern);
     return this._runCommand(
       process.platform === 'win32'
@@ -1545,40 +1666,33 @@ class MCPToolServer {
     };
   }
 
-  // â”€â”€ Browser Automation â”€â”€
-  // These methods communicate with the BrowserWindow's webContents or external Chrome
+  // ─── Browser Automation Setters ──────────────────────────────────────────
 
-  setBrowserManager(browserManager) {
-    this.browserManager = browserManager;
+  setBrowserManager(browserManager) { this.browserManager = browserManager; }
+  setPlaywrightBrowser(playwrightBrowser) { this.playwrightBrowser = playwrightBrowser; }
+  setGitManager(gitManager) { this.gitManager = gitManager; }
+  setImageGen(imageGen) { this.imageGen = imageGen; }
+
+  _getBrowser() {
+    return this.playwrightBrowser || this.browserManager;
   }
 
-  setPlaywrightBrowser(playwrightBrowser) {
-    this.playwrightBrowser = playwrightBrowser;
-  }
+  // Browser tools: _browserNavigate through _browserClose → tools/mcpBrowserTools.js
+  // Git tools: _gitStatus through _gitReset → tools/mcpGitTools.js
 
-  setGitManager(gitManager) {
-    this.gitManager = gitManager;
-  }
-
-  setImageGen(imageGen) {
-    this.imageGen = imageGen;
-  }
+  // ─── Image Generation ────────────────────────────────────────────────────
 
   async _generateImage(prompt, width, height, savePath) {
     if (!prompt) return { success: false, error: 'No prompt provided' };
     if (!this.imageGen) return { success: false, error: 'Image generation service not available' };
-
     try {
       const result = await this.imageGen.generate(prompt.substring(0, 2000), {
         width: width || 1024,
         height: height || 1024,
       });
-
       if (!result.success) {
         return { success: false, error: result.error || 'Image generation failed' };
       }
-
-      // If savePath provided, save the image
       if (savePath) {
         const fullPath = path.isAbsolute(savePath) ? savePath : path.join(this.projectPath || '', savePath);
         const fsSync = require('fs');
@@ -1595,8 +1709,6 @@ class MCPToolServer {
           sizeKB: Math.round(result.imageBase64.length * 0.75 / 1024),
         };
       }
-
-      // Return base64 data (will be rendered inline in the chat)
       return {
         success: true,
         message: `Image generated via ${result.provider} (${result.model})`,
@@ -1611,227 +1723,13 @@ class MCPToolServer {
     }
   }
 
-  /**
-   * Get the active browser engine. Prefers Playwright, falls back to embedded BrowserView.
-   */
-  _getBrowser() {
-    return this.playwrightBrowser || this.browserManager;
-  }
-
-  // Browser tools: _browserNavigate through _browserWaitFor
-  // â†’ moved to tools/mcpBrowserTools.js
-
-  async _deleteFile(filePath) {
-    const fullPath = path.isAbsolute(filePath) ? filePath : path.join(this.projectPath || '', filePath);
-    try {
-      await fs.unlink(fullPath);
-      return { success: true, path: fullPath, message: `File deleted: ${fullPath}` };
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
-  }
-
-  async _renameFile(oldPath, newPath) {
-    const fullOld = path.isAbsolute(oldPath) ? oldPath : path.join(this.projectPath || '', oldPath);
-    const fullNew = path.isAbsolute(newPath) ? newPath : path.join(this.projectPath || '', newPath);
-    try {
-      // Ensure destination directory exists
-      await fs.mkdir(path.dirname(fullNew), { recursive: true });
-      await fs.rename(fullOld, fullNew);
-      return { success: true, oldPath: fullOld, newPath: fullNew, message: `Renamed: ${path.basename(fullOld)} â†’ ${path.basename(fullNew)}` };
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
-  }
-
-  async _editFile(filePath, oldText, newText) {
-    const fullPath = path.isAbsolute(filePath) ? filePath : path.join(this.projectPath || '', filePath);
-    try {
-      let content = await fs.readFile(fullPath, 'utf8');
-      const originalContent = content; // preserve for undo backup
-
-      // ── Flexible matching: try exact → line-ending normalized → trimmed → whitespace-collapsed ──
-      const normLF = s => s.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-      const trimLines = s => s.split('\n').map(l => l.trimEnd()).join('\n');
-      const collapseWS = s => s.replace(/\s+/g, ' ').trim();
-      let matched = false;
-
-      if (content.includes(oldText)) {
-        // 1. Exact match
-        matched = true;
-      } else if (normLF(content).includes(normLF(oldText))) {
-        // 2. Line-ending normalized (\r\n vs \n)
-        content = normLF(content);
-        oldText = normLF(oldText);
-        matched = true;
-      } else if (trimLines(normLF(content)).includes(trimLines(normLF(oldText)))) {
-        // 3. Trailing whitespace + line-ending tolerance
-        content = trimLines(normLF(content));
-        oldText = trimLines(normLF(oldText));
-        matched = true;
-      } else {
-        // 4. Whitespace-collapsed matching: handles multi-line → single-line compression by model
-        const contentNorm = normLF(content);
-        const oldNorm = normLF(oldText);
-        const contentCollapsed = collapseWS(contentNorm);
-        const oldCollapsed = collapseWS(oldNorm);
-        if (contentCollapsed.includes(oldCollapsed) && oldCollapsed.length >= 20) {
-          const lines = contentNorm.split('\n');
-          let accumulated = '';
-          let startLine = -1, endLine = -1;
-          for (let i = 0; i < lines.length; i++) {
-            accumulated += (accumulated ? ' ' : '') + lines[i].trim();
-            if (startLine < 0 && accumulated.includes(oldCollapsed)) {
-              endLine = i;
-              let charCount = 0;
-              for (let j = i; j >= 0; j--) {
-                charCount += lines[j].trim().length + (j < i ? 1 : 0);
-                if (charCount >= oldCollapsed.length) {
-                  startLine = j;
-                  break;
-                }
-              }
-              break;
-            }
-          }
-          if (startLine >= 0 && endLine >= 0) {
-            const before = lines.slice(0, startLine).join('\n');
-            const after = lines.slice(endLine + 1).join('\n');
-            content = before + (before ? '\n' : '') + newText + (after ? '\n' : '') + after;
-            matched = true;
-            console.log(`[MCPToolServer] edit_file: whitespace-collapsed match at lines ${startLine + 1}-${endLine + 1}`);
-          }
-        }
-      }
-
-      if (!matched) {
-        // Provide diagnostic hints
-        const contentLines = normLF(content).split('\n');
-        const oldLines = normLF(oldText).split('\n');
-        const firstOldLine = oldLines[0].trim();
-        let closestLine = -1, closestSim = 0;
-        for (let i = 0; i < contentLines.length; i++) {
-          const trimmed = contentLines[i].trim();
-          if (trimmed === firstOldLine) { closestLine = i + 1; closestSim = 1; break; }
-          if (firstOldLine.length > 5) {
-            const shorter = Math.min(trimmed.length, firstOldLine.length);
-            const longer  = Math.max(trimmed.length, firstOldLine.length);
-            if (shorter > 0 && longer > 0) {
-              let m = 0;
-              for (let j = 0; j < shorter; j++) { if (trimmed[j] === firstOldLine[j]) m++; }
-              const sim = m / longer;
-              if (sim > closestSim) { closestSim = sim; closestLine = i + 1; }
-            }
-          }
-        }
-        let hint = 'oldText not found in file.';
-        if (closestLine > 0 && closestSim > 0.5) {
-          const start = Math.max(0, closestLine - 4);
-          const end = Math.min(contentLines.length, closestLine + oldLines.length + 3);
-          const ctx = contentLines.slice(start, end).map((l, i) => `${start + i + 1}| ${l}`).join('\n');
-          hint += ` Closest match at line ${closestLine}.\nRelevant section (lines ${start + 1}-${end}):\n${ctx}`;
-        } else {
-          // No close match — search for key identifiers from oldText to help locate the code
-          const identifiers = oldText.match(/[a-zA-Z_$][a-zA-Z0-9_$]{3,}/g) || [];
-          const uniqueIds = [...new Set(identifiers)].slice(0, 5);
-          const foundLines = [];
-          for (const id of uniqueIds) {
-            for (let i = 0; i < contentLines.length; i++) {
-              if (contentLines[i].includes(id) && !foundLines.some(f => f.line === i + 1)) {
-                foundLines.push({ line: i + 1, text: contentLines[i].substring(0, 120), keyword: id });
-              }
-            }
-          }
-          if (foundLines.length > 0) {
-            hint += '\nKeyword matches in file:';
-            for (const f of foundLines.slice(0, 8)) {
-              hint += `\n  Line ${f.line} (${f.keyword}): ${f.text}`;
-            }
-          } else {
-            hint += '\nNone of the identifiers in your oldText exist in the file. The code may not have been written yet, or was already changed.';
-          }
-        }
-        hint += '\nCopy oldText EXACTLY from the lines above — do not retype.';
-        return { success: false, error: hint };
-      }
-
-      // Backup original content for undo (use originalContent, not already-modified content)
-      if (!this._fileBackups.has(fullPath)) {
-        this._setFileBackup(fullPath, { original: originalContent, timestamp: Date.now(), tool: 'edit_file', isNew: false });
-      }
-      // For tiers 1-3, content still needs the replacement applied; tier 4 already rebuilt content above
-      let totalOccurrences = 0;
-      if (content.includes(oldText)) {
-        totalOccurrences = (content.split(oldText).length - 1);
-        content = content.replace(oldText, newText); // Replace first occurrence only (RISK-15 fix)
-      }
-      await fs.writeFile(fullPath, content, 'utf8');
-
-      // Notify renderer of agent file modification for diff highlighting
-      if (this.browserManager?.parentWindow) {
-        this.browserManager.parentWindow.webContents.send('files-changed');
-        this.browserManager.parentWindow.webContents.send('agent-file-modified', {
-          filePath: fullPath,
-          newContent: content,
-          originalContent: originalContent,
-          isNew: false,
-          tool: 'edit_file',
-        });
-      }
-
-      const editMsg = totalOccurrences > 1
-        ? `Edited ${path.basename(fullPath)}: replaced 1 of ${totalOccurrences} occurrences (use replace_in_files for bulk replace)`
-        : `Edited ${path.basename(fullPath)}: 1 replacement made`;
-      return { success: true, path: fullPath, message: editMsg, replacements: 1 };
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
-  }
-
-  async _getFileInfo(filePath) {
-    const fullPath = path.isAbsolute(filePath) ? filePath : path.join(this.projectPath || '', filePath);
-    try {
-      const stats = await fs.stat(fullPath);
-      return {
-        success: true,
-        path: fullPath,
-        name: path.basename(fullPath),
-        extension: path.extname(fullPath),
-        size: stats.size,
-        sizeFormatted: stats.size < 1024 ? `${stats.size}B` : stats.size < 1048576 ? `${(stats.size / 1024).toFixed(1)}KB` : `${(stats.size / 1048576).toFixed(1)}MB`,
-        modified: stats.mtime.toISOString(),
-        created: stats.birthtime.toISOString(),
-        isDirectory: stats.isDirectory(),
-        isFile: stats.isFile(),
-      };
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
-  }
-
-  async _listMemories() {
-    try {
-      const memDir = path.join(this.projectPath || require('os').homedir(), '.guide-memory');
-      try { await fs.access(memDir); } catch { return { success: true, keys: [], message: 'No memories saved yet.' }; }
-      const files = await fs.readdir(memDir);
-      const keys = files.filter(f => f.endsWith('.txt')).map(f => f.replace('.txt', '').replace(/_/g, ' '));
-      return { success: true, keys, message: `${keys.length} memories found` };
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
-  }
-
-  // Git tools: _gitStatus through _gitReset
-  // â†’ moved to tools/mcpGitTools.js
-
-  // â”€â”€ New Search Tools â”€â”€
+  // ─── Search Tools ────────────────────────────────────────────────────────
 
   async _grepSearch(pattern, filePattern, isRegex = false, maxResults = 50) {
     const cwd = this.projectPath;
     if (!cwd) return { success: false, error: 'No project opened' };
     const cap = Math.min(Math.max(maxResults || 50, 1), 200);
-    
-    // Use RAG engine's indexed files if available for speed
+
     if (this.ragEngine && this.ragEngine._fileCache) {
       const results = [];
       const regex = isRegex ? new RegExp(pattern, 'gi') : null;
@@ -1846,7 +1744,7 @@ class MCPToolServer {
         for (let i = 0; i < lines.length; i++) {
           const line = lines[i];
           const matches = regex ? regex.test(line) : line.includes(pattern);
-          if (regex) regex.lastIndex = 0; // Reset sticky regex
+          if (regex) regex.lastIndex = 0;
           if (matches) {
             results.push({ file: relPath, line: i + 1, text: line.trim().substring(0, 200) });
             if (results.length >= cap) break;
@@ -1856,16 +1754,15 @@ class MCPToolServer {
       }
       return { success: true, results, total: results.length, pattern };
     }
-    
-    // Fallback: use system grep/findstr
+
     const isWin = process.platform === 'win32';
     const safePattern = this._sanitizeShellArg(pattern);
     const safeFilePattern = filePattern ? this._sanitizeShellArg(filePattern) : '';
     let cmd;
     if (isWin) {
       const fileFilter = safeFilePattern ? `/include:"${safeFilePattern}"` : '';
-      cmd = isRegex 
-        ? `findstr /S /N /R ${fileFilter} "${safePattern}" *` 
+      cmd = isRegex
+        ? `findstr /S /N /R ${fileFilter} "${safePattern}" *`
         : `findstr /S /N /I ${fileFilter} "${safePattern}" *`;
     } else {
       const fileFilter = safeFilePattern ? `--include="${safeFilePattern}"` : '';
@@ -1907,14 +1804,13 @@ class MCPToolServer {
     }
   }
 
-  // â”€â”€ New File Tools â”€â”€
+  // ─── Copy / Append / Diff ────────────────────────────────────────────────
 
   async _copyFile(source, destination) {
     const fullSrc = path.isAbsolute(source) ? source : path.join(this.projectPath || '', source);
     const fullDst = path.isAbsolute(destination) ? destination : path.join(this.projectPath || '', destination);
     try {
       await fs.mkdir(path.dirname(fullDst), { recursive: true });
-      // Check if source is a directory
       const stats = await fs.stat(fullSrc);
       if (stats.isDirectory()) {
         await this._copyDirRecursive(fullSrc, fullDst);
@@ -1943,14 +1839,10 @@ class MCPToolServer {
 
   async _appendToFile(filePath, content) {
     if (!this.projectPath) {
-      return {
-        success: false,
-        error: 'No project folder is open. Please open a folder first (File > Open Folder or Ctrl+K Ctrl+O), then retry.',
-      };
+      return { success: false, error: 'No project folder is open. Please open a folder first.' };
     }
     const fullPath = path.isAbsolute(filePath) ? filePath : path.join(this.projectPath, filePath);
     try {
-      // Backup existing content for undo (before append)
       let isNew = true;
       try {
         const existingContent = await fs.readFile(fullPath, 'utf8');
@@ -1963,11 +1855,9 @@ class MCPToolServer {
       await fs.mkdir(path.dirname(fullPath), { recursive: true });
       await fs.appendFile(fullPath, content, 'utf8');
 
-      // Read full file content after append for UI notification
       let fullContent = content;
-      try { fullContent = await fs.readFile(fullPath, 'utf8'); } catch { /* use appended content */ }
+      try { fullContent = await fs.readFile(fullPath, 'utf8'); } catch {}
 
-      // Notify renderer so file tree refreshes and editor shows changes
       if (this.browserManager?.parentWindow) {
         this.browserManager.parentWindow.webContents.send('files-changed');
         this.browserManager.parentWindow.webContents.send('agent-file-modified', {
@@ -1992,7 +1882,6 @@ class MCPToolServer {
       const contentB = await fs.readFile(fullB, 'utf8');
       const linesA = contentA.split('\n');
       const linesB = contentB.split('\n');
-      // Simple line-by-line diff
       const diffs = [];
       const maxLen = Math.max(linesA.length, linesB.length);
       for (let i = 0; i < maxLen; i++) {
@@ -2012,21 +1901,20 @@ class MCPToolServer {
     }
   }
 
-  // â”€â”€ HTTP Request Tool â”€â”€
+  // ─── HTTP Request ────────────────────────────────────────────────────────
 
   async _httpRequest(url, method = 'GET', headers = {}, body) {
     return new Promise((resolve) => {
       try {
         const parsedUrl = new URL(url);
-
-        // SSRF protection - block internal/private IP ranges and cloud metadata
+        // SSRF protection
         const hostname = parsedUrl.hostname.toLowerCase();
         const blockedHosts = ['localhost', '127.0.0.1', '0.0.0.0', '::1', '[::1]', 'metadata.google.internal'];
         const blockedPrefixes = ['10.', '172.16.', '172.17.', '172.18.', '172.19.', '172.20.',
           '172.21.', '172.22.', '172.23.', '172.24.', '172.25.', '172.26.', '172.27.',
           '172.28.', '172.29.', '172.30.', '172.31.', '192.168.', '169.254.'];
         if (blockedHosts.includes(hostname) || blockedPrefixes.some(p => hostname.startsWith(p))) {
-          resolve({ success: false, error: `SSRF protection: requests to internal/private addresses are blocked (` + hostname + `)` });
+          resolve({ success: false, error: `SSRF protection: requests to internal/private addresses are blocked (${hostname})` });
           return;
         }
 
@@ -2068,9 +1956,7 @@ class MCPToolServer {
     });
   }
 
-  // _browserGetUrl, _browserGetLinks â†’ moved to tools/mcpBrowserTools.js
-
-  // â”€â”€ System Tools â”€â”€
+  // ─── System Tools ────────────────────────────────────────────────────────
 
   async _checkPort(port) {
     return new Promise((resolve) => {
@@ -2094,7 +1980,6 @@ class MCPToolServer {
   async _installPackages(packages, manager) {
     const cwd = this.projectPath;
     if (!cwd) return { success: false, error: 'No project opened' };
-    // Auto-detect package manager
     let pm = manager;
     if (!pm) {
       try {
@@ -2115,9 +2000,6 @@ class MCPToolServer {
     return this._runCommand(cmd, cwd, 120000);
   }
 
-  /**
-   * Replace text across multiple files in the project
-   */
   async _replaceInFiles(searchText, replaceText, searchPath, isRegex = false) {
     if (!searchText) return { success: false, error: 'searchText is required' };
     const basePath = this.projectPath || '';
@@ -2128,20 +2010,17 @@ class MCPToolServer {
     try {
       const stats = await fs.stat(targetPath);
       const files = [];
-      
+
       if (stats.isDirectory()) {
-        // Recursively find text files
         const walk = async (dir, depth = 0) => {
-          if (depth > 10) return; // prevent infinite recursion
+          if (depth > 10) return;
           const entries = await fs.readdir(dir, { withFileTypes: true });
           for (const entry of entries) {
             const fullPath = path.join(dir, entry.name);
-            // Skip node_modules, .git, dist, build
             if (entry.isDirectory()) {
               if (['node_modules', '.git', 'dist', 'build', '__pycache__', '.next', '.vscode'].includes(entry.name)) continue;
               await walk(fullPath, depth + 1);
             } else if (entry.isFile()) {
-              // Skip binary files
               const ext = path.extname(entry.name).toLowerCase();
               if (['.png', '.jpg', '.jpeg', '.gif', '.ico', '.woff', '.woff2', '.ttf', '.eot', '.mp3', '.mp4', '.zip', '.tar', '.gz', '.exe', '.dll', '.so', '.gguf'].includes(ext)) continue;
               files.push(fullPath);
@@ -2163,9 +2042,8 @@ class MCPToolServer {
           const matches = isRegex
             ? (content.match(regex) || []).length
             : content.split(searchText).length - 1;
-          
+
           if (matches > 0) {
-            // Backup before modifying
             if (!this._fileBackups.has(file)) {
               this._setFileBackup(file, { original: content, timestamp: Date.now(), tool: 'replace_in_files', isNew: false });
             }
@@ -2176,7 +2054,7 @@ class MCPToolServer {
             results.push({ file: path.relative(basePath, file), replacements: matches });
             totalReplacements += matches;
           }
-        } catch {} // skip files that can't be read
+        } catch {}
       }
 
       return {
@@ -2191,14 +2069,10 @@ class MCPToolServer {
     }
   }
 
-  /**
-   * Open a file in the IDE editor tab
-   */
   async _openFileInEditor(filePath) {
     const fullPath = path.isAbsolute(filePath) ? filePath : path.join(this.projectPath || '', filePath);
     try {
       await fs.access(fullPath);
-      // Send IPC to renderer to open the file
       if (this.browserManager && this.browserManager.parentWindow) {
         this.browserManager.parentWindow.webContents.send('open-file', fullPath);
         return { success: true, filePath: fullPath, message: `Opened ${path.basename(fullPath)} in editor` };
@@ -2219,7 +2093,7 @@ class MCPToolServer {
     return { success: false, error: 'No project opened' };
   }
 
-  // _browserScroll, _browserWait â†’ moved to tools/mcpBrowserTools.js
+  // ─── Memory Tools ────────────────────────────────────────────────────────
 
   async _saveMemory(key, value) {
     if (!key || !value) return { success: false, error: 'Both key and value are required' };
@@ -2246,21 +2120,405 @@ class MCPToolServer {
     }
   }
 
-  /**
-   * Format tool definitions for inclusion in LLM system prompt
-   */
+  async _listMemories() {
+    try {
+      const memDir = path.join(this.projectPath || require('os').homedir(), '.guide-memory');
+      try { await fs.access(memDir); } catch { return { success: true, keys: [], message: 'No memories saved yet.' }; }
+      const files = await fs.readdir(memDir);
+      const keys = files.filter(f => f.endsWith('.txt')).map(f => f.replace('.txt', '').replace(/_/g, ' '));
+      return { success: true, keys, message: `${keys.length} memories found` };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  // ─── TODO Tools ──────────────────────────────────────────────────────────
+
+  _writeTodos(params) {
+    const { items } = params;
+    if (!Array.isArray(items) || items.length === 0) {
+      return { success: false, error: 'items must be a non-empty array of strings or {text, status} objects' };
+    }
+    const created = [];
+    for (const item of items) {
+      let text, status;
+      if (typeof item === 'string') {
+        text = item.trim();
+        status = 'pending';
+      } else if (item && typeof item === 'object') {
+        text = (item.text || item.content || '').toString().trim();
+        status = ['pending', 'in-progress', 'done'].includes(item.status) ? item.status : 'pending';
+      } else {
+        continue;
+      }
+      if (!text) continue;
+      const todo = { id: this._todoNextId++, text, status };
+      this._todos.push(todo);
+      created.push(todo);
+    }
+    if (this.onTodoUpdate) this.onTodoUpdate([...this._todos]);
+    return { success: true, created, allTodos: [...this._todos] };
+  }
+
+  _updateTodo(params) {
+    const { id, status, text } = params;
+    const todo = this._todos.find(t => t.id === id);
+    if (!todo) return { success: false, error: `TODO #${id} not found` };
+    if (status && ['pending', 'in-progress', 'done'].includes(status)) {
+      todo.status = status;
+    }
+    if (typeof text === 'string' && text.trim()) {
+      todo.text = text.trim();
+    }
+    if (this.onTodoUpdate) this.onTodoUpdate([...this._todos]);
+    return { success: true, todo };
+  }
+
+  // ─── Scratchpad Tools ────────────────────────────────────────────────────
+
+  _writeScratchpad(params) {
+    const { key, content } = params;
+    if (!key || typeof key !== 'string') {
+      return { success: false, error: 'key must be a non-empty string' };
+    }
+    const safeKey = key.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const scratchDir = this._scratchDir || path.join(this.projectRoot || '.', '.guide-scratch');
+    const fsSync = require('fs');
+    if (!fsSync.existsSync(scratchDir)) {
+      fsSync.mkdirSync(scratchDir, { recursive: true });
+    }
+    const filePath = path.join(scratchDir, `${safeKey}.json`);
+    const data = { key: safeKey, content, updatedAt: new Date().toISOString() };
+    fsSync.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
+    return { success: true, path: filePath, key: safeKey };
+  }
+
+  _readScratchpad(params) {
+    const { key } = params;
+    if (!key || typeof key !== 'string') {
+      return { success: false, error: 'key must be a non-empty string' };
+    }
+    const safeKey = key.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const scratchDir = this._scratchDir || path.join(this.projectRoot || '.', '.guide-scratch');
+    const filePath = path.join(scratchDir, `${safeKey}.json`);
+    const fsSync = require('fs');
+    if (!fsSync.existsSync(filePath)) {
+      return { success: false, error: `Scratchpad '${safeKey}' not found` };
+    }
+    const raw = fsSync.readFileSync(filePath, 'utf8');
+    const data = JSON.parse(raw);
+    return { success: true, ...data };
+  }
+
+  // ─── Custom Tool Creation ────────────────────────────────────────────────
+
+  _createCustomTool(params) {
+    const { name, description, code } = params;
+    if (!name || typeof name !== 'string') return { success: false, error: 'name must be a non-empty string' };
+    if (!code || typeof code !== 'string') return { success: false, error: 'code must be a non-empty string' };
+    const forbidden = ['require', 'import', 'process.', 'child_process', 'fs.', 'eval(', 'Function('];
+    for (const pattern of forbidden) {
+      if (code.includes(pattern)) {
+        return { success: false, error: `Forbidden pattern in code: ${pattern}` };
+      }
+    }
+    this._customTools.set(name, { name, description, code, createdAt: Date.now() });
+    return { success: true, name, message: `Custom tool '${name}' created successfully` };
+  }
+
+  async _useCustomTool(params) {
+    const { name, args } = params;
+    if (!name || typeof name !== 'string') return { success: false, error: 'name must be a non-empty string' };
+    const tool = this._customTools.get(name);
+    if (!tool) return { success: false, error: `Custom tool '${name}' not found` };
+    try {
+      const sandbox = {
+        args: args || {},
+        console: { log: (...a) => a.join(' ') },
+        JSON, Math, Date, String, Number, Array, Object,
+      };
+      const vmContext = vm.createContext(sandbox);
+      const result = vm.runInContext(tool.code, vmContext, { timeout: 5000 });
+      return { success: true, result };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  }
+
+  // ─── Subagent Spawning ───────────────────────────────────────────────────
+
+  async _delegateTask(params) {
+    const { goal, context } = params;
+    if (!goal || typeof goal !== 'string') return { success: false, error: 'goal must be a non-empty string' };
+    if (!this._spawnSubagent) return { success: false, error: 'Subagent spawning not configured' };
+    try {
+      const result = await this._spawnSubagent(goal, context || '');
+      return { success: true, result };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  }
+
+  // ─── Response Processing (parseToolCalls + processResponse) ──────────────
+
+  parseToolCalls(responseText) {
+    return standaloneParseToolCalls(responseText);
+  }
+
+  async processResponse(responseText, options = {}) {
+    console.log('[MCP] processResponse called, text preview:', responseText?.substring(0, 200));
+
+    const toolPaceMs = options.toolPaceMs || 0;
+    const maxToolsPerResponse = Number.isFinite(options.maxToolsPerResponse) ? options.maxToolsPerResponse : 0;
+
+    let toolCalls = this.parseToolCalls(responseText);
+
+    // Normalize common tool-name aliases
+    for (const call of toolCalls) {
+      if (!call || typeof call.tool !== 'string') continue;
+      if (call.tool === 'list_files') call.tool = 'list_directory';
+    }
+
+    // Path cleanup: strip template/placeholder prefixes
+    const TEMPLATE_PATH_RE = /^(?:\$\w+\/|\/project\/[^/]*\/|\/home\/[^/]*\/[^/]*\/|\/workspace\/|~\/[^/]*\/)/;
+    for (const call of toolCalls) {
+      if (!call?.params) continue;
+      for (const key of ['filePath', 'path', 'file_path', 'dirPath', 'directory']) {
+        const v = call.params[key];
+        if (typeof v === 'string' && TEMPLATE_PATH_RE.test(v)) {
+          const cleaned = v.replace(TEMPLATE_PATH_RE, '');
+          if (cleaned && cleaned !== v) {
+            console.log(`[MCP] Path cleanup: "${v}" → "${cleaned}"`);
+            call.params[key] = cleaned;
+          }
+        }
+      }
+    }
+
+    // Param inference: fix "." or "" filePath when user message references a real file
+    if (options.userMessage) {
+      for (const call of toolCalls) {
+        if (!call || typeof call.tool !== 'string') continue;
+        const fp = call.params?.filePath ?? call.params?.path ?? call.params?.file_path ?? '';
+        const isFileOp = ['read_file', 'write_file', 'edit_file'].includes(call.tool);
+        const isListOp = call.tool === 'list_directory';
+        const pathIsBad = fp === '.' || fp === './' || fp === '' || fp === '..';
+
+        if (pathIsBad && (isFileOp || isListOp)) {
+          const msg = options.userMessage;
+          if (isFileOp) {
+            const fileMatch = msg.match(/\b([\w.-]+\.(?:json|js|ts|tsx|jsx|md|html|css|yml|yaml|toml|py|sh|bat|txt|xml|env|cfg|conf|ini|log|csv))\b/i);
+            if (fileMatch) {
+              const inferred = fileMatch[1];
+              console.log(`[MCP] Param inference: "${call.tool}" filePath "${fp}" → "${inferred}" (from user message)`);
+              call.params = { ...call.params, filePath: inferred };
+              if (call.params.path) delete call.params.path;
+              if (call.params.file_path) delete call.params.file_path;
+            }
+          } else if (isListOp) {
+            const dirMatch = msg.match(/\b(src|main|scripts|tests|components|services|utils|config|public|build|dist|output|lib|assets)\b/i);
+            if (dirMatch) {
+              const inferred = dirMatch[1].toLowerCase();
+              const dp = call.params?.dirPath ?? call.params?.path ?? call.params?.directory ?? '.';
+              if (dp === '.' || dp === '' || dp === './') {
+                console.log(`[MCP] Param inference: "list_directory" path "${dp}" → "${inferred}" (from user message)`);
+                call.params = { ...call.params };
+                if (call.params.dirPath != null) call.params.dirPath = inferred;
+                else if (call.params.directory != null) call.params.directory = inferred;
+                else if (call.params.path != null) call.params.path = inferred;
+                else call.params.dirPath = inferred;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Optional enforcement: rewrite browser_navigate URL
+    if (options && typeof options.enforceNavigateUrl === 'string' && options.enforceNavigateUrl.trim()) {
+      const expectedUrl = options.enforceNavigateUrl.trim();
+      const firstNav = toolCalls.find(tc => tc && tc.tool === 'browser_navigate');
+      if (firstNav) {
+        const gotUrl = firstNav.params?.url;
+        if (typeof gotUrl === 'string' && gotUrl.trim() && gotUrl.trim() !== expectedUrl) {
+          console.log(`[MCP] Enforcing browser_navigate url: "${gotUrl.trim()}" -> "${expectedUrl}"`);
+          firstNav.params = { ...(firstNav.params || {}), url: expectedUrl };
+        }
+        toolCalls = [firstNav];
+      }
+    }
+
+    // Tool Call Repair
+    let _repairDropped = [];
+    if (toolCalls.length > 0) {
+      const { repaired, issues, droppedFilePaths: _rd } = repairToolCalls(toolCalls, responseText);
+      _repairDropped = _rd || [];
+      if (issues.length > 0) {
+        console.log(`[MCP] Repair dropped/fixed ${issues.length} call(s)`);
+      }
+      toolCalls = repaired;
+    }
+
+    // De-duplicate tool calls
+    {
+      const seen = new Set();
+      const deduped = [];
+      for (const call of toolCalls) {
+        const tool = call?.tool;
+        if (!tool || typeof tool !== 'string') continue;
+        let sig;
+        try { sig = `${tool}:${JSON.stringify(call.params || {})}`; } catch { sig = `${tool}:<unstringifiable>`; }
+        if (seen.has(sig)) continue;
+        seen.add(sig);
+        deduped.push(call);
+      }
+      toolCalls = deduped;
+    }
+
+    // Cap tool burst
+    let capped = false;
+    let skippedCount = 0;
+    if (maxToolsPerResponse > 0 && toolCalls.length > maxToolsPerResponse) {
+      skippedCount = toolCalls.length - maxToolsPerResponse;
+      toolCalls = toolCalls.slice(0, maxToolsPerResponse);
+      capped = true;
+      console.log(`[MCP] Capped tool calls: executing ${maxToolsPerResponse}, skipping ${skippedCount}`);
+    }
+
+    // Fallback detection if no formal tool calls
+    if (toolCalls.length === 0) {
+      console.log('[MCP] No formal tool calls found, trying fallback detection...');
+
+      const proseCommands = _detectProseCommands(responseText);
+      if (proseCommands.length > 0) {
+        console.log('[MCP] Found prose command fallback:', proseCommands.length);
+        toolCalls.push(...proseCommands);
+      }
+
+      const fallbackCalls = this._detectFallbackFileOperations(responseText, options.userMessage, [..._repairDropped, ...(options.lastDroppedFilePaths || [])]);
+      if (fallbackCalls.length > 0) {
+        console.log('[MCP] Found fallback tool calls:', fallbackCalls.length);
+        let effectiveFallbackCalls = fallbackCalls;
+        let fbCapped = false;
+        let fbSkipped = 0;
+        if (maxToolsPerResponse > 0 && fallbackCalls.length > maxToolsPerResponse) {
+          fbSkipped = fallbackCalls.length - maxToolsPerResponse;
+          effectiveFallbackCalls = fallbackCalls.slice(0, maxToolsPerResponse);
+          fbCapped = true;
+        }
+        const results = [];
+        for (const call of effectiveFallbackCalls) {
+          if (toolPaceMs > 0 && results.length > 0) {
+            await new Promise(r => setTimeout(r, toolPaceMs));
+          }
+          if (options.writeFileHistory && call.tool === 'write_file') {
+            const wfPath = call.params?.filePath || call.params?.path || call.params?.file_path;
+            if (wfPath && options.writeFileHistory[wfPath] && options.writeFileHistory[wfPath].count >= 2) {
+              console.log(`[MCP] Write dedup: blocking ${call.tool} to "${wfPath}" (already written ${options.writeFileHistory[wfPath].count}x)`);
+              results.push({ tool: call.tool, params: call.params, result: { success: false, error: `BLOCKED: "${wfPath}" has already been written ${options.writeFileHistory[wfPath].count} times this conversation. The file is COMPLETE. Do NOT write to it again.` } });
+              continue;
+            }
+          }
+          const result = await this.executeTool(call.tool, call.params || {});
+          results.push({ tool: call.tool, params: call.params, result });
+        }
+        return { hasToolCalls: true, results, capped: fbCapped, skippedToolCalls: fbSkipped, formalCallCount: 0, droppedFilePaths: [] };
+      }
+      console.log('[MCP] No fallback tool calls either');
+      return { hasToolCalls: false, results: [], formalCallCount: 0, droppedFilePaths: _repairDropped };
+    }
+
+    // Browser Tool Capping
+    const BROWSER_STATE_CHANGERS = new Set([
+      'browser_navigate', 'browser_click', 'browser_type', 'browser_select',
+      'browser_select_option', 'browser_press_key', 'browser_back',
+      'browser_fill_form', 'browser_drag', 'browser_file_upload',
+    ]);
+    const MAX_BROWSER_STATE_CHANGES = 2;
+    let browserStateChanges = 0;
+    let browserCapped = false;
+    let browserSkipped = 0;
+
+    // Write Deferral
+    const DATA_GATHER_TOOLS = new Set([
+      'browser_navigate', 'browser_click', 'browser_type', 'browser_snapshot',
+      'browser_evaluate', 'browser_get_content', 'browser_scroll', 'browser_back',
+      'browser_select_option', 'browser_press_key', 'browser_get_links',
+      'browser_screenshot', 'browser_hover', 'browser_tabs',
+      'web_search', 'fetch_webpage',
+    ]);
+    const DATA_WRITE_TOOLS = new Set(['write_file', 'edit_file']);
+    const batchHasGather = toolCalls.some(c => c?.tool && DATA_GATHER_TOOLS.has(c.tool));
+    const batchHasWrite = toolCalls.some(c => c?.tool && DATA_WRITE_TOOLS.has(c.tool));
+    const shouldDeferWrites = batchHasGather && batchHasWrite && !options?.skipWriteDeferral;
+    if (shouldDeferWrites) {
+      console.log('[MCP] Write deferral: batch contains both data-gathering and file-writing tools — deferring writes to next turn');
+    }
+
+    console.log('[MCP] Executing', toolCalls.length, 'tool calls...', toolPaceMs ? `(${toolPaceMs}ms pace)` : '');
+    const results = [];
+    for (const call of toolCalls) {
+      if (call && typeof call.tool === 'string' && BROWSER_STATE_CHANGERS.has(call.tool)) {
+        if (browserStateChanges >= MAX_BROWSER_STATE_CHANGES) {
+          browserSkipped++;
+          browserCapped = true;
+          console.log(`[MCP] Browser cap: skipping ${call.tool} (${browserStateChanges} state changes already, refs are stale)`);
+          continue;
+        }
+      }
+
+      if (shouldDeferWrites && call?.tool && DATA_WRITE_TOOLS.has(call.tool)) {
+        console.log(`[MCP] Write deferred: skipping ${call.tool} (re-issue next turn with real data)`);
+        results.push({
+          tool: call.tool, params: call.params,
+          result: { success: false, error: `DEFERRED: ${call.tool} was batched with data-gathering tools. The file content was generated before seeing tool results and would be fabricated. Re-issue this ${call.tool} call in your NEXT response, using the ACTUAL data from the tool results above.` },
+        });
+        continue;
+      }
+
+      if (toolPaceMs > 0 && results.length > 0) {
+        await new Promise(r => setTimeout(r, toolPaceMs));
+      }
+      if (call && typeof call.tool === 'string') {
+        if (call.tool.startsWith('browser_')) call.params = this._normalizeBrowserParams(call.tool, call.params || {});
+        else call.params = this._normalizeFsParams(call.tool, call.params || {});
+      }
+      if (options.writeFileHistory && call.tool === 'write_file') {
+        const wfPath = call.params?.filePath || call.params?.path || call.params?.file_path;
+        if (wfPath && options.writeFileHistory[wfPath] && options.writeFileHistory[wfPath].count >= 2) {
+          console.log(`[MCP] Write dedup: blocking ${call.tool} to "${wfPath}" (already written ${options.writeFileHistory[wfPath].count}x)`);
+          results.push({ tool: call.tool, params: call.params, result: { success: false, error: `BLOCKED: "${wfPath}" has already been written ${options.writeFileHistory[wfPath].count} times this conversation. The file is COMPLETE. Do NOT write to it again.` } });
+          continue;
+        }
+      }
+      const result = await this.executeTool(call.tool, call.params || {});
+      console.log('[MCP] Executed tool:', call.tool, 'result:', result.success ? 'success' : 'failed');
+      results.push({ tool: call.tool, params: call.params, result });
+
+      if (call && typeof call.tool === 'string' && BROWSER_STATE_CHANGERS.has(call.tool)) {
+        browserStateChanges++;
+      }
+    }
+
+    if (browserCapped) {
+      console.log(`[MCP] Browser cap enforced: executed ${browserStateChanges} state-changing actions, skipped ${browserSkipped}`);
+    }
+
+    return { hasToolCalls: true, results, capped: capped || browserCapped, skippedToolCalls: skippedCount + browserSkipped, formalCallCount: toolCalls.length, droppedFilePaths: _repairDropped };
+  }
+
+  _detectFallbackFileOperations(responseText, userMessage, lastDroppedFilePaths = []) {
+    return standaloneFallbackDetect(responseText, userMessage, lastDroppedFilePaths);
+  }
+
+  // ─── Tool Prompt Building ────────────────────────────────────────────────
+
   getToolPrompt() {
     if (this._toolPromptCache) return this._toolPromptCache;
     this._toolPromptCache = this._buildToolPrompt(this.getToolDefinitions());
     return this._toolPromptCache;
   }
 
-  /**
-   * Compact tool reference for small models.
-   * Lists every relevant tool with key params so the model knows what exists.
-   * Grammar handles structural validity; this provides semantic guidance.
-   * Task-filtered to reduce noise. ~350 tokens.
-   */
   getCompactToolHint(taskType, options) {
     if (taskType === 'chat') return '';
     const minimal = options && options.minimal;
@@ -2271,7 +2529,6 @@ class MCPToolServer {
     }
     hint += '\n';
 
-    // Always include file tools — every task type needs them
     hint += '### File Operations\n';
     hint += '- **write_file**(filePath, content) — Create/overwrite a file. USE THIS for the FIRST section of any new file.\n';
     hint += '- **append_to_file**(filePath, content) — Append content to end of a file WITHOUT overwriting. Use for 2nd, 3rd, etc. sections.\n';
@@ -2281,9 +2538,6 @@ class MCPToolServer {
     hint += '- **run_command**(command) — Run a terminal/shell command.\n';
     hint += '\n';
 
-    // For minimal mode (extremely constrained contexts <4096 tokens), stop here.
-    // The 6 file tools above are the essential set. Skip browser, memory, planning
-    // to save ~400 tokens of context budget.
     if (minimal) {
       hint += '### Web\n';
       hint += '- **web_search**(query) — Search the internet.\n\n';
@@ -2308,7 +2562,6 @@ class MCPToolServer {
       hint += '```json\n{"tool":"web_search","params":{"query":"best laptops 2026"}}\n```\n';
       hint += '```json\n{"tool":"browser_navigate","params":{"url":"https://example.com"}}\n```\n';
     } else {
-      // General: include both browser and code tools
       hint += '### Browser (REAL Chromium)\n';
       hint += '- **browser_navigate**(url) — Open a URL.\n';
       hint += '- **browser_snapshot**() — Get page content with [ref=N] IDs.\n';
@@ -2325,7 +2578,6 @@ class MCPToolServer {
       hint += '```json\n{"tool":"write_file","params":{"filePath":"report.html","content":"<!DOCTYPE html>..."}}\n```\n';
     }
 
-    // Common to all non-chat tasks
     hint += '\n### Planning\n';
     hint += '- **write_todos**(items) — Create task list for complex multi-step work.\n';
     hint += '- **update_todo**(index, status) — Mark a task done/in-progress.\n';
@@ -2333,20 +2585,12 @@ class MCPToolServer {
     return hint;
   }
 
-  /**
-   * Get a compact tool prompt with only tools relevant to the task type.
-   * This dramatically reduces context usage: full = ~2500 tokens, browser = ~800, code = ~1200.
-   * @param {'browser'|'code'|'general'} taskType
-   */
   getToolPromptForTask(taskType) {
-    // Chat/greeting: no tools at all â€” just conversation
     if (taskType === 'chat') return '';
-    
+
     const tools = this.getToolDefinitions();
-    
-    // Core tools always included (minimal set)
+
     const coreTool = new Set(['web_search']);
-    
     const browserTools = new Set([
       'browser_navigate', 'browser_snapshot', 'browser_click', 'browser_type',
       'browser_fill_form', 'browser_select_option', 'browser_get_content',
@@ -2356,7 +2600,6 @@ class MCPToolServer {
       'browser_drag', 'browser_console_messages', 'browser_close',
       'browser_file_upload', 'browser_resize', 'browser_get_links',
     ]);
-    
     const codeTools = new Set([
       'read_file', 'write_file', 'edit_file', 'delete_file', 'rename_file',
       'create_directory', 'find_files', 'search_codebase', 'grep_search',
@@ -2364,29 +2607,23 @@ class MCPToolServer {
       'install_packages', 'undo_edit', 'replace_in_files', 'get_file_info',
       'git_status', 'git_commit', 'git_diff', 'git_log', 'git_branch',
     ]);
-    
+
     let selectedNames;
     if (taskType === 'browser') {
       selectedNames = new Set([...coreTool, ...browserTools]);
     } else if (taskType === 'code') {
-      selectedNames = new Set([...coreTool, ...codeTools, 'write_todos', 'update_todo']); // RISK-19 fix: include web_search for code tasks
+      selectedNames = new Set([...coreTool, ...codeTools, 'write_todos', 'update_todo']);
     } else {
-      // General: all tools â€” user might need anything
       selectedNames = new Set([...coreTool, ...browserTools, ...codeTools,
         'fetch_webpage', 'save_memory', 'get_memory', 'list_memories',
         'write_todos', 'update_todo',
       ]);
     }
-    
+
     const filtered = tools.filter(t => selectedNames.has(t.name));
     return this._buildToolPrompt(filtered);
   }
 
-  /**
-   * Build a rich tool prompt from a list of tool definitions.
-   * Includes categorization, parameter descriptions, and common patterns.
-   * Ported from Pocket guIDE hand-tuned tool prompt approach.
-   */
   _buildToolPrompt(tools) {
     let prompt = '## Tools\nCall tools with: ```json\n{"tool":"name","params":{...}}\n```\n';
     if (this.projectPath) {
@@ -2394,7 +2631,6 @@ class MCPToolServer {
     }
     prompt += '\n';
 
-    // Categorize tools for clarity
     const categories = {
       'File Operations': ['read_file', 'write_file', 'edit_file', 'delete_file', 'rename_file', 'create_directory', 'list_directory', 'find_files', 'search_codebase', 'grep_search', 'get_project_structure', 'get_file_info', 'replace_in_files', 'undo_edit', 'install_packages'],
       'Terminal': ['run_command'],
@@ -2423,7 +2659,6 @@ class MCPToolServer {
       prompt += '\n';
     }
 
-    // Any uncategorized tools (custom / plugin tools)
     const remaining = Object.values(toolMap);
     if (remaining.length > 0) {
       prompt += '### Other\n';
@@ -2436,7 +2671,6 @@ class MCPToolServer {
       prompt += '\n';
     }
 
-    // Few-shot examples — small models learn from seeing, not reading
     prompt += `### Example: User says "find me a cheap laptop"
 \`\`\`json
 {"tool":"web_search","params":{"query":"cheap laptops under $200 2026"}}
@@ -2465,191 +2699,14 @@ Then to see the page:
     return prompt;
   }
 
-  // parseToolCalls, processResponse, _detectFallbackFileOperations
-  // â†’ moved to tools/mcpToolParser.js
-
   getHistory() {
     return this.toolHistory;
-  }
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // TODO / Planning Tools
-  // ─────────────────────────────────────────────────────────────────────────
-  /**
-   * Create multiple TODO items. Each item gets a unique ID.
-   */
-  _writeTodos(params) {
-    const { items } = params;
-    if (!Array.isArray(items) || items.length === 0) {
-      return { success: false, error: 'items must be a non-empty array of strings or {text, status} objects' };
-    }
-    const created = [];
-    for (const item of items) {
-      let text, status;
-      if (typeof item === 'string') {
-        text = item.trim();
-        status = 'pending';
-      } else if (item && typeof item === 'object') {
-        text = (item.text || item.content || '').toString().trim();
-        status = ['pending', 'in-progress', 'done'].includes(item.status) ? item.status : 'pending';
-      } else {
-        continue;
-      }
-      if (!text) continue;
-      const todo = { id: this._todoNextId++, text, status };
-      this._todos.push(todo);
-      created.push(todo);
-    }
-    if (this.onTodoUpdate) this.onTodoUpdate([...this._todos]);
-    return { success: true, created, allTodos: [...this._todos] };
-  }
-
-  /**
-   * Update a TODO item's status or text.
-   */
-  _updateTodo(params) {
-    const { id, status, text } = params;
-    const todo = this._todos.find(t => t.id === id);
-    if (!todo) {
-      return { success: false, error: `TODO #${id} not found` };
-    }
-    if (status && ['pending', 'in-progress', 'done'].includes(status)) {
-      todo.status = status;
-    }
-    if (typeof text === 'string' && text.trim()) {
-      todo.text = text.trim();
-    }
-    if (this.onTodoUpdate) this.onTodoUpdate([...this._todos]);
-    return { success: true, todo };
-  }
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // Scratchpad Tools
-  // ─────────────────────────────────────────────────────────────────────────
-  /**
-   * Write data to a scratchpad file.
-   */
-  _writeScratchpad(params) {
-    const { key, content } = params;
-    if (!key || typeof key !== 'string') {
-      return { success: false, error: 'key must be a non-empty string' };
-    }
-    const safeKey = key.replace(/[^a-zA-Z0-9_-]/g, '_');
-    const scratchDir = this._scratchDir || path.join(this.projectRoot || '.', '.guide-scratch');
-    if (!fs.existsSync(scratchDir)) {
-      fs.mkdirSync(scratchDir, { recursive: true });
-    }
-    const filePath = path.join(scratchDir, `${safeKey}.json`);
-    const data = { key: safeKey, content, updatedAt: new Date().toISOString() };
-    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
-    return { success: true, path: filePath, key: safeKey };
-  }
-
-  /**
-   * Read data from a scratchpad file.
-   */
-  _readScratchpad(params) {
-    const { key } = params;
-    if (!key || typeof key !== 'string') {
-      return { success: false, error: 'key must be a non-empty string' };
-    }
-    const safeKey = key.replace(/[^a-zA-Z0-9_-]/g, '_');
-    const scratchDir = this._scratchDir || path.join(this.projectRoot || '.', '.guide-scratch');
-    const filePath = path.join(scratchDir, `${safeKey}.json`);
-    if (!fs.existsSync(filePath)) {
-      return { success: false, error: `Scratchpad '${safeKey}' not found` };
-    }
-    const raw = fs.readFileSync(filePath, 'utf8');
-    const data = JSON.parse(raw);
-    return { success: true, ...data };
-  }
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // Self-tool Creation
-  // ─────────────────────────────────────────────────────────────────────────
-  /**
-   * Create a custom tool that can be invoked later.
-   */
-  _createCustomTool(params) {
-    const { name, description, code, inputSchema } = params;
-    if (!name || typeof name !== 'string') {
-      return { success: false, error: 'name must be a non-empty string' };
-    }
-    if (!code || typeof code !== 'string') {
-      return { success: false, error: 'code must be a non-empty string' };
-    }
-    // Security: Block dangerous patterns
-    const forbidden = ['require', 'import', 'process.', 'child_process', 'fs.', 'eval(', 'Function('];
-    for (const pattern of forbidden) {
-      if (code.includes(pattern)) {
-        return { success: false, error: `Forbidden pattern in code: ${pattern}` };
-      }
-    }
-    this._customTools.set(name, { name, description, code, inputSchema, createdAt: Date.now() });
-    return { success: true, name, message: `Custom tool '${name}' created successfully` };
-  }
-
-  /**
-   * Execute a previously created custom tool.
-   */
-  async _useCustomTool(params) {
-    const { name, args } = params;
-    if (!name || typeof name !== 'string') {
-      return { success: false, error: 'name must be a non-empty string' };
-    }
-    const tool = this._customTools.get(name);
-    if (!tool) {
-      return { success: false, error: `Custom tool '${name}' not found` };
-    }
-    try {
-      // Create sandboxed function with limited API
-      const sandbox = {
-        args: args || {},
-        console: { log: (...a) => a.join(' ') },
-        JSON,
-        Math,
-        Date,
-        String,
-        Number,
-        Array,
-        Object
-      };
-      // Use vm.createContext for real sandboxing (BUG-3 fix — prevents escape via this.constructor.constructor)
-      const vmContext = vm.createContext(sandbox);
-      const result = vm.runInContext(tool.code, vmContext, { timeout: 5000 });
-      return { success: true, result };
-    } catch (err) {
-      return { success: false, error: err.message };
-    }
-  }
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // Subagent Spawning
-  // ─────────────────────────────────────────────────────────────────────────
-  /**
-   * Delegate a task to a subagent.
-   */
-  async _delegateTask(params) {
-    const { goal, context } = params;
-    if (!goal || typeof goal !== 'string') {
-      return { success: false, error: 'goal must be a non-empty string' };
-    }
-    if (!this._spawnSubagent) {
-      return { success: false, error: 'Subagent spawning not configured' };
-    }
-    try {
-      const result = await this._spawnSubagent(goal, context || '');
-      return { success: true, result };
-    } catch (err) {
-      return { success: false, error: err.message };
-    }
   }
 }
 
 // Mix in extracted tool methods onto the prototype
 Object.assign(MCPToolServer.prototype, mcpBrowserTools);
 Object.assign(MCPToolServer.prototype, mcpGitTools);
-Object.assign(MCPToolServer.prototype, mcpToolParser);
 
 module.exports = { MCPToolServer };
 

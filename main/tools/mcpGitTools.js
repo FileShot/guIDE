@@ -1,121 +1,92 @@
-/**
- * MCP Git Tools — Git version control methods for MCPToolServer.
- * Extracted from mcpToolServer.js (ARCH-03).
- * These methods are mixed into MCPToolServer.prototype so `this` works.
- */
+'use strict';
+
+// Git tool methods — mixed onto MCPToolServer.prototype
+// All methods use `this` to access gitManager, _runCommand, _sanitizeShellArg
 
 async function _gitStatus() {
-  if (!this.gitManager) return { success: false, error: 'Git not available. Open a project first.' };
-  try {
-    const status = await this.gitManager.getStatus();
-    return { success: true, ...status };
-  } catch (error) {
-    return { success: false, error: error.message };
-  }
+  if (this.gitManager) return this.gitManager.getStatus();
+  return { success: false, error: 'Git manager not available' };
 }
 
 async function _gitCommit(message) {
-  if (!this.gitManager) return { success: false, error: 'Git not available. Open a project first.' };
-  try {
-    await this.gitManager.stageAll();
-    const result = await this.gitManager.commit(message);
-    return { success: true, message: `Committed: "${message}"`, ...result };
-  } catch (error) {
-    return { success: false, error: error.message };
+  if (!this.gitManager) return { success: false, error: 'Git manager not available' };
+  if (!message || typeof message !== 'string' || !message.trim()) {
+    return { success: false, error: 'Commit message is required' };
   }
+  await this.gitManager.stageAll();
+  return this.gitManager.commit(message.trim());
 }
 
-async function _gitDiff(filePath) {
-  if (!this.gitManager) return { success: false, error: 'Git not available. Open a project first.' };
-  try {
-    const diff = await this.gitManager.getDiff(filePath || null, false);
-    return { success: true, diff: diff || 'No changes', hasChanges: !!diff };
-  } catch (error) {
-    return { success: false, error: error.message };
-  }
+async function _gitDiff(options = {}) {
+  if (this.gitManager) return this.gitManager.getDiff(options);
+  return { success: false, error: 'Git manager not available' };
 }
 
-async function _gitLog(maxCount = 20, filePath) {
-  const cwd = this.projectPath;
-  if (!cwd) return { success: false, error: 'No project opened' };
-  const count = Math.min(Math.max(maxCount || 20, 1), 100);
-  const fileArg = filePath ? ` -- "${this._sanitizeShellArg(filePath)}"` : '';
-  const cmd = `git log --oneline --decorate -n ${count}${fileArg}`;
-  const result = await this._runCommand(cmd, cwd, 15000);
-  if (!result.success) return result;
-  const commits = result.stdout.trim().split('\n').filter(Boolean).map(line => {
+async function _gitLog(count = 20) {
+  count = Math.min(100, Math.max(1, parseInt(count) || 20));
+  const result = await this._runCommand(`git log --oneline -${count}`);
+  if (!result || result.exitCode !== 0) {
+    return { success: false, error: result?.stderr || 'git log failed' };
+  }
+  const entries = result.stdout.split('\n').filter(Boolean).map(line => {
     const spaceIdx = line.indexOf(' ');
-    return { hash: line.substring(0, spaceIdx), message: line.substring(spaceIdx + 1) };
+    return {
+      hash: spaceIdx > 0 ? line.slice(0, spaceIdx) : line,
+      message: spaceIdx > 0 ? line.slice(spaceIdx + 1) : '',
+    };
   });
-  return { success: true, commits, total: commits.length };
+  return { success: true, entries };
 }
 
 async function _gitBranch(action, name) {
-  const cwd = this.projectPath;
-  if (!cwd) return { success: false, error: 'No project opened' };
-  let cmd;
+  const safe = name ? this._sanitizeShellArg(name) : '';
   switch (action) {
     case 'list':
-      cmd = 'git branch -a';
-      break;
+      return this._runCommand('git branch -a');
     case 'create':
-      if (!name) return { success: false, error: 'Branch name is required for create' };
-      cmd = `git checkout -b "${this._sanitizeShellArg(name)}"`;
-      break;
+      if (!safe) return { success: false, error: 'Branch name required' };
+      return this._runCommand(`git checkout -b ${safe}`);
     case 'switch':
-      if (!name) return { success: false, error: 'Branch name is required for switch' };
-      cmd = `git checkout "${this._sanitizeShellArg(name)}"`;
-      break;
+      if (!safe) return { success: false, error: 'Branch name required' };
+      return this._runCommand(`git checkout ${safe}`);
     default:
-      return { success: false, error: `Invalid action: ${action}. Use 'list', 'create', or 'switch'` };
+      return this._runCommand('git branch');
   }
-  const result = await this._runCommand(cmd, cwd, 30000);
-  return { success: result.exitCode === 0 || result.success, output: (result.stdout + result.stderr).trim(), action };
 }
 
-async function _gitStash(action, message) {
-  const cwd = this.projectPath;
-  if (!cwd) return { success: false, error: 'No project opened' };
-  let cmd;
+async function _gitStash(action = 'push', message) {
   switch (action) {
-    case 'push':
-      cmd = message ? `git stash push -m "${this._sanitizeShellArg(message)}"` : 'git stash push';
-      break;
+    case 'push': {
+      const msg = message ? ` -m ${this._sanitizeShellArg(message)}` : '';
+      return this._runCommand(`git stash push${msg}`);
+    }
     case 'pop':
-      cmd = 'git stash pop';
-      break;
+      return this._runCommand('git stash pop');
     case 'list':
-      cmd = 'git stash list';
-      break;
+      return this._runCommand('git stash list');
     case 'drop':
-      cmd = 'git stash drop';
-      break;
+      return this._runCommand('git stash drop');
     default:
-      return { success: false, error: `Invalid action: ${action}. Use 'push', 'pop', 'list', or 'drop'` };
+      return this._runCommand('git stash');
   }
-  const result = await this._runCommand(cmd, cwd, 30000);
-  return { success: result.exitCode === 0 || result.success, output: (result.stdout + result.stderr).trim(), action };
 }
 
-async function _gitReset(filePath, hard = false) {
-  const cwd = this.projectPath;
-  if (!cwd) return { success: false, error: 'No project opened' };
-  let cmd;
-  if (hard) {
-    cmd = filePath ? `git checkout -- "${this._sanitizeShellArg(filePath)}"` : 'git reset --hard HEAD';
-  } else {
-    cmd = filePath ? `git reset HEAD "${this._sanitizeShellArg(filePath)}"` : 'git reset HEAD';
+async function _gitReset(mode = 'soft', filePath) {
+  if (mode === 'hard' && filePath) {
+    const safe = this._sanitizeShellArg(filePath);
+    return this._runCommand(`git checkout -- ${safe}`);
   }
-  const result = await this._runCommand(cmd, cwd, 15000);
-  return { success: result.exitCode === 0 || result.success, output: (result.stdout + result.stderr).trim(), action: hard ? 'hard_reset' : 'unstage' };
+  if (mode === 'soft') {
+    if (filePath) {
+      const safe = this._sanitizeShellArg(filePath);
+      return this._runCommand(`git reset HEAD ${safe}`);
+    }
+    return this._runCommand('git reset HEAD');
+  }
+  return { success: false, error: 'Use mode "soft" or "hard"' };
 }
 
 module.exports = {
-  _gitStatus,
-  _gitCommit,
-  _gitDiff,
-  _gitLog,
-  _gitBranch,
-  _gitStash,
-  _gitReset,
+  _gitStatus, _gitCommit, _gitDiff, _gitLog,
+  _gitBranch, _gitStash, _gitReset,
 };

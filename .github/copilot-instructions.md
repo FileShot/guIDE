@@ -1,5 +1,10 @@
 # 🚫 STOP — READ THIS FIRST — NON-NEGOTIABLE — NO EXCEPTIONS
 
+** NEVER BLAME MODEL
+ SIZE —ALL MODELS EXCEL IN LM STUDIO  AT SAME TASKS THEYRE BEING TESTED ON HERE! If something fails, the problem is in the pipeline. Exhaust all levers before concluding "the model isn't good enough." Do not say "the model can't do this" without first confirming that every other lever has been pulled. This is a production software project, not a research experiment. The user expects results, not excuses.
+
+**NEVER BLAME CONTEXT WINDOW —IF CONTEXT IS EVER SEEMINGLY TO BLAME, THEN OUR CONTEXT MANAGEMENT SYSTEMS (CONTEXT ROTATION, SEAMLESS CONTINUATION, COMPACTION, AREN'T WORKING!!!!!) If something fails, the problem is in the pipeline. Do not say "the context window isn't big enough" without first confirming that every other lever has been pulled. This is a production software project, not a research experiment. The user expects results, not excuses.
+
 ## THIS COMPUTER IS A DEV MACHINE. IT IS NOT A SERVER.
 
 **DO NOT — under ANY circumstances — run any of the following on this machine:**
@@ -583,3 +588,102 @@ Keyword matchers are unreliable for production use across thousands of users wit
 - Every code change goes to BOTH `main/` AND `pipeline-clone/main/`. No exceptions.
 - If you change one file, you change its mirror. Always.
 - Forgetting the clone or the real source is a violation.
+
+---
+
+## MANDATORY PRE-CODE CHECKLIST — BLOCKING. NO EXCEPTIONS.
+
+This section was added on 2026-03-08 because the model repeatedly violated the full-pipeline-trace rule despite reading the instructions every session. The following checklist MUST be completed and SHOWN TO THE USER in full before any code change is written. Not summarized. Not paraphrased. Listed explicitly. If you skip any item, you are lying and violating these instructions.
+
+**Before writing a single line of code for any bug fix, you MUST output the following, verbatim in your response:**
+
+```
+PRE-CODE CHECKLIST
+==================
+1. SYMPTOM: [exact observable behavior the user reported]
+2. FILES READ (list every file and line range actually read, not just mentioned):
+   - [file path] lines [X-Y]: [what this showed]
+   - [file path] lines [X-Y]: [what this showed]
+   (If you have not read a file, you CANNOT list it here. Read it first.)
+3. FULL CALL CHAIN (every function the broken value passes through, source to screen):
+   - [function name] in [file] — [what it does to the value]
+   - [function name] in [file] — [what it does to the value]
+   (If you do not know a function in the chain, READ IT before continuing.)
+4. WHAT I HAVE NOT READ (be explicit — list every function or file you skipped):
+   - [file or function]: [why you skipped it / why you believe it's not relevant]
+5. ALL CODE PATHS THAT COULD PRODUCE THE SYMPTOM (not just the ones with log evidence):
+   - [path description]: [why this path could produce the symptom]
+   - [path description]: [why this path could produce the symptom]
+6. SECOND INDEPENDENT INDICATOR (something OTHER than the first clue that confirms the root cause):
+   - [indicator]: [what it confirms]
+   (If you cannot find a second indicator, say so explicitly — do NOT proceed as if you found one.)
+7. PROPOSED CHANGE (specific: file, function, line range, what is removed, what is added):
+   - File: [path]
+   - Function: [name]
+   - Lines: [range]
+   - Remove: [exact description]
+   - Add: [exact description]
+   - Observable change after this: [what the user will see differently]
+8. PATHS NOT COVERED BY THIS FIX (honest assessment of what could still break):
+   - [path]: [why this fix does not cover it]
+```
+
+**If the user approves the checklist, THEN write the code. Not before.**
+
+**If you cannot complete item 3 (full call chain) because you haven't read a function — READ IT before outputting the checklist. Do not output a partial checklist.**
+
+**If you cannot complete item 6 (second indicator) — say so explicitly. Do NOT proceed as if you have two indicators when you only have one. State the confidence level clearly.**
+
+**This checklist is not optional. It is not skippable for "simple fixes." Every fix requires it. A fix that seems simple is often where the worst violations happen.**
+
+---
+
+## MANDATORY POST-CODE VERIFICATION — BLOCKING. NO EXCEPTIONS.
+
+After writing any code change and before declaring anything about it, you MUST output:
+
+```
+POST-CODE VERIFICATION
+======================
+1. CHANGE MADE: [file, function, line — exact]
+2. EVERY OTHER LOCATION that produces the same bad output (did you grep for all of them?):
+   - [location]: [addressed by this fix? yes/no — if no, why not?]
+3. SPECIFIC OBSERVABLE BEHAVIOR that will change:
+   - Before this change: [exact behavior]
+   - After this change: [what the user should see instead]
+4. WHAT WILL NOT CHANGE (be honest — what symptoms might persist?):
+   - [symptom that may persist]: [why this fix does not cover it]
+5. BANNED WORDS CHECK: Does this response contain any of these? confirmed / fixed / resolves / fully fixed / ready / working / all set — [yes/no]
+   If yes: REWRITE the response before sending.
+```
+
+**You cannot say the work is done without completing this. You cannot skip item 2. You cannot skip item 4.**
+
+---
+
+## ONE BUILD PER CONFIRMED FIX — NO SPECULATIVE BUILDS
+
+**A build is triggered ONLY after the PRE-CODE CHECKLIST and POST-CODE VERIFICATION are both complete and the user has explicitly approved.**
+
+- Do NOT build speculatively ("this probably fixes it, let's try").
+- Do NOT build after finding one indicator and declaring root cause.
+- Do NOT build after reading 40% of the call chain.
+- A build wastes an hour of the user's testing time. Every speculative build is a direct harm.
+- If the checklist cannot be completed because you haven't traced the full call chain: READ MORE CODE. Do not build.
+
+---
+
+## EXPLICIT SELF-ENFORCEMENT REQUIREMENT
+
+The existence of these rules in text does not automatically enforce them. The model's trained instincts will attempt to skip the checklist, declare root cause after one indicator, and build speculatively. **You are required to actively resist this.**
+
+Before outputting ANY analysis of a bug, ask yourself:
+1. Have I read every function in the call chain? If no — stop. Read them.
+2. Can I list the full call chain by function name and file? If no — stop. I don't know enough yet.
+3. Do I have a second independent indicator? If no — I have a hypothesis, not a root cause. Say so.
+4. Have I listed every code path that could produce this symptom? If no — stop. Find them.
+5. Am I about to use a banned word? Check the list. Do not use them.
+
+**"I traced the failure modes visible in logs" is NOT the same as "I traced the full pipeline." Logs only show what was logged. The full pipeline must be read from source, not inferred from logs alone.**
+
+**If you find yourself writing "I traced the relevant code" without having listed every function by name — you are lying. Stop. Do the actual trace.**

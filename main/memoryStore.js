@@ -1,166 +1,120 @@
 /**
- * guIDE Memory Store - Persistent context & conversation memory for the AI
- * Copyright (c) 2025-2026 Brendan Gray (GitHub: FileShot)
- * All Rights Reserved. See LICENSE for terms.
+ * guIDE — Memory Store
  *
- * Stores conversation summaries, project knowledge, and frequently-accessed code patterns.
- * Persisted to disk so context survives restarts.
+ * Persistent cross-session memory: conversations, project facts, code patterns,
+ * and error history. Debounced save (5 s) to <projectRoot>/.ide-memory/memory.json.
  */
+'use strict';
+
+const fs = require('fs');
 const path = require('path');
-const fs = require('fs').promises;
-const fsSync = require('fs');
+const log = require('./logger');
 
 class MemoryStore {
-  constructor(appPath) {
-    this.memoryDir = path.join(appPath, '.ide-memory');
-    this.conversations = [];        // Recent conversation turns
-    this.projectFacts = new Map();   // Key facts learned about the project
-    this.codePatterns = new Map();   // Code patterns and conventions observed
-    this.errorHistory = [];          // Past errors and their resolutions
-    this.maxConversations = 100;
-    this.maxErrors = 50;
-    this.loaded = false;
+  constructor() {
+    this._basePath = null;
+    this._filePath = null;
+    this._saveTimer = null;
+    this.conversations = [];
+    this.projectFacts = new Map();
+    this.codePatterns = new Map();
+    this.errorHistory = [];
   }
 
-  async initialize() {
+  /* ── Lifecycle ─────────────────────────────────────────────────── */
+
+  initialize(projectPath) {
+    if (!projectPath) return;
+    this._basePath = path.join(projectPath, '.ide-memory');
+    this._filePath = path.join(this._basePath, 'memory.json');
     try {
-      await fs.mkdir(this.memoryDir, { recursive: true });
-      await this._load();
-      this.loaded = true;
+      fs.mkdirSync(this._basePath, { recursive: true });
+      if (fs.existsSync(this._filePath)) {
+        const raw = JSON.parse(fs.readFileSync(this._filePath, 'utf8'));
+        this.conversations = raw.conversations || [];
+        this.projectFacts = new Map(Object.entries(raw.projectFacts || {}));
+        this.codePatterns = new Map(Object.entries(raw.codePatterns || {}));
+        this.errorHistory = raw.errorHistory || [];
+        log.info('Memory', `Loaded ${this.conversations.length} conversations, ${this.projectFacts.size} facts`);
+      }
     } catch (e) {
-      console.error('Failed to initialize memory store:', e);
+      log.warn('Memory', 'Failed to load memory store:', e.message);
     }
   }
 
-  /**
-   * Record a conversation turn
-   */
-  addConversation(role, content, metadata = {}) {
-    const entry = {
-      role,
-      content: content.substring(0, 2000), // Truncate for memory efficiency
+  /* ── Learning ──────────────────────────────────────────────────── */
+
+  addConversation(entry) {
+    this.conversations.push({
       timestamp: Date.now(),
-      ...metadata,
-    };
-    this.conversations.push(entry);
-    if (this.conversations.length > this.maxConversations) {
-      // Summarize old conversations before dropping them
-      this.conversations = this.conversations.slice(-this.maxConversations);
+      ...entry,
+    });
+    // Keep last 200 conversations
+    if (this.conversations.length > 200) {
+      this.conversations = this.conversations.slice(-200);
     }
     this._scheduleSave();
   }
 
-  /**
-   * Learn a fact about the project
-   */
   learnFact(key, value) {
-    this.projectFacts.set(key, {
-      value,
-      learnedAt: Date.now(),
-      accessCount: 0,
-    });
+    this.projectFacts.set(key, { value, learnedAt: Date.now() });
     this._scheduleSave();
   }
 
-  /**
-   * Record a code pattern/convention
-   */
-  learnPattern(patternName, description, examples = []) {
-    this.codePatterns.set(patternName, {
-      description,
-      examples: examples.slice(0, 3),
-      learnedAt: Date.now(),
-    });
+  learnPattern(key, pattern) {
+    this.codePatterns.set(key, { pattern, learnedAt: Date.now() });
     this._scheduleSave();
   }
 
-  /**
-   * Record an error and its resolution
-   */
-  recordError(errorMessage, resolution, files = []) {
+  recordError(error) {
     this.errorHistory.push({
-      error: errorMessage.substring(0, 500),
-      resolution: resolution.substring(0, 1000),
-      files,
       timestamp: Date.now(),
+      message: typeof error === 'string' ? error : error.message,
+      stack: error?.stack,
     });
-    if (this.errorHistory.length > this.maxErrors) {
-      this.errorHistory = this.errorHistory.slice(-this.maxErrors);
+    // Keep last 100 errors
+    if (this.errorHistory.length > 100) {
+      this.errorHistory = this.errorHistory.slice(-100);
     }
     this._scheduleSave();
   }
 
-  /**
-   * Find similar past errors
-   */
-  findSimilarErrors(errorMessage) {
-    const words = errorMessage.toLowerCase().split(/\s+/);
-    return this.errorHistory
-      .map(entry => {
-        const entryWords = entry.error.toLowerCase().split(/\s+/);
-        const overlap = words.filter(w => entryWords.includes(w)).length;
-        return { ...entry, similarity: overlap / Math.max(words.length, 1) };
-      })
-      .filter(e => e.similarity > 0.3)
-      .sort((a, b) => b.similarity - a.similarity)
-      .slice(0, 5);
+  /* ── Querying ──────────────────────────────────────────────────── */
+
+  findSimilarErrors(errorMsg) {
+    if (!errorMsg) return [];
+    const lower = errorMsg.toLowerCase();
+    return this.errorHistory.filter(e =>
+      e.message && e.message.toLowerCase().includes(lower)
+    ).slice(-5);
   }
 
-  /**
-   * Build context prompt from memory for the LLM
-   */
   getContextPrompt() {
-    let prompt = '';
-
-    // Add project facts
-    if (this.projectFacts.size > 0) {
-      prompt += '\n## Known Project Facts\n';
-      for (const [key, fact] of this.projectFacts) {
-        prompt += `- **${key}**: ${fact.value}\n`;
+    const parts = [];
+    if (this.projectFacts.size) {
+      parts.push('Known project facts:');
+      for (const [k, v] of this.projectFacts) {
+        parts.push(`  - ${k}: ${v.value}`);
       }
     }
-
-    // Add code patterns
-    if (this.codePatterns.size > 0) {
-      prompt += '\n## Observed Code Patterns\n';
-      for (const [name, pattern] of this.codePatterns) {
-        prompt += `- **${name}**: ${pattern.description}\n`;
+    if (this.codePatterns.size) {
+      parts.push('Known code patterns:');
+      for (const [k, v] of this.codePatterns) {
+        parts.push(`  - ${k}: ${v.pattern}`);
       }
     }
-
-    // NOTE: Past conversation turns are intentionally NOT injected here.
-    // conversations[] persists across sessions on disk. Injecting previous-session
-    // turns into a new session's system prompt caused the model to appear to
-    // "remember" things from prior sessions. Current-session messages are already
-    // in the messages[] array sent to the LLM — no injection needed.
-
-    return prompt;
+    return parts.length ? parts.join('\n') : '';
   }
 
-  /**
-   * Get memory stats
-   */
   getStats() {
     return {
       conversations: this.conversations.length,
-      projectFacts: this.projectFacts.size,
-      codePatterns: this.codePatterns.size,
-      errorHistory: this.errorHistory.length,
-      memoryDir: this.memoryDir,
+      facts: this.projectFacts.size,
+      patterns: this.codePatterns.size,
+      errors: this.errorHistory.length,
     };
   }
 
-  /**
-   * Clear only conversation history (for session reset)
-   */
-  clearConversations() {
-    this.conversations = [];
-    this._scheduleSave();
-  }
-
-  /**
-   * Clear all memory
-   */
   clear() {
     this.conversations = [];
     this.projectFacts.clear();
@@ -169,61 +123,40 @@ class MemoryStore {
     this._scheduleSave();
   }
 
-  // ── Persistence ──
+  dispose() {
+    if (this._saveTimer) {
+      clearTimeout(this._saveTimer);
+      this._saveTimer = null;
+    }
+    this._save(); // final flush
+  }
 
-  _saveTimer = null;
+  /* ── Persistence ───────────────────────────────────────────────── */
 
   _scheduleSave() {
-    if (this._saveTimer) clearTimeout(this._saveTimer);
-    this._saveTimer = setTimeout(() => this._save(), 5000);
+    if (this._saveTimer) return;
+    this._saveTimer = setTimeout(() => {
+      this._saveTimer = null;
+      this._save();
+    }, 5000);
   }
 
-  async _save() {
+  _save() {
+    if (!this._filePath) return;
+    const data = {
+      conversations: this.conversations,
+      projectFacts: Object.fromEntries(this.projectFacts),
+      codePatterns: Object.fromEntries(this.codePatterns),
+      errorHistory: this.errorHistory,
+    };
     try {
-      const data = {
-        conversations: this.conversations,
-        projectFacts: Array.from(this.projectFacts.entries()),
-        codePatterns: Array.from(this.codePatterns.entries()),
-        errorHistory: this.errorHistory,
-        savedAt: Date.now(),
-      };
-      await fs.writeFile(
-        path.join(this.memoryDir, 'memory.json'),
-        JSON.stringify(data, null, 2),
-        'utf8'
-      );
+      fs.mkdirSync(this._basePath, { recursive: true });
+      const tmp = this._filePath + '.tmp';
+      fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
+      fs.renameSync(tmp, this._filePath);
     } catch (e) {
-      console.error('Failed to save memory:', e);
+      log.warn('Memory', 'Failed to save memory store:', e.message);
     }
-  }
-
-  async _load() {
-    try {
-      const filePath = path.join(this.memoryDir, 'memory.json');
-      if (!fsSync.existsSync(filePath)) return;
-      
-      const raw = await fs.readFile(filePath, 'utf8');
-      if (!raw.trim()) return; // empty file — start with clean memory
-      const data = JSON.parse(raw);
-
-      this.conversations = data.conversations || [];
-      this.projectFacts = new Map(data.projectFacts || []);
-      this.codePatterns = new Map(data.codePatterns || []);
-      this.errorHistory = data.errorHistory || [];
-    } catch (e) {
-      // Corrupted or partially-written file — start with clean state rather than
-      // leaving the in-memory store in an inconsistent/partially-loaded condition.
-      console.warn('[Memory] memory.json corrupted or unreadable — starting fresh:', e.message);
-      this.conversations = [];
-      this.projectFacts = new Map();
-      this.codePatterns = new Map();
-      this.errorHistory = [];
-    }
-  }
-
-  async dispose() {
-    if (this._saveTimer) clearTimeout(this._saveTimer);
-    await this._save();
   }
 }
 

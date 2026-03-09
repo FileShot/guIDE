@@ -1,612 +1,350 @@
 /**
- * guIDE RAG Engine - Retrieval-Augmented Generation for codebase understanding
- * Copyright (c) 2025-2026 Brendan Gray (GitHub: FileShot)
- * All Rights Reserved. See LICENSE for terms.
+ * guIDE — RAG Engine
  *
- * Uses BM25 text search + file chunking for efficient context retrieval
+ * BM25-based code search over the project tree. Files are split into
+ * 500-line chunks with 50-line overlap. Metadata is always in memory;
+ * chunk content uses an LRU cache (5 000 entries) and reloads from disk
+ * on miss. Supports full reindex, incremental reindex, file-name search,
+ * error-context search, and relevance-filtered context retrieval.
  */
+'use strict';
+
 const path = require('path');
 const fs = require('fs').promises;
 const fsSync = require('fs');
+const log = require('./logger');
 
-// BM25 parameters
+/* ── Constants ───────────────────────────────────────────────────── */
+
 const BM25_K1 = 1.5;
-const BM25_B = 0.75;
+const BM25_B  = 0.75;
+const CHUNK_SIZE    = 500;
+const CHUNK_OVERLAP = 50;
+const MAX_FILE_SIZE = 1024 * 1024; // 1 MB
+const MAX_CACHED    = 5000;
 
-// Chunk settings
-const CHUNK_SIZE = 500; // lines per chunk
-const CHUNK_OVERLAP = 50; // overlap between chunks
-const MAX_FILE_SIZE = 1024 * 1024; // 1MB max file size to index
-const MAX_CACHED_CHUNKS = 5000; // LRU cap on in-memory chunk content
-
-// File patterns to ignore
-const IGNORE_PATTERNS = [
-  /node_modules/,
-  /\.git\//,
-  /dist\//,
-  /build\//,
-  /\.next\//,
-  /\.cache/,
-  /\.DS_Store/,
-  /\.env/,
-  /\.gguf$/,
-  /\.exe$/,
-  /\.dll$/,
-  /\.so$/,
-  /\.dylib$/,
-  /\.bin$/,
-  /\.png$/,
-  /\.jpg$/,
-  /\.jpeg$/,
-  /\.gif$/,
-  /\.ico$/,
-  /\.svg$/,
-  /\.woff/,
-  /\.ttf$/,
-  /\.eot$/,
-  /\.mp3$/,
-  /\.mp4$/,
-  /\.avi$/,
-  /\.zip$/,
-  /\.tar$/,
-  /\.gz$/,
-  /\.rar$/,
-  /\.7z$/,
-  /package-lock\.json$/,
-  /yarn\.lock$/,
-  /pnpm-lock\.yaml$/,
+const IGNORE_RE = [
+  /node_modules/, /\.git\//, /dist\//, /build\//, /\.next\//, /\.cache/,
+  /\.DS_Store/, /\.env$/, /\.gguf$/, /\.exe$/, /\.dll$/, /\.so$/, /\.dylib$/,
+  /\.bin$/, /\.png$/, /\.jpe?g$/, /\.gif$/, /\.ico$/, /\.svg$/, /\.woff/,
+  /\.ttf$/, /\.eot$/, /\.mp[34]$/, /\.avi$/, /\.zip$/, /\.tar$/, /\.gz$/,
+  /\.rar$/, /\.7z$/, /package-lock\.json$/, /yarn\.lock$/, /pnpm-lock\.yaml$/,
 ];
+
+/* ── RAGEngine ───────────────────────────────────────────────────── */
 
 class RAGEngine {
   constructor() {
-    this.index = new Map(); // term -> { docId -> { tf, positions } }
-    this.documents = new Map(); // docId -> { path, content, lines, chunk }
-    this.docLengths = new Map(); // docId -> length (in terms)
+    this.index       = new Map(); // term → Map<docId, {tf, positions}>
+    this.documents   = new Map(); // docId → {path, relativePath, startLine, endLine, lineCount}
+    this.docLengths  = new Map(); // docId → number
+    this.fileIndex   = new Map(); // filePath → [docId, ...]
+    this.fileMtimes  = new Map(); // filePath → mtimeMs
+    this._cache      = new Map(); // docId → content (LRU)
+    this._cacheSize  = 0;
     this.avgDocLength = 0;
-    this.totalDocs = 0;
+    this.totalDocs   = 0;
     this.projectPath = null;
-    this.isIndexing = false;
+    this.isIndexing  = false;
     this.indexProgress = 0;
-    this.fileIndex = new Map(); // filePath -> [docIds] for file-level lookup
-    this.fileMtimes = new Map(); // filePath -> mtimeMs for incremental re-index
-
-    // LRU content cache — content is evicted when cache exceeds MAX_CACHED_CHUNKS.
-    // Metadata (path, startLine, endLine, lineCount) is always kept in this.documents.
-    // Evicted content is reloaded from disk on-demand during search.
-    this._contentCache = new Map(); // docId -> content string (LRU ordered by insertion)
-    this._contentCacheSize = 0;
   }
 
+  /* ── Full index ────────────────────────────────────────────────── */
+
   async indexProject(projectPath, onProgress) {
-    // Guard against concurrent indexing — if already running, skip
     if (this.isIndexing) {
-      console.log('[RAG] indexProject called while already indexing, skipping');
+      log.info('RAG', 'Already indexing — skipping');
       return { indexed: 0, skipped: 0, duration: 0 };
     }
     this.isIndexing = true;
     this.indexProgress = 0;
     this.projectPath = projectPath;
-
-    // Clear existing index
-    this.index.clear();
-    this.documents.clear();
-    this.docLengths.clear();
-    this.fileIndex.clear();
-    this.fileMtimes.clear();
-    this._contentCache.clear();
-    this._contentCacheSize = 0;
+    this._clear();
 
     try {
-      // Collect all indexable files
       const files = await this._collectFiles(projectPath);
-      const totalFiles = files.length;
-      let processedFiles = 0;
-      const startTime = Date.now();
+      const t0 = Date.now();
+      let done = 0;
 
-      // Index files in parallel batches of 20 for throughput
-      const BATCH_SIZE = 20;
-      for (let i = 0; i < files.length; i += BATCH_SIZE) {
-        const batch = files.slice(i, i + BATCH_SIZE);
-        await Promise.all(batch.map(async (filePath) => {
-          try {
-            await this._indexFile(filePath);
-          } catch (e) {
-            // Skip files that can't be read
-          }
-        }));
-        processedFiles += batch.length;
-        this.indexProgress = Math.round((processedFiles / totalFiles) * 100);
-        if (onProgress) onProgress(this.indexProgress, processedFiles, totalFiles);
+      for (let i = 0; i < files.length; i += 20) {
+        const batch = files.slice(i, i + 20);
+        await Promise.all(batch.map(f => this._indexFile(f).catch(() => {})));
+        done += batch.length;
+        this.indexProgress = Math.round((done / files.length) * 100);
+        onProgress?.(this.indexProgress, done, files.length);
       }
 
-      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-      console.log(`[RAG] Indexed ${totalFiles} files in ${elapsed}s`);
-
-      // Calculate average document length
-      let totalLength = 0;
-      for (const len of this.docLengths.values()) {
-        totalLength += len;
-      }
-      this.totalDocs = this.documents.size;
-      this.avgDocLength = this.totalDocs > 0 ? totalLength / this.totalDocs : 0;
-
+      this._recalcStats();
+      const secs = ((Date.now() - t0) / 1000).toFixed(1);
+      log.info('RAG', `Indexed ${files.length} files (${this.totalDocs} chunks) in ${secs}s`);
+      return { totalFiles: files.length, totalChunks: this.totalDocs, totalTerms: this.index.size };
+    } finally {
       this.isIndexing = false;
-      return {
-        totalFiles: totalFiles,
-        totalChunks: this.totalDocs,
-        totalTerms: this.index.size,
-      };
-    } catch (error) {
-      this.isIndexing = false;
-      throw error;
     }
   }
 
-  /**
-   * Incremental re-index — only re-indexes files whose mtime has changed,
-   * plus indexes new files and removes deleted files from the index.
-   */
-  async reindexChanged(onProgress) {
-    if (this.isIndexing || !this.projectPath) {
-      return { updated: 0, added: 0, removed: 0 };
-    }
-    this.isIndexing = true;
-    const startTime = Date.now();
+  /* ── Incremental reindex ───────────────────────────────────────── */
 
+  async reindexChanged(onProgress) {
+    if (this.isIndexing || !this.projectPath) return { updated: 0, added: 0, removed: 0 };
+    this.isIndexing = true;
     try {
       const files = await this._collectFiles(this.projectPath);
-      const currentFileSet = new Set(files);
-      let updated = 0, added = 0, removed = 0;
-      let processed = 0;
+      const current = new Set(files);
+      let updated = 0, added = 0, removed = 0, done = 0;
 
-      // Remove index entries for deleted files
-      for (const [filePath] of this.fileIndex) {
-        if (!currentFileSet.has(filePath)) {
-          this._removeFileFromIndex(filePath);
-          removed++;
-        }
+      for (const [fp] of this.fileIndex) {
+        if (!current.has(fp)) { this._removeFile(fp); removed++; }
       }
 
-      // Check each current file for changes
-      const BATCH_SIZE = 20;
-      for (let i = 0; i < files.length; i += BATCH_SIZE) {
-        const batch = files.slice(i, i + BATCH_SIZE);
-        await Promise.all(batch.map(async (filePath) => {
+      for (let i = 0; i < files.length; i += 20) {
+        const batch = files.slice(i, i + 20);
+        await Promise.all(batch.map(async fp => {
           try {
-            const stats = await fs.stat(filePath);
-            const prevMtime = this.fileMtimes.get(filePath);
-            if (prevMtime === undefined) {
-              // New file
-              await this._indexFile(filePath);
-              added++;
-            } else if (stats.mtimeMs > prevMtime) {
-              // Changed file — remove old entries, re-index
-              this._removeFileFromIndex(filePath);
-              await this._indexFile(filePath);
-              updated++;
-            }
-            // Unchanged: skip
-          } catch (e) { /* skip unreadable */ }
+            const st = await fs.stat(fp);
+            const prev = this.fileMtimes.get(fp);
+            if (prev === undefined) { await this._indexFile(fp); added++; }
+            else if (st.mtimeMs > prev) { this._removeFile(fp); await this._indexFile(fp); updated++; }
+          } catch {}
         }));
-        processed += batch.length;
-        if (onProgress) onProgress(Math.round((processed / files.length) * 100), processed, files.length);
+        done += batch.length;
+        onProgress?.(Math.round((done / files.length) * 100), done, files.length);
       }
 
-      // Recalculate stats
-      this._recalculateStats();
-
-      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-      console.log(`[RAG] Incremental re-index in ${elapsed}s: ${updated} updated, ${added} added, ${removed} removed`);
-      this.isIndexing = false;
+      this._recalcStats();
+      log.info('RAG', `Incremental: ${updated} updated, ${added} added, ${removed} removed`);
       return { updated, added, removed };
-    } catch (error) {
+    } finally {
       this.isIndexing = false;
-      throw error;
     }
   }
 
-  /** Remove all index entries for a single file */
-  _removeFileFromIndex(filePath) {
-    const docIds = this.fileIndex.get(filePath);
-    if (!docIds) return;
-    for (const docId of docIds) {
-      // Remove from inverted index
-      for (const [term, postings] of this.index) {
-        postings.delete(docId);
-        if (postings.size === 0) this.index.delete(term);
-      }
-      this.documents.delete(docId);
-      this.docLengths.delete(docId);
-      this._evictContent(docId);
-    }
-    this.fileIndex.delete(filePath);
-    this.fileMtimes.delete(filePath);
-  }
+  /* ── BM25 search ───────────────────────────────────────────────── */
 
-  /** Recalculate totalDocs and avgDocLength after incremental changes */
-  _recalculateStats() {
-    let totalLength = 0;
-    for (const len of this.docLengths.values()) {
-      totalLength += len;
-    }
-    this.totalDocs = this.documents.size;
-    this.avgDocLength = this.totalDocs > 0 ? totalLength / this.totalDocs : 0;
-  }
-
-  async _collectFiles(dirPath, files = []) {
-    try {
-      const entries = await fs.readdir(dirPath, { withFileTypes: true });
-      for (const entry of entries) {
-        const fullPath = path.join(dirPath, entry.name);
-        const relativePath = path.relative(this.projectPath, fullPath);
-
-        // Check ignore patterns
-        if (IGNORE_PATTERNS.some(p => p.test(relativePath) || p.test(entry.name))) {
-          continue;
-        }
-
-        if (entry.isDirectory()) {
-          await this._collectFiles(fullPath, files);
-        } else if (entry.isFile()) {
-          try {
-            const stats = await fs.stat(fullPath);
-            if (stats.size <= MAX_FILE_SIZE && stats.size > 0) {
-              files.push(fullPath);
-            }
-          } catch (e) { /* skip */ }
-        }
-      }
-    } catch (e) { /* skip unreadable dirs */ }
-    return files;
-  }
-
-  async _indexFile(filePath) {
-    const content = await fs.readFile(filePath, 'utf8');
-    const stats = await fs.stat(filePath);
-    this.fileMtimes.set(filePath, stats.mtimeMs);
-    const lines = content.split('\n');
-    const docIds = [];
-
-    // Create chunks with overlap
-    for (let start = 0; start < lines.length; start += CHUNK_SIZE - CHUNK_OVERLAP) {
-      const end = Math.min(start + CHUNK_SIZE, lines.length);
-      const chunkLines = lines.slice(start, end);
-      const chunkContent = chunkLines.join('\n');
-
-      const docId = `${filePath}:${start}-${end}`;
-      // Store metadata always; content goes to LRU cache
-      this.documents.set(docId, {
-        path: filePath,
-        relativePath: path.relative(this.projectPath, filePath),
-        startLine: start,
-        endLine: end,
-        lineCount: lines.length,
-      });
-      this._cacheContent(docId, chunkContent);
-
-      // Tokenize and index
-      const terms = this._tokenize(chunkContent);
-      this.docLengths.set(docId, terms.length);
-
-      // Build term frequency map
-      const termFreqs = new Map();
-      terms.forEach((term, pos) => {
-        if (!termFreqs.has(term)) {
-          termFreqs.set(term, { count: 0, positions: [] });
-        }
-        const tf = termFreqs.get(term);
-        tf.count++;
-        tf.positions.push(pos);
-      });
-
-      // Add to inverted index
-      for (const [term, { count, positions }] of termFreqs) {
-        if (!this.index.has(term)) {
-          this.index.set(term, new Map());
-        }
-        this.index.get(term).set(docId, { tf: count, positions });
-      }
-
-      docIds.push(docId);
-
-      if (start + CHUNK_SIZE >= lines.length) break;
-    }
-
-    this.fileIndex.set(filePath, docIds);
-  }
-
-  _tokenize(text) {
-    // Split on non-alphanumeric, convert to lowercase, filter short tokens
-    return text
-      .toLowerCase()
-      .replace(/[^a-z0-9_\-\.]/g, ' ')
-      .split(/\s+/)
-      .filter(t => t.length >= 2);
-  }
-
-  /**
-   * BM25 search across the indexed codebase
-   */
   search(query, maxResults = 10) {
-    if (this.totalDocs === 0) return [];
-
-    const queryTerms = this._tokenize(query);
+    if (!this.totalDocs) return [];
+    const terms = _tokenize(query);
     const scores = new Map();
 
-    for (const term of queryTerms) {
+    for (const term of terms) {
       const postings = this.index.get(term);
       if (!postings) continue;
-
-      // IDF calculation
-      const df = postings.size;
-      const idf = Math.log((this.totalDocs - df + 0.5) / (df + 0.5) + 1);
-
+      const idf = Math.log((this.totalDocs - postings.size + 0.5) / (postings.size + 0.5) + 1);
       for (const [docId, { tf }] of postings) {
-        const docLen = this.docLengths.get(docId) || 0;
-        // BM25 score
-        const numerator = tf * (BM25_K1 + 1);
-        const denominator = tf + BM25_K1 * (1 - BM25_B + BM25_B * (docLen / this.avgDocLength));
-        const score = idf * (numerator / denominator);
-
+        const dl = this.docLengths.get(docId) || 0;
+        const score = idf * ((tf * (BM25_K1 + 1)) / (tf + BM25_K1 * (1 - BM25_B + BM25_B * (dl / this.avgDocLength))));
         scores.set(docId, (scores.get(docId) || 0) + score);
       }
     }
 
-    // Sort by score and return top results
-    const results = Array.from(scores.entries())
+    return [...scores.entries()]
       .sort((a, b) => b[1] - a[1])
       .slice(0, maxResults)
-      .map(([docId, score]) => {
-        const doc = this.documents.get(docId);
-        return {
-          docId,
-          score,
-          path: doc.path,
-          relativePath: doc.relativePath,
-          content: this._getContent(docId, doc),
-          startLine: doc.startLine,
-          endLine: doc.endLine,
-          lineCount: doc.lineCount,
-        };
+      .map(([id, score]) => {
+        const doc = this.documents.get(id);
+        return { docId: id, score, path: doc.path, relativePath: doc.relativePath,
+                 content: this._getContent(id, doc), startLine: doc.startLine,
+                 endLine: doc.endLine, lineCount: doc.lineCount };
       });
-
-    return results;
   }
 
-  /**
-   * Search for files by name/path
-   */
   searchFiles(query, maxResults = 20) {
-    const queryLower = query.toLowerCase();
+    const q = query.toLowerCase();
     const results = [];
-
-    for (const [filePath, docIds] of this.fileIndex) {
-      const relativePath = path.relative(this.projectPath, filePath).toLowerCase();
-      const fileName = path.basename(filePath).toLowerCase();
-
+    for (const [fp] of this.fileIndex) {
+      const rel = path.relative(this.projectPath, fp).toLowerCase();
+      const name = path.basename(fp).toLowerCase();
       let score = 0;
-      if (fileName === queryLower) score = 100;
-      else if (fileName.startsWith(queryLower)) score = 80;
-      else if (fileName.includes(queryLower)) score = 60;
-      else if (relativePath.includes(queryLower)) score = 40;
-
-      if (score > 0) {
-        results.push({
-          path: filePath,
-          relativePath: path.relative(this.projectPath, filePath),
-          score,
-          fileName: path.basename(filePath),
-        });
-      }
+      if (name === q) score = 100;
+      else if (name.startsWith(q)) score = 80;
+      else if (name.includes(q)) score = 60;
+      else if (rel.includes(q)) score = 40;
+      if (score) results.push({ path: fp, relativePath: path.relative(this.projectPath, fp), score, fileName: path.basename(fp) });
     }
-
     return results.sort((a, b) => b.score - a.score).slice(0, maxResults);
   }
 
-  /**
-   * Get relevant context for an AI query about the codebase
-   */
+  /* ── Context retrieval ─────────────────────────────────────────── */
+
   getContextForQuery(query, maxChunks = 5, maxTokens = 3000) {
     const results = this.search(query, maxChunks * 3);
-    const context = [];
-    let totalTokens = 0;
-    const seenFiles = new Set();
+    const topScore = results[0]?.score || 0;
+    const threshold = Math.max(1.5, topScore * 0.25);
 
-    // --- Relevance filtering ---
-    // Absolute minimum: discard very weak BM25 matches that are just
-    // coincidental single-word overlaps (e.g. "file" appearing everywhere)
-    const MIN_SCORE = 1.5;
-    // Relative threshold: only keep results within 25% of the top score
-    const topScore = results.length > 0 ? results[0].score : 0;
-    const relativeThreshold = topScore * 0.25;
-    const scoreThreshold = Math.max(MIN_SCORE, relativeThreshold);
-
-    for (const result of results) {
-      // Skip results below relevance threshold
-      if (result.score < scoreThreshold) continue;
-
-      // Approximate token count (4 chars per token)
-      const chunkTokens = Math.ceil(result.content.length / 4);
-      if (totalTokens + chunkTokens > maxTokens) break;
-
-      context.push({
-        file: result.relativePath,
-        startLine: result.startLine + 1, // 1-indexed
-        endLine: result.endLine,
-        content: result.content,
-        score: result.score,
-      });
-      totalTokens += chunkTokens;
-      seenFiles.add(result.path);
-
-      if (context.length >= maxChunks) break;
+    const chunks = [];
+    let tokens = 0;
+    for (const r of results) {
+      if (r.score < threshold) continue;
+      const ct = Math.ceil(r.content.length / 4);
+      if (tokens + ct > maxTokens) break;
+      chunks.push({ file: r.relativePath, startLine: r.startLine + 1, endLine: r.endLine, content: r.content, score: r.score });
+      tokens += ct;
+      if (chunks.length >= maxChunks) break;
     }
-
-    return {
-      chunks: context,
-      totalTokens,
-      filesSearched: this.fileIndex.size,
-      chunksSearched: this.totalDocs,
-    };
+    return { chunks, totalTokens: tokens, filesSearched: this.fileIndex.size, chunksSearched: this.totalDocs };
   }
 
-  /**
-   * Get the full content of a specific file (reads from disk on demand)
-   */
-  async getFileContent(filePath) {
-    try {
-      return await fs.readFile(filePath, 'utf8');
-    } catch {
-      return null;
-    }
-  }
+  /* ── Error context ─────────────────────────────────────────────── */
 
-  /**
-   * Find files that might contain a specific error
-   */
   findErrorContext(errorMessage, stackTrace = '') {
     const combined = `${errorMessage} ${stackTrace}`;
-
-    // Extract file references from error/stack trace
     const fileRefs = [];
-    const fileRegex = /(?:at\s+.*?\s+\()?([a-zA-Z]:[\\\/].*?|\.?[\/\\].*?):(\d+)(?::(\d+))?\)?/g;
-    let match;
-    while ((match = fileRegex.exec(combined)) !== null) {
-      fileRefs.push({ path: match[1], line: parseInt(match[2]), col: match[3] ? parseInt(match[3]) : 0 });
-    }
+    const fileRe = /(?:at\s+.*?\s+\()?([a-zA-Z]:[\\\/].*?|\.?[\/\\].*?):(\d+)(?::(\d+))?\)?/g;
+    let m;
+    while ((m = fileRe.exec(combined))) fileRefs.push({ path: m[1], line: +m[2], col: m[3] ? +m[3] : 0 });
 
-    // Also extract potential identifiers (function names, variable names)
-    const identRegex = /\b([a-zA-Z_$][a-zA-Z0-9_$]{2,})\b/g;
-    const identifiers = new Set();
-    while ((match = identRegex.exec(combined)) !== null) {
-      const id = match[1];
-      // Filter out common words
-      if (!['undefined', 'null', 'true', 'false', 'function', 'const', 'let', 'var', 'class', 'import', 'export', 'from', 'return', 'Error', 'TypeError', 'ReferenceError', 'SyntaxError'].includes(id)) {
-        identifiers.add(id);
-      }
-    }
+    const ids = new Set();
+    const idRe = /\b([a-zA-Z_$][a-zA-Z0-9_$]{2,})\b/g;
+    const skip = new Set(['undefined', 'null', 'true', 'false', 'function', 'const', 'let', 'var', 'class', 'import', 'export', 'from', 'return', 'Error', 'TypeError', 'ReferenceError', 'SyntaxError']);
+    while ((m = idRe.exec(combined))) { if (!skip.has(m[1])) ids.add(m[1]); }
 
-    // Search for error-related content
-    const searchQuery = Array.from(identifiers).join(' ') + ' ' + errorMessage;
-    const searchResults = this.search(searchQuery, 10);
-
-    // Boost results that match file references
-    for (const result of searchResults) {
+    const results = this.search([...ids].join(' ') + ' ' + errorMessage, 10);
+    for (const r of results) {
       for (const ref of fileRefs) {
-        if (result.path.endsWith(ref.path) || ref.path.endsWith(path.basename(result.path))) {
-          result.score *= 3; // Strongly boost files mentioned in stack trace
-          result.errorLine = ref.line;
+        if (r.path.endsWith(ref.path) || ref.path.endsWith(path.basename(r.path))) {
+          r.score *= 3;
+          r.errorLine = ref.line;
         }
       }
     }
-
-    // Re-sort
-    searchResults.sort((a, b) => b.score - a.score);
-
-    return {
-      results: searchResults.slice(0, 5),
-      fileReferences: fileRefs,
-      identifiers: Array.from(identifiers),
-    };
+    results.sort((a, b) => b.score - a.score);
+    return { results: results.slice(0, 5), fileReferences: fileRefs, identifiers: [...ids] };
   }
 
-  /**
-   * Get project structure summary for context
-   */
-  getProjectSummary() {
-    const files = Array.from(this.fileIndex.keys()).map(f => path.relative(this.projectPath, f));
-    const dirs = new Set();
-    files.forEach(f => {
-      const parts = f.split(path.sep);
-      for (let i = 1; i <= parts.length - 1; i++) {
-        dirs.add(parts.slice(0, i).join('/'));
-      }
-    });
+  /* ── Misc ──────────────────────────────────────────────────────── */
 
-    return {
-      projectPath: this.projectPath,
-      totalFiles: files.length,
-      totalChunks: this.totalDocs,
-      directories: Array.from(dirs).sort(),
-      files: files.sort(),
-    };
+  async getFileContent(filePath) {
+    try { return await fs.readFile(filePath, 'utf8'); } catch { return null; }
+  }
+
+  getProjectSummary() {
+    const files = [...this.fileIndex.keys()].map(f => path.relative(this.projectPath, f));
+    const dirs = new Set();
+    for (const f of files) {
+      const parts = f.split(path.sep);
+      for (let i = 1; i < parts.length; i++) dirs.add(parts.slice(0, i).join('/'));
+    }
+    return { projectPath: this.projectPath, totalFiles: files.length, totalChunks: this.totalDocs, directories: [...dirs].sort(), files: files.sort() };
   }
 
   getStatus() {
-    return {
-      isIndexing: this.isIndexing,
-      indexProgress: this.indexProgress,
-      totalFiles: this.fileIndex.size,
-      totalChunks: this.totalDocs,
-      totalTerms: this.index.size,
-      projectPath: this.projectPath,
-    };
+    return { isIndexing: this.isIndexing, indexProgress: this.indexProgress, totalFiles: this.fileIndex.size, totalChunks: this.totalDocs, totalTerms: this.index.size, projectPath: this.projectPath };
   }
 
-  clear() {
-    this.index.clear();
-    this.documents.clear();
-    this.docLengths.clear();
-    this.fileIndex.clear();
-    this._contentCache.clear();
-    this._contentCacheSize = 0;
-    this.totalDocs = 0;
-    this.avgDocLength = 0;
-    this.projectPath = null;
+  clear() { this._clear(); }
+
+  /* ── Internals ─────────────────────────────────────────────────── */
+
+  _clear() {
+    this.index.clear(); this.documents.clear(); this.docLengths.clear();
+    this.fileIndex.clear(); this.fileMtimes.clear();
+    this._cache.clear(); this._cacheSize = 0;
+    this.totalDocs = 0; this.avgDocLength = 0;
   }
 
-  // ── LRU Content Cache ──────────────────────────────────────────
-  // The inverted index (this.index) and metadata (this.documents) are always kept.
-  // Only chunk *content* (the largest memory consumer) is cached with LRU eviction.
-  // Evicted content is reloaded from disk on demand during search.
+  _recalcStats() {
+    let total = 0;
+    for (const l of this.docLengths.values()) total += l;
+    this.totalDocs = this.documents.size;
+    this.avgDocLength = this.totalDocs ? total / this.totalDocs : 0;
+  }
 
-  /** Store content in LRU cache, evicting oldest entries if over limit */
-  _cacheContent(docId, content) {
-    if (this._contentCache.has(docId)) {
-      // Move to end (most recently used)
-      this._contentCache.delete(docId);
-    } else {
-      this._contentCacheSize++;
+  _removeFile(fp) {
+    const docIds = this.fileIndex.get(fp);
+    if (!docIds) return;
+    for (const id of docIds) {
+      for (const [term, postings] of this.index) { postings.delete(id); if (!postings.size) this.index.delete(term); }
+      this.documents.delete(id); this.docLengths.delete(id);
+      if (this._cache.has(id)) { this._cache.delete(id); this._cacheSize--; }
     }
-    this._contentCache.set(docId, content);
+    this.fileIndex.delete(fp); this.fileMtimes.delete(fp);
+  }
 
-    // Evict oldest entries if over limit
-    while (this._contentCacheSize > MAX_CACHED_CHUNKS) {
-      const oldest = this._contentCache.keys().next().value;
-      this._contentCache.delete(oldest);
-      this._contentCacheSize--;
+  async _collectFiles(dir, out = []) {
+    let entries;
+    try { entries = await fs.readdir(dir, { withFileTypes: true }); } catch { return out; }
+    for (const e of entries) {
+      const full = path.join(dir, e.name);
+      const rel = path.relative(this.projectPath, full);
+      if (IGNORE_RE.some(r => r.test(rel) || r.test(e.name))) continue;
+      if (e.isDirectory()) { await this._collectFiles(full, out); }
+      else if (e.isFile()) {
+        try { const st = await fs.stat(full); if (st.size > 0 && st.size <= MAX_FILE_SIZE) out.push(full); } catch {}
+      }
+    }
+    return out;
+  }
+
+  async _indexFile(fp) {
+    const content = await fs.readFile(fp, 'utf8');
+    const st = await fs.stat(fp);
+    this.fileMtimes.set(fp, st.mtimeMs);
+    const lines = content.split('\n');
+    const docIds = [];
+
+    for (let start = 0; start < lines.length; start += CHUNK_SIZE - CHUNK_OVERLAP) {
+      const end = Math.min(start + CHUNK_SIZE, lines.length);
+      const chunk = lines.slice(start, end).join('\n');
+      const id = `${fp}:${start}-${end}`;
+
+      this.documents.set(id, { path: fp, relativePath: path.relative(this.projectPath, fp), startLine: start, endLine: end, lineCount: lines.length });
+      this._putCache(id, chunk);
+
+      const terms = _tokenize(chunk);
+      this.docLengths.set(id, terms.length);
+
+      const freq = new Map();
+      terms.forEach((t, pos) => {
+        const e = freq.get(t) || { count: 0, positions: [] };
+        e.count++; e.positions.push(pos);
+        freq.set(t, e);
+      });
+
+      for (const [term, { count, positions }] of freq) {
+        if (!this.index.has(term)) this.index.set(term, new Map());
+        this.index.get(term).set(id, { tf: count, positions });
+      }
+
+      docIds.push(id);
+      if (start + CHUNK_SIZE >= lines.length) break;
+    }
+    this.fileIndex.set(fp, docIds);
+  }
+
+  /* ── LRU content cache ─────────────────────────────────────────── */
+
+  _putCache(id, content) {
+    if (this._cache.has(id)) this._cache.delete(id);
+    else this._cacheSize++;
+    this._cache.set(id, content);
+    while (this._cacheSize > MAX_CACHED) {
+      this._cache.delete(this._cache.keys().next().value);
+      this._cacheSize--;
     }
   }
 
-  /** Get content for a docId — from cache or reload from disk */
-  _getContent(docId, doc) {
-    // Cache hit — move to end (most recently used)
-    if (this._contentCache.has(docId)) {
-      const content = this._contentCache.get(docId);
-      this._contentCache.delete(docId);
-      this._contentCache.set(docId, content);
-      return content;
+  _getContent(id, doc) {
+    if (this._cache.has(id)) {
+      const c = this._cache.get(id);
+      this._cache.delete(id);
+      this._cache.set(id, c);
+      return c;
     }
-
-    // Cache miss — reload from disk synchronously
     try {
-      const fileContent = require('fs').readFileSync(doc.path, 'utf8');
-      const lines = fileContent.split('\n');
-      const chunkContent = lines.slice(doc.startLine, doc.endLine).join('\n');
-      this._cacheContent(docId, chunkContent);
-      return chunkContent;
+      const lines = fsSync.readFileSync(doc.path, 'utf8').split('\n');
+      const chunk = lines.slice(doc.startLine, doc.endLine).join('\n');
+      this._putCache(id, chunk);
+      return chunk;
     } catch (e) {
       return `[Content unavailable: ${e.message}]`;
     }
   }
+}
 
-  /** Remove content from cache when doc is removed from index */
-  _evictContent(docId) {
-    if (this._contentCache.has(docId)) {
-      this._contentCache.delete(docId);
-      this._contentCacheSize--;
-    }
-  }
+/* ── Tokenizer ───────────────────────────────────────────────────── */
+
+function _tokenize(text) {
+  return text.toLowerCase().replace(/[^a-z0-9_\-\.]/g, ' ').split(/\s+/).filter(t => t.length >= 2);
 }
 
 module.exports = { RAGEngine };

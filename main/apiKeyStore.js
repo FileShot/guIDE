@@ -1,90 +1,101 @@
 /**
- * Secure API key storage — uses Electron's safeStorage (OS keychain via DPAPI/Keychain/libsecret).
- * Falls back to plaintext if safeStorage is unavailable (e.g. CI, headless).
+ * guIDE — Secure API Key Storage
+ *
+ * Encrypts/decrypts API keys via Electron's safeStorage (OS keychain: DPAPI/Keychain/libsecret).
+ * Falls back to plaintext when safeStorage is unavailable (CI, headless, Linux without gnome-keyring).
+ *
+ * Config stored at: <projectRoot>/.guide-config.json
+ *   - apiKeys: { provider: "enc:<base64>" }
+ *   - keyPools: { provider: ["enc:<base64>", ...] }
  */
+'use strict';
+
 const path = require('path');
-const fsSync = require('fs');
+const fs = require('fs');
 const { safeStorage } = require('electron');
+const log = require('./logger');
+
+/* ------------------------------------------------------------------ */
+/*  Encrypt / Decrypt                                                  */
+/* ------------------------------------------------------------------ */
 
 function encryptApiKey(key) {
   if (!key || typeof key !== 'string') return key;
   try {
     if (safeStorage.isEncryptionAvailable()) {
-      const encrypted = safeStorage.encryptString(key);
-      return 'enc:' + encrypted.toString('base64');
+      return 'enc:' + safeStorage.encryptString(key).toString('base64');
     }
-  } catch (_) {}
+  } catch (_) { /* safeStorage unavailable */ }
   return key;
 }
 
 function decryptApiKey(stored) {
   if (!stored || typeof stored !== 'string') return stored;
-  if (stored.startsWith('enc:')) {
-    try {
-      const buf = Buffer.from(stored.slice(4), 'base64');
-      return safeStorage.decryptString(buf);
-    } catch (e) {
-      console.warn('[Security] Failed to decrypt API key, it may need to be re-entered:', e.message);
-      return '';
-    }
+  if (!stored.startsWith('enc:')) return stored;
+  try {
+    return safeStorage.decryptString(Buffer.from(stored.slice(4), 'base64'));
+  } catch (e) {
+    log.warn('Security', 'Failed to decrypt API key — may need re-entry:', e.message);
+    return '';
   }
-  return stored;
 }
+
+/* ------------------------------------------------------------------ */
+/*  Load from config                                                   */
+/* ------------------------------------------------------------------ */
 
 function loadSavedApiKeys(appBasePath, cloudLLM) {
   const configPath = path.join(appBasePath, '.guide-config.json');
+  let config;
   try {
-    const config = JSON.parse(fsSync.readFileSync(configPath, 'utf8'));
-    if (config.apiKeys) {
-      let migrated = false;
-      for (const [provider, storedKey] of Object.entries(config.apiKeys)) {
-        if (!storedKey) continue;
-        const key = decryptApiKey(storedKey);
-        if (key) {
-          cloudLLM.setApiKey(provider, key);
-          if (typeof storedKey === 'string' && !storedKey.startsWith('enc:')) {
-            config.apiKeys[provider] = encryptApiKey(storedKey);
-            migrated = true;
-          }
-        }
-      }
-      if (migrated) {
-        // Atomic write: write to temp file, then rename
-        const tmpPath = configPath + '.tmp';
-        try { fsSync.writeFileSync(tmpPath, JSON.stringify(config, null, 2)); fsSync.renameSync(tmpPath, configPath); } catch (_) {}
-        console.log('[Security] Auto-migrated plaintext API keys to encrypted storage');
-      }
-      console.log(`[IDE] Loaded API keys for: ${Object.keys(config.apiKeys).filter(k => config.apiKeys[k]).join(', ')}`);
-    }
-
-    // Load key pools: { provider: ["key1", "key2", ...] }
-    // Each key is added to the provider's rotation pool for automatic failover
-    if (config.keyPools && typeof config.keyPools === 'object') {
-      let poolMigrated = false;
-      for (const [provider, keys] of Object.entries(config.keyPools)) {
-        if (!Array.isArray(keys)) continue;
-        for (let i = 0; i < keys.length; i++) {
-          const storedKey = keys[i];
-          if (!storedKey) continue;
-          const key = decryptApiKey(storedKey);
-          if (key) {
-            cloudLLM.addKeyToPool(provider, key);
-            if (typeof storedKey === 'string' && !storedKey.startsWith('enc:')) {
-              keys[i] = encryptApiKey(storedKey);
-              poolMigrated = true;
-            }
-          }
-        }
-      }
-      if (poolMigrated) {
-        config.keyPools = config.keyPools; // updated in-place
-        const tmpPath = configPath + '.tmp';
-        try { fsSync.writeFileSync(tmpPath, JSON.stringify(config, null, 2)); fsSync.renameSync(tmpPath, configPath); } catch (_) {}
-        console.log('[Security] Auto-encrypted key pool entries');
-      }
-    }
+    config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
   } catch {
-    // No config file yet
+    return; // no config file yet
+  }
+
+  let dirty = false;
+
+  // -- Single keys per provider --
+  if (config.apiKeys && typeof config.apiKeys === 'object') {
+    for (const [provider, stored] of Object.entries(config.apiKeys)) {
+      if (!stored) continue;
+      const key = decryptApiKey(stored);
+      if (!key) continue;
+      cloudLLM.setApiKey(provider, key);
+      if (typeof stored === 'string' && !stored.startsWith('enc:')) {
+        config.apiKeys[provider] = encryptApiKey(stored);
+        dirty = true;
+      }
+    }
+    const loaded = Object.keys(config.apiKeys).filter(k => config.apiKeys[k]);
+    if (loaded.length) log.info('IDE', `Loaded API keys for: ${loaded.join(', ')}`);
+  }
+
+  // -- Key pools (rotation / failover) --
+  if (config.keyPools && typeof config.keyPools === 'object') {
+    for (const [provider, keys] of Object.entries(config.keyPools)) {
+      if (!Array.isArray(keys)) continue;
+      for (let i = 0; i < keys.length; i++) {
+        if (!keys[i]) continue;
+        const key = decryptApiKey(keys[i]);
+        if (!key) continue;
+        cloudLLM.addKeyToPool(provider, key);
+        if (typeof keys[i] === 'string' && !keys[i].startsWith('enc:')) {
+          keys[i] = encryptApiKey(keys[i]);
+          dirty = true;
+        }
+      }
+    }
+  }
+
+  // Atomic write-back if any plaintext keys were auto-encrypted
+  if (dirty) {
+    const tmp = configPath + '.tmp';
+    try {
+      fs.writeFileSync(tmp, JSON.stringify(config, null, 2));
+      fs.renameSync(tmp, configPath);
+      log.info('Security', 'Auto-migrated plaintext API keys to encrypted storage');
+    } catch (_) { /* non-fatal */ }
   }
 }
 

@@ -1,379 +1,305 @@
-/**
- * MCP Browser Tools — All browser automation methods for MCPToolServer.
- * Extracted from mcpToolServer.js (ARCH-03).
- * These methods are mixed into MCPToolServer.prototype so `this` works.
- */
+'use strict';
+
+// Browser automation methods — mixed onto MCPToolServer.prototype
+// All methods use `this` to access playwrightBrowser, browserManager, projectPath
+
+const path = require('path');
 
 async function _browserNavigate(url) {
-  const browser = this._getBrowser();
-  if (!browser) return { success: false, error: 'Browser not available.' };
+  if (!url) return { success: false, error: 'No URL provided' };
 
-  // Auto-launch Playwright if not yet launched
-  if (this.playwrightBrowser && !this.playwrightBrowser.isLaunched) {
-    console.log('[MCPToolServer] Auto-launching Playwright browser for navigation...');
-    const launchResult = await this.playwrightBrowser.launch({ headless: false });
-    if (!launchResult.success) {
-      console.warn('[MCPToolServer] Playwright auto-launch failed:', launchResult.error);
-    }
+  // Clean URL
+  url = String(url).trim().replace(/^['"]|['"]$/g, '');
+
+  // Translate workspace URIs to real paths
+  if (url.startsWith('file:///workspace/') && this.projectPath) {
+    url = 'file:///' + path.join(this.projectPath, url.slice(18)).replace(/\\/g, '/');
   }
 
-  // Clean up URL — strip stray quotes/whitespace that small models inject
-  let cleanUrl = (url || '').trim().replace(/^['"`]+|['"`]+$/g, '').trim();
-  if (!cleanUrl) return { success: false, error: 'No URL provided.' };
-
-  // Handle file:///workspace/ URLs — translate to real paths and check existence
-  const wsFileMatch = cleanUrl.match(/^file:\/\/\/workspace\/(.*)/i);
-  if (wsFileMatch) {
-    const fs = require('fs');
-    const filename = wsFileMatch[1];
-    const projectPath = this.projectPath || '';
-    const filePath = require('path').isAbsolute(filename) ? filename : require('path').join(projectPath, filename);
-    if (fs.existsSync(filePath)) {
-      cleanUrl = `file:///${filePath.replace(/\\/g, '/')}`;
-    } else {
-      return { success: false, error: `File not found: /workspace/${filename}. You must call write_file to create the file BEFORE navigating to it. The file does not exist yet.` };
-    }
+  // Block dangerous schemes
+  const scheme = url.split(':')[0]?.toLowerCase();
+  if (['javascript', 'data', 'ftp', 'vbscript'].includes(scheme)) {
+    return { success: false, error: `Blocked scheme: ${scheme}` };
   }
 
-  // Only allow http/https schemes — block javascript:, file:, data:, ftp: etc.
-  if (/^https?:\/\//i.test(cleanUrl)) {
-    // Already has valid scheme
-  } else if (/^file:\/\//i.test(cleanUrl)) {
-    // file:// URLs are allowed (handled above for workspace paths)
-  } else if (/^[a-z][a-z0-9+.-]*:/i.test(cleanUrl)) {
-    return { success: false, error: 'URL scheme not allowed. Only http:// and https:// are supported.' };
-  } else {
-    cleanUrl = 'https://' + cleanUrl;
-  }
-
-  // Block navigation to internal/private IPs
+  // SSRF guard — block private/internal IPs
   try {
-    const parsed = new URL(cleanUrl);
-    const host = parsed.hostname.toLowerCase();
-    const blockedNav = ['localhost', '127.0.0.1', '0.0.0.0', '::1', '[::1]', 'metadata.google.internal'];
-    if (blockedNav.includes(host) || /^(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.|169\.254\.)/.test(host)) {
-      return { success: false, error: `Navigation to internal addresses (${host}) is blocked for security.` };
+    const urlObj = new URL(url);
+    const host = urlObj.hostname;
+    if (/^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|127\.|0\.|localhost|169\.254\.)/.test(host)) {
+      return { success: false, error: 'Blocked: private/internal IP' };
     }
-  } catch (_) {}
+  } catch {}
 
-  const result = await browser.navigate(cleanUrl);
-
-  // Only show viewport browser panel when NOT using Playwright (it has its own window)
-  if (result.success && this.browserManager?.parentWindow && !this.playwrightBrowser?.isLaunched) {
-    this.browserManager.parentWindow.webContents.send('show-browser', { url });
-    setTimeout(() => {
-      try { this.browserManager.parentWindow.webContents.send('browser-restore'); } catch (_) {}
-    }, 300);
+  // Auto-prepend https if no scheme
+  if (!/^https?:\/\//i.test(url) && !url.startsWith('file://')) {
+    url = 'https://' + url;
   }
-  return result;
+
+  // Prefer Playwright
+  if (this.playwrightBrowser) {
+    if (!this.playwrightBrowser.isLaunched?.()) await this.playwrightBrowser.launch?.();
+    return this.playwrightBrowser.navigate(url);
+  }
+  if (this.browserManager) {
+    if (this.browserManager.parentWindow) {
+      this.browserManager.parentWindow.webContents.send('show-viewport-browser');
+    }
+    return this.browserManager.navigate(url);
+  }
+  return { success: false, error: 'No browser available' };
 }
 
 async function _browserClick(refStr, options = {}) {
   const browser = this._getBrowser();
-  if (!browser) return { success: false, error: 'Browser not available' };
+  if (!browser) return { success: false, error: 'No browser available' };
 
-  const result = await browser.click(refStr, options);
-
-  // Attempt 2: if ref not found, take a fresh snapshot and retry
-  if (!result.success && (result.error?.includes('not found') || result.error?.includes('timeout'))) {
-    console.log(`[MCPToolServer] browser_click ref=${refStr} failed — retrying with fresh snapshot`);
+  // 3-attempt strategy: direct → fresh snapshot + retry → JS fallback
+  for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      // Dismiss any overlay popups first
-      const page = browser.page;
-      if (page) {
-        await page.evaluate(() => {
-          document.querySelectorAll('[class*="overlay"], [class*="modal"], [class*="popup"], [class*="cookie"], [class*="consent"], [class*="banner"]').forEach(el => {
-            if (el.offsetHeight > 0 && getComputedStyle(el).position === 'fixed') el.remove();
-          });
-        }).catch(() => {});
+      if (attempt === 1) await browser.getSnapshot?.(); // refresh refs
+      if (attempt < 2) {
+        return await browser.click(refStr, options);
       }
-
-      const snapshot = await browser.getSnapshot();
-      if (snapshot.success) {
-        const retryResult = await browser.click(refStr, options);
-        if (retryResult.success) return retryResult;
-      }
-
-      // Attempt 3: JS fallback — try to find and click element via evaluate()
-      if (page && options.element) {
-        console.log(`[MCPToolServer] browser_click attempt 3: JS fallback for "${options.element}"`);
-        const jsClicked = await page.evaluate((text) => {
-          const elements = document.querySelectorAll('button, a, [role="button"], [onclick], input[type="submit"], input[type="button"]');
-          for (const el of elements) {
-            const elText = (el.textContent || el.getAttribute('aria-label') || el.getAttribute('title') || '').trim();
-            if (elText.toLowerCase().includes(text.toLowerCase())) {
-              el.scrollIntoView({ block: 'center' });
-              el.click();
-              return true;
-            }
-          }
-          return false;
-        }, String(options.element)).catch(() => false);
-        if (jsClicked) {
-          return { success: true, ref: refStr, element: { tag: 'unknown', text: options.element, role: '' }, message: 'Clicked via JS fallback' };
-        }
-      }
-
-      return { success: false, error: `Element ref=${refStr} not found after retry. Use browser_snapshot to see current page elements.` };
-    } catch (e) {
-      console.log('[MCPToolServer] Auto-retry failed:', e.message);
+    } catch (err) {
+      if (attempt < 2) continue;
     }
+
+    // Attempt 3: JS DOM fallback
+    try {
+      if (options.element && browser.evaluate) {
+        const result = await browser.evaluate(`
+          (() => {
+            const els = [...document.querySelectorAll('*')].filter(el =>
+              el.textContent?.trim().includes(${JSON.stringify(options.element)}) && el.offsetParent !== null
+            );
+            if (els.length > 0) { els[0].click(); return { success: true }; }
+            // Try dismissing overlays first
+            document.querySelectorAll('[class*="modal"], [class*="overlay"], [class*="cookie"], [class*="consent"]')
+              .forEach(el => { try { el.remove(); } catch {} });
+            const retry = [...document.querySelectorAll('*')].filter(el =>
+              el.textContent?.trim().includes(${JSON.stringify(options.element)}) && el.offsetParent !== null
+            );
+            if (retry.length > 0) { retry[0].click(); return { success: true }; }
+            return { success: false, error: 'Element not found by text' };
+          })()
+        `);
+        return result;
+      }
+    } catch {}
   }
-  return result;
+  return { success: false, error: `Click failed after 3 attempts on ref ${refStr}` };
 }
 
 async function _browserType(refStr, text, options = {}) {
   const browser = this._getBrowser();
-  if (!browser) return { success: false, error: 'Browser not available' };
+  if (!browser) return { success: false, error: 'No browser available' };
 
-  const result = await browser.type(refStr, text, options);
-
-  // Attempt 2: if ref not found, take fresh snapshot and retry
-  if (!result.success && (result.error?.includes('not found') || result.error?.includes('timeout'))) {
-    console.log(`[MCPToolServer] browser_type ref=${refStr} failed — retrying with fresh snapshot`);
+  for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      const snapshot = await browser.getSnapshot();
-      if (snapshot.success) {
-        const retryResult = await browser.type(refStr, text, options);
-        if (retryResult.success) return retryResult;
+      if (attempt === 1) await browser.getSnapshot?.();
+      if (attempt < 2) {
+        return await browser.type(refStr, text, options);
       }
-
-      // Attempt 3: JS fallback — find input by description and set value directly
-      const page = browser.page;
-      if (page) {
-        console.log(`[MCPToolServer] browser_type attempt 3: JS value setter fallback`);
-        const jsTyped = await page.evaluate(({ refNum, value }) => {
-          // Try to find the input by iterating all visible inputs
-          const inputs = document.querySelectorAll('input, textarea, [contenteditable="true"]');
-          const visible = Array.from(inputs).filter(el => el.offsetHeight > 0);
-          // Try matching by index position as a rough ref mapping
-          const idx = parseInt(refNum) - 1;
-          const target = (idx >= 0 && idx < visible.length) ? visible[idx] : visible[0];
-          if (target) {
-            target.scrollIntoView({ block: 'center' });
-            target.focus();
-            const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set
-              || Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set;
-            if (nativeSetter) nativeSetter.call(target, value);
-            else target.value = value;
-            target.dispatchEvent(new Event('input', { bubbles: true }));
-            target.dispatchEvent(new Event('change', { bubbles: true }));
-            return true;
-          }
-          return false;
-        }, { refNum: String(refStr), value: text }).catch(() => false);
-        if (jsTyped) {
-          return { success: true, ref: refStr, text, message: 'Typed via JS fallback' };
-        }
-      }
-
-      return { success: false, error: `Element ref=${refStr} not found after retry. Use browser_snapshot to see current page elements.` };
-    } catch (e) {
-      console.log('[MCPToolServer] Auto-retry failed:', e.message);
+    } catch (err) {
+      if (attempt < 2) continue;
     }
+
+    // JS fallback: find visible inputs by index
+    try {
+      if (browser.evaluate) {
+        const idx = parseInt(refStr) || 0;
+        const result = await browser.evaluate(`
+          (() => {
+            const inputs = [...document.querySelectorAll('input, textarea, [contenteditable]')]
+              .filter(el => el.offsetParent !== null);
+            const el = inputs[${idx}];
+            if (!el) return { success: false, error: 'No input found at index ${idx}' };
+            const nativeSet = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set
+              || Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set;
+            if (nativeSet) nativeSet.call(el, ${JSON.stringify(text)});
+            else el.value = ${JSON.stringify(text)};
+            el.dispatchEvent(new Event('input', {bubbles: true}));
+            el.dispatchEvent(new Event('change', {bubbles: true}));
+            return { success: true };
+          })()
+        `);
+        return result;
+      }
+    } catch {}
   }
-  return result;
+  return { success: false, error: `Type failed after 3 attempts on ref ${refStr}` };
 }
 
 async function _browserFillForm(fields) {
-  if (!this.playwrightBrowser) {
-    return { success: false, error: 'browser_fill_form requires Playwright browser. Use browser_type for individual fields.' };
-  }
-  let normalizedFields = fields;
-  if (Array.isArray(fields)) {
-    normalizedFields = fields.map(f => {
-      if (Array.isArray(f)) {
-        return { ref: String(f[0]), value: String(f[1] || ''), type: f[2] || 'textbox' };
-      }
-      if (typeof f === 'string') return null;
-      if (typeof f === 'object' && f !== null) {
-        return { ref: String(f.ref || ''), value: String(f.value || ''), type: f.type || 'textbox' };
-      }
-      return null;
-    }).filter(Boolean);
-  }
-  if (!normalizedFields || normalizedFields.length === 0) {
-    return { success: false, error: 'No valid fields provided. Expected: [{ref: "N", value: "text", type: "textbox"}]' };
-  }
-  return this.playwrightBrowser.fillForm(normalizedFields);
+  if (!this.playwrightBrowser) return { success: false, error: 'Fill form requires Playwright' };
+  // Normalize fields
+  const normalized = Array.isArray(fields)
+    ? fields.map(f => (typeof f === 'object' ? f : {}))
+    : Object.entries(fields || {}).map(([ref, value]) => ({ ref, value }));
+  return this.playwrightBrowser.fillForm(normalized);
 }
 
 async function _browserSelectOption(refStr, values) {
-  if (this.playwrightBrowser) return this.playwrightBrowser.selectOption(refStr, values);
-  if (this.browserManager) return this.browserManager.selectOption(refStr, Array.isArray(values) ? values[0] : values);
-  return { success: false, error: 'Browser not available' };
+  const browser = this._getBrowser();
+  if (!browser) return { success: false, error: 'No browser available' };
+  return browser.selectOption(refStr, values);
 }
 
 async function _browserSnapshot() {
   const browser = this._getBrowser();
-  if (!browser) return { success: false, error: 'Browser not available' };
+  if (!browser) return { success: false, error: 'No browser available' };
   return browser.getSnapshot();
 }
 
 async function _browserScreenshot(options = {}) {
   const browser = this._getBrowser();
-  if (!browser) return { success: false, error: 'Browser not available' };
+  if (!browser) return { success: false, error: 'No browser available' };
   if (this.playwrightBrowser) return this.playwrightBrowser.screenshot(options);
-  return this.browserManager.screenshot(options.fullPage);
+  return browser.screenshot({ fullPage: true });
 }
 
 async function _browserGetContent(selector, html = false) {
   const browser = this._getBrowser();
-  if (!browser) return { success: false, error: 'Browser not available' };
+  if (!browser) return { success: false, error: 'No browser available' };
   return browser.getContent(selector, html);
 }
 
 async function _browserEvaluate(code, ref) {
   const browser = this._getBrowser();
-  if (!browser) return { success: false, error: 'Browser not available' };
+  if (!browser) return { success: false, error: 'No browser available' };
   if (this.playwrightBrowser) return this.playwrightBrowser.evaluate(code, ref);
-  return this.browserManager.evaluate(code);
+  return browser.evaluate(code);
 }
 
 async function _browserBack() {
   const browser = this._getBrowser();
-  if (!browser) return { success: false, error: 'Browser not available' };
+  if (!browser) return { success: false, error: 'No browser available' };
   return browser.goBack();
 }
 
 async function _browserPressKey(key) {
   const browser = this._getBrowser();
-  if (!browser) return { success: false, error: 'Browser not available' };
+  if (!browser) return { success: false, error: 'No browser available' };
   return browser.pressKey(key);
 }
 
 async function _browserHover(refStr) {
   const browser = this._getBrowser();
-  if (!browser) return { success: false, error: 'Browser not available' };
+  if (!browser) return { success: false, error: 'No browser available' };
   return browser.hover(refStr);
 }
 
 async function _browserDrag(startRef, endRef) {
-  if (this.playwrightBrowser) return this.playwrightBrowser.drag(startRef, endRef);
-  return { success: false, error: 'browser_drag requires Playwright browser.' };
+  if (!this.playwrightBrowser) return { success: false, error: 'Drag requires Playwright' };
+  return this.playwrightBrowser.drag(startRef, endRef);
 }
 
 async function _browserTabs(action, index) {
-  if (this.playwrightBrowser) return this.playwrightBrowser.tabs(action, index);
-  return { success: false, error: 'browser_tabs requires Playwright browser.' };
+  if (!this.playwrightBrowser) return { success: false, error: 'Tabs require Playwright' };
+  return this.playwrightBrowser.tabs(action, index);
 }
 
 async function _browserHandleDialog(accept, promptText) {
-  if (this.playwrightBrowser) return this.playwrightBrowser.handleDialog(accept, promptText);
-  return { success: false, error: 'browser_handle_dialog requires Playwright browser.' };
+  if (!this.playwrightBrowser) return { success: false, error: 'Dialog handling requires Playwright' };
+  return this.playwrightBrowser.handleDialog(accept, promptText);
 }
 
 async function _browserConsoleMessages(level) {
-  if (this.playwrightBrowser) return this.playwrightBrowser.getConsoleMessages(level);
-  return { success: false, error: 'browser_console_messages requires Playwright browser.' };
+  if (!this.playwrightBrowser) return { success: false, error: 'Console messages require Playwright' };
+  return this.playwrightBrowser.consoleMessages(level);
 }
 
 async function _browserFileUpload(refStr, paths) {
-  if (this.playwrightBrowser) return this.playwrightBrowser.uploadFiles(refStr, paths);
-  return { success: false, error: 'browser_file_upload requires Playwright browser.' };
+  if (!this.playwrightBrowser) return { success: false, error: 'File upload requires Playwright' };
+  return this.playwrightBrowser.fileUpload(refStr, paths);
 }
 
 async function _browserResize(width, height) {
-  if (this.playwrightBrowser) return this.playwrightBrowser.resize(width, height);
-  return { success: false, error: 'browser_resize requires Playwright browser.' };
+  if (!this.playwrightBrowser) return { success: false, error: 'Resize requires Playwright' };
+  return this.playwrightBrowser.resize(width, height);
 }
 
 async function _browserClose() {
-  if (this.playwrightBrowser) return this.playwrightBrowser.close();
-  return { success: true, message: 'No external browser to close' };
+  if (this.playwrightBrowser) {
+    try { await this.playwrightBrowser.close(); } catch {}
+  }
+  return { success: true };
 }
 
 async function _browserWaitFor(options = {}) {
-  if (this.playwrightBrowser) return this.playwrightBrowser.waitFor(options);
-  if (options.selector && this.browserManager) {
-    return this.browserManager.waitForSelector(options.selector, options.timeout || 10000);
-  }
+  const browser = this._getBrowser();
+  if (!browser) return { success: false, error: 'No browser available' };
+
   if (options.time) {
-    await new Promise(r => setTimeout(r, Math.min(options.time * 1000, 60000)));
-    return { success: true, message: `Waited ${options.time}s` };
+    const ms = Math.min(60000, Math.max(100, (options.time || 1) * 1000));
+    await new Promise(r => setTimeout(r, ms));
+    return { success: true, waited: ms };
   }
-  return { success: false, error: 'Browser not available' };
+
+  if (this.playwrightBrowser) return this.playwrightBrowser.waitFor(options);
+  if (options.selector && browser.waitForSelector) return browser.waitForSelector(options.selector);
+  return { success: true };
 }
 
 async function _browserScroll(direction, amount) {
+  const browser = this._getBrowser();
+  if (!browser) return { success: false, error: 'No browser available' };
   if (this.playwrightBrowser) return this.playwrightBrowser.scroll(direction, amount);
-  if (!this.browserManager) return { success: false, error: 'Browser not available' };
-  try {
-    const scrollAmount = direction === 'up' ? -Math.abs(amount) : Math.abs(amount);
-    const result = await this.browserManager.evaluate(`window.scrollBy(0, ${scrollAmount}); window.scrollY`);
-    return { success: true, direction, amount, message: `Scrolled ${direction} by ${amount}px` };
-  } catch (error) {
-    return { success: false, error: error.message };
-  }
+  const pixels = (amount || 3) * 300;
+  const dy = direction === 'up' ? -pixels : pixels;
+  return browser.evaluate(`window.scrollBy(0, ${dy})`);
 }
 
 async function _browserWait(ms = 2000) {
-  const waitMs = Math.min(Math.max(ms || 2000, 100), 30000);
-  await new Promise(resolve => setTimeout(resolve, waitMs));
-  return { success: true, message: `Waited ${waitMs}ms` };
+  ms = Math.min(30000, Math.max(100, ms));
+  await new Promise(r => setTimeout(r, ms));
+  return { success: true, waited: ms };
 }
 
 async function _browserGetUrl() {
-  if (this.playwrightBrowser) return this.playwrightBrowser.getUrl();
-  if (!this.browserManager) return { success: false, error: 'Browser not available' };
-  try {
-    const wc = this.browserManager._getWebContents?.() || this.browserManager.browserView?.webContents;
-    if (!wc) return { success: false, error: 'No browser page active' };
-    const url = wc.getURL();
-    const title = await wc.executeJavaScript('document.title');
-    return { success: true, url, title };
-  } catch (error) {
-    return { success: false, error: error.message };
+  if (this.playwrightBrowser) {
+    const info = await this.playwrightBrowser.getUrl?.();
+    if (info) return info;
   }
+  if (this.browserManager?.webContents) {
+    return {
+      success: true,
+      url: this.browserManager.webContents.getURL(),
+      title: this.browserManager.webContents.getTitle(),
+    };
+  }
+  return { success: false, error: 'No browser available' };
 }
 
 async function _browserGetLinks(selector) {
-  if (this.playwrightBrowser) return this.playwrightBrowser.getLinks(selector);
-  if (!this.browserManager) return { success: false, error: 'Browser not available' };
-  const wc = this.browserManager._getWebContents?.() || this.browserManager.browserView?.webContents;
-  if (!wc) return { success: false, error: 'No browser page active' };
-  try {
-    const container = selector ? `document.querySelector(${JSON.stringify(selector)})` : 'document';
-    const result = await wc.executeJavaScript(`
-      (function() {
-        const container = ${container} || document;
-        const anchors = container.querySelectorAll('a[href]');
-        return Array.from(anchors).slice(0, 100).map(a => ({
-          href: a.href,
-          text: (a.textContent || '').trim().substring(0, 100),
-          title: a.title || '',
-        }));
+  const browser = this._getBrowser();
+  if (!browser) return { success: false, error: 'No browser available' };
+
+  if (this.playwrightBrowser?.getLinks) return this.playwrightBrowser.getLinks(selector);
+
+  // Fallback: evaluate to extract links
+  if (browser.evaluate) {
+    const result = await browser.evaluate(`
+      (() => {
+        const container = ${selector ? `document.querySelector(${JSON.stringify(selector)})` : 'document'};
+        if (!container) return { success: false, error: 'Selector not found' };
+        const links = [...(container.querySelectorAll || document.querySelectorAll.bind(document))('a')]
+          .slice(0, 100)
+          .map(a => ({ href: a.href, text: a.textContent?.trim()?.slice(0, 100), title: a.title }));
+        return { success: true, links };
       })()
     `);
-    return { success: true, links: result, total: result.length };
-  } catch (error) {
-    return { success: false, error: error.message };
+    return result;
   }
+  return { success: false, error: 'Cannot extract links' };
 }
 
 module.exports = {
-  _browserNavigate,
-  _browserClick,
-  _browserType,
-  _browserFillForm,
-  _browserSelectOption,
-  _browserSnapshot,
-  _browserScreenshot,
-  _browserGetContent,
-  _browserEvaluate,
-  _browserBack,
-  _browserPressKey,
-  _browserHover,
-  _browserDrag,
-  _browserTabs,
-  _browserHandleDialog,
-  _browserConsoleMessages,
-  _browserFileUpload,
-  _browserResize,
-  _browserClose,
-  _browserWaitFor,
-  _browserScroll,
-  _browserWait,
-  _browserGetUrl,
-  _browserGetLinks,
+  _browserNavigate, _browserClick, _browserType, _browserFillForm,
+  _browserSelectOption, _browserSnapshot, _browserScreenshot, _browserGetContent,
+  _browserEvaluate, _browserBack, _browserPressKey, _browserHover,
+  _browserDrag, _browserTabs, _browserHandleDialog, _browserConsoleMessages,
+  _browserFileUpload, _browserResize, _browserClose, _browserWaitFor,
+  _browserScroll, _browserWait, _browserGetUrl, _browserGetLinks,
 };

@@ -1,211 +1,127 @@
 /**
- * guIDE Terminal Manager - Manages PTY instances for integrated terminal
- * Copyright (c) 2025-2026 Brendan Gray (GitHub: FileShot)
- * All Rights Reserved. See LICENSE for terms.
+ * guIDE — Terminal Manager
  *
- * Uses node-pty for real terminal emulation
+ * Manages pseudo-terminal sessions via node-pty (with child_process fallback).
+ * Each terminal has an id, a PTY process, and emits 'data' / 'exit' events.
  */
+'use strict';
+
 const os = require('os');
 const path = require('path');
-const { EventEmitter } = require('events');
+const EventEmitter = require('events');
+const log = require('./logger');
+
+let pty;
+try {
+  pty = require('node-pty');
+} catch {
+  pty = null;
+  log.warn('Terminal', 'node-pty unavailable — falling back to child_process');
+}
 
 class TerminalManager extends EventEmitter {
   constructor() {
     super();
-    this.terminals = new Map(); // id -> { pty, title, cwd }
-    this.nextId = 1;
-    this.pty = null;
-
-    // Try to load node-pty
-    try {
-      this.pty = require('node-pty');
-    } catch (e) {
-      console.warn('node-pty not available; terminal will use fallback mode');
-    }
+    this._terminals = new Map(); // id → { pty, cwd }
+    this._nextId = 1;
   }
 
-  /**
-   * Create a new terminal instance
-   */
-  create(options = {}) {
-    const id = this.nextId++;
-    const cwd = options.cwd || os.homedir();
-    const shell = this._getDefaultShell();
+  /* ── Create ────────────────────────────────────────────────────── */
 
-    if (!this.pty) {
-      // Fallback: use child_process
-      return this._createFallbackTerminal(id, cwd, options);
+  create(opts = {}) {
+    const id = this._nextId++;
+    const shell = opts.shell || _defaultShell();
+    const cwd = opts.cwd || os.homedir();
+    const cols = opts.cols || 120;
+    const rows = opts.rows || 30;
+    const env = { ...process.env, ...opts.env };
+
+    if (pty) {
+      const proc = pty.spawn(shell, [], { name: 'xterm-256color', cols, rows, cwd, env });
+      proc.onData(data => this.emit('data', { id, data }));
+      proc.onExit(({ exitCode }) => {
+        this.emit('exit', { id, exitCode });
+        this._terminals.delete(id);
+      });
+      this._terminals.set(id, { pty: proc, cwd });
+    } else {
+      // Fallback: child_process.spawn with piped stdio
+      const { spawn } = require('child_process');
+      const proc = spawn(shell, [], { cwd, env, stdio: ['pipe', 'pipe', 'pipe'], shell: true });
+      proc.stdout.on('data', data => this.emit('data', { id, data: data.toString() }));
+      proc.stderr.on('data', data => this.emit('data', { id, data: data.toString() }));
+      proc.on('exit', (exitCode) => {
+        this.emit('exit', { id, exitCode });
+        this._terminals.delete(id);
+      });
+      this._terminals.set(id, { proc, cwd, fallback: true });
     }
 
-    try {
-      const ptyProcess = this.pty.spawn(shell.command, shell.args, {
-        name: 'xterm-256color',
-        cols: options.cols || 120,
-        rows: options.rows || 30,
-        cwd: cwd,
-        env: { ...process.env, ...options.env },
-        useConpty: process.platform === 'win32',
-      });
-
-      const terminal = {
-        id,
-        pty: ptyProcess,
-        title: options.title || `Terminal ${id}`,
-        cwd,
-        pid: ptyProcess.pid,
-        shell: shell.command,
-      };
-
-      this.terminals.set(id, terminal);
-
-      // Forward data events
-      ptyProcess.onData((data) => {
-        this.emit('data', { id, data });
-      });
-
-      ptyProcess.onExit(({ exitCode, signal }) => {
-        this.emit('exit', { id, exitCode, signal });
-        this.terminals.delete(id);
-      });
-
-      return { id, pid: ptyProcess.pid, shell: shell.command, title: terminal.title };
-    } catch (error) {
-      console.error('Failed to create PTY terminal:', error);
-      return this._createFallbackTerminal(id, cwd, options);
-    }
+    log.info('Terminal', `Created terminal ${id} (${shell})`);
+    return id;
   }
 
-  _createFallbackTerminal(id, cwd, options = {}) {
-    const { spawn } = require('child_process');
-    const shell = this._getDefaultShell();
+  /* ── Write ─────────────────────────────────────────────────────── */
 
-    const proc = spawn(shell.command, shell.args, {
-      cwd,
-      env: { ...process.env, ...options.env },
-      shell: true,
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
-
-    const terminal = {
-      id,
-      process: proc,
-      title: options.title || `Terminal ${id}`,
-      cwd,
-      pid: proc.pid,
-      shell: shell.command,
-      isFallback: true,
-    };
-
-    this.terminals.set(id, terminal);
-
-    proc.stdout.on('data', (data) => {
-      this.emit('data', { id, data: data.toString() });
-    });
-
-    proc.stderr.on('data', (data) => {
-      this.emit('data', { id, data: data.toString() });
-    });
-
-    proc.on('exit', (exitCode, signal) => {
-      this.emit('exit', { id, exitCode, signal });
-      this.terminals.delete(id);
-    });
-
-    return { id, pid: proc.pid, shell: shell.command, title: terminal.title, fallback: true };
-  }
-
-  /**
-   * Write data to terminal
-   */
   write(id, data) {
-    const terminal = this.terminals.get(id);
-    if (!terminal) return false;
-
-    if (terminal.pty) {
-      terminal.pty.write(data);
-    } else if (terminal.process) {
-      terminal.process.stdin.write(data);
+    const t = this._terminals.get(id);
+    if (!t) return;
+    if (t.pty) {
+      t.pty.write(data);
+    } else if (t.proc?.stdin?.writable) {
+      t.proc.stdin.write(data);
     }
-    return true;
   }
 
-  /**
-   * Resize terminal
-   */
+  /* ── Resize ────────────────────────────────────────────────────── */
+
   resize(id, cols, rows) {
-    const terminal = this.terminals.get(id);
-    if (!terminal) return false;
-
-    if (terminal.pty) {
-      try {
-        terminal.pty.resize(cols, rows);
-      } catch (e) {
-        // Ignore resize errors
-      }
+    const t = this._terminals.get(id);
+    if (!t) return;
+    if (t.pty) {
+      try { t.pty.resize(cols, rows); } catch (_) {}
     }
-    return true;
+    // child_process fallback has no resize support
   }
 
-  /**
-   * Destroy a terminal
-   */
+  /* ── Destroy ───────────────────────────────────────────────────── */
+
   destroy(id) {
-    const terminal = this.terminals.get(id);
-    if (!terminal) return false;
-
-    if (terminal.pty) {
-      terminal.pty.kill();
-    } else if (terminal.process) {
-      terminal.process.kill();
-    }
-    this.terminals.delete(id);
-    return true;
+    const t = this._terminals.get(id);
+    if (!t) return;
+    try {
+      if (t.pty) {
+        t.pty.kill();
+      } else if (t.proc) {
+        t.proc.kill();
+      }
+    } catch (_) {}
+    this._terminals.delete(id);
+    log.info('Terminal', `Destroyed terminal ${id}`);
   }
 
-  /**
-   * Get all terminal info
-   */
+  /* ── Query ─────────────────────────────────────────────────────── */
+
   list() {
-    return Array.from(this.terminals.entries()).map(([id, t]) => ({
+    return [...this._terminals.entries()].map(([id, t]) => ({
       id,
-      title: t.title,
       cwd: t.cwd,
-      pid: t.pid,
-      shell: t.shell,
+      fallback: !!t.fallback,
     }));
   }
 
-  /**
-   * Get default shell for the platform
-   */
-  _getDefaultShell() {
-    if (process.platform === 'win32') {
-      // Prefer PowerShell 7 → Windows PowerShell → cmd.exe
-      const fs = require('fs');
-      const pwsh7 = 'C:\\Program Files\\PowerShell\\7\\pwsh.exe';
-      const pwsh5 = 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe';
-      let command = process.env.COMSPEC || 'cmd.exe'; // last resort
-      if (fs.existsSync(pwsh7)) {
-        command = pwsh7;
-      } else if (fs.existsSync(pwsh5)) {
-        command = pwsh5;
-      }
-      return { command, args: [] };
-    } else if (process.platform === 'darwin') {
-      return { command: process.env.SHELL || '/bin/zsh', args: ['-l'] };
-    } else {
-      return { command: process.env.SHELL || '/bin/bash', args: ['-l'] };
-    }
-  }
+  /* ── Cleanup ───────────────────────────────────────────────────── */
 
-  /**
-   * Clean up all terminals
-   */
   disposeAll() {
-    for (const [id] of this.terminals) {
+    for (const id of [...this._terminals.keys()]) {
       this.destroy(id);
     }
   }
+}
+
+function _defaultShell() {
+  if (process.platform === 'win32') return 'powershell.exe';
+  return process.env.SHELL || '/bin/bash';
 }
 
 module.exports = { TerminalManager };

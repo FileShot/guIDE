@@ -103,8 +103,10 @@ function sanitizeJson(raw) {
     if (ch === '"' && !escaped) {
       inStr = !inStr;
     }
-    // Strip raw control chars inside strings (except tab, newline)
-    if (inStr && ch.charCodeAt(0) < 32 && ch !== '\t' && ch !== '\n') {
+    // Escape raw control chars inside strings (literal newlines/carriage returns break JSON.parse)
+    if (inStr && ch.charCodeAt(0) < 32 && ch !== '\t') {
+      if (ch === '\n') { result += '\\n'; continue; }
+      if (ch === '\r') { result += '\\r'; continue; }
       result += ' ';
       continue;
     }

@@ -2668,9 +2668,12 @@ ${e.message}`,
                                 </div>
                                 {partialContent ? (
                                   <CodeBlock code={partialContent} language={lang} onApply={() => {}} isToolCall={true} />
-                                ) : tc.paramsText ? (
-                                  <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2 max-h-[300px] overflow-y-auto">{tc.paramsText}</pre>
-                                ) : null}
+                                ) : (
+                                  <div className="flex items-center gap-2 px-2 py-1.5 bg-[#1e1e1e] rounded-md">
+                                    <Loader2 size={10} className="animate-spin text-[#007acc]" />
+                                    <span className="text-[11px] text-[#858585]">Generating {fname || 'file'}…</span>
+                                  </div>
+                                )}
                               </div>
                             );
                           })}

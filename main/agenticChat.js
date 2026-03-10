@@ -883,7 +883,7 @@ function register(ctx) {
               }
               if (_tStart !== -1 && _tName && mainWindow && !mainWindow.isDestroyed()) {
                 const raw = _tb.slice(_tStart);
-                const paramsText = raw;
+                const paramsText = raw.length > 4000 ? raw.slice(-4000) : raw;
                 mainWindow.webContents.send('llm-tool-generating', {
                   callIndex: _tIdx, functionName: _tName, paramsText, done: false,
                 });
@@ -1080,7 +1080,19 @@ function register(ctx) {
       displayResponseText += displayChunk;
 
       // ── SEAMLESS CONTINUATION ──
-      const _stitchedForMcp = _pendingPartialBlock ? _pendingPartialBlock + responseText : responseText;
+      let _stitchedForMcp;
+      if (_pendingPartialBlock) {
+        // Overlap de-duplication: detect if model repeated the tail we sent
+        let overlap = 0;
+        const maxCheck = Math.min(_pendingPartialBlock.length, responseText.length, 2000);
+        for (let len = maxCheck; len >= 20; len--) {
+          const suffix = _pendingPartialBlock.slice(-len);
+          if (responseText.startsWith(suffix)) { overlap = len; break; }
+        }
+        _stitchedForMcp = _pendingPartialBlock + responseText.slice(overlap);
+      } else {
+        _stitchedForMcp = responseText;
+      }
       _pendingPartialBlock = null;
       const _fenceIdx = _stitchedForMcp.search(/```(?:json|tool_call|tool)\b/);
       const _afterFence = _fenceIdx !== -1 ? _stitchedForMcp.slice(_fenceIdx) : '';
@@ -1162,6 +1174,10 @@ function register(ctx) {
             console.log(`[AI Chat] Seamless continuation ${continuationCount}/50 — ${truncReason} (${responseText.length} chars this pass, ${fullResponseText.length} total)`);
             iteration--;
 
+            // Cap effectiveMaxTokens on continuation passes to avoid overflowing context
+            const remainingTokens = Math.max(0, totalCtx - Math.ceil(((typeof currentPrompt === 'string' ? currentPrompt.length : ((currentPrompt.systemContext || '').length + (currentPrompt.userMessage || '').length)) + fullResponseText.length) / 4));
+            effectiveMaxTokens = Math.min(effectiveMaxTokens, Math.max(256, Math.floor(remainingTokens * 0.70)));
+
             let continuationMsg;
             const taskHint = message ? `[Task: ${message.substring(0, 100)}${message.length > 100 ? '...' : ''}]\n` : '';
             // Include written-files manifest so model knows what already exists
@@ -1169,12 +1185,16 @@ function register(ctx) {
             const fileManifest = writtenPaths.length > 0
               ? `[Files already written this turn: ${writtenPaths.join(', ')}. Do NOT write to these files again. Use append_to_file or edit_file if changes needed.]\n`
               : '';
+            // Dynamic tail size: scale with remaining context, clamped to [500, 3000] chars
+            const maxTailChars = Math.max(500, Math.min(Math.floor(remainingTokens * 0.3 * 4), 3000));
             if (_hasUnclosedToolFence) {
               const partialFence = _stitchedForMcp.slice(_fenceIdx);
-              _pendingPartialBlock = partialFence;
-              continuationMsg = `${taskHint}${fileManifest}[Continue the tool call JSON from exactly where it was cut. Output ONLY the JSON continuation. Do NOT restart the tool call. Continue from:\n${partialFence}]`;
+              _pendingPartialBlock = partialFence; // keep FULL text for stitching
+              const tailForModel = partialFence.length > maxTailChars ? partialFence.slice(-maxTailChars) : partialFence;
+              continuationMsg = `${taskHint}${fileManifest}[Continue the tool call JSON from exactly where it was cut. Output ONLY the JSON continuation. Do NOT restart the tool call. Continue from:\n${tailForModel}]`;
             } else {
-              continuationMsg = `${taskHint}${fileManifest}[Continue your response exactly where you left off. Do not restart or repeat content. Here is the end of what you wrote:\n${responseText}]`;
+              const tailForModel = responseText.length > maxTailChars ? responseText.slice(-maxTailChars) : responseText;
+              continuationMsg = `${taskHint}${fileManifest}[Continue your response exactly where you left off. Do not restart or repeat content. Here is the end of what you wrote:\n${tailForModel}]`;
             }
 
             currentPrompt = {

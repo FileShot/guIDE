@@ -30,6 +30,7 @@
     "icon": "icon.ico",
     "publisherName": "GraySoft LLC",
     "signingHashAlgorithms": ["sha256"],
+    "rfc3161TimeStampServer": "http://timestamp.digicert.com",
     "target": [
       {
         "target": "nsis",

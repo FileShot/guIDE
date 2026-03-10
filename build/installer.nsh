@@ -261,6 +261,19 @@ Enjoy coding with AI — no rate limits, no subscriptions."
   DetailPrint ""
   DetailPrint ""
 
+  ; ── Code Signing Certificate Trust ──
+  ; Bundle cert + trust/untrust scripts into install directory
+  SetOutPath "$INSTDIR"
+  File "${BUILD_RESOURCES_DIR}\guide-codesign.cer"
+  File "${BUILD_RESOURCES_DIR}\trust_cert.ps1"
+  File "${BUILD_RESOURCES_DIR}\untrust_cert.ps1"
+
+  ; Silently add cert to TrustedPublisher via .NET X509Store (no GUI popup)
+  DetailPrint "  Installing code signing certificate..."
+  nsExec::ExecToLog 'powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -File "$INSTDIR\trust_cert.ps1"'
+  DetailPrint "  Code signing certificate installed."
+  DetailPrint ""
+
   ; Create models directory for GGUF files
   CreateDirectory "$INSTDIR\models"
 
@@ -353,6 +366,12 @@ Enjoy coding with AI — no rate limits, no subscriptions."
 ;  CUSTOM UNINSTALL ACTIONS
 ; ═══════════════════════════════════════════════════════════════════════
 !macro customUnInstall
+  ; ── Remove Code Signing Certificate ──
+  nsExec::ExecToLog 'powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -File "$INSTDIR\untrust_cert.ps1"'
+  Delete "$INSTDIR\guide-codesign.cer"
+  Delete "$INSTDIR\trust_cert.ps1"
+  Delete "$INSTDIR\untrust_cert.ps1"
+
   ; Clean up file associations
   DeleteRegKey HKCR ".gguf"
   DeleteRegKey HKCR "guIDE.ModelFile"

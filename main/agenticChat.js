@@ -34,7 +34,6 @@ const {
 } = require('./agenticChatHelpers');
 const { LLMEngine } = require('./llmEngine');
 const { repairToolCalls: repairToolCallsFn } = require('./tools/toolParser');
-const { ContextManager } = require('./contextManager');
 
 /**
  * Get the path to node-llama-cpp that works in both dev and production (asar).
@@ -495,6 +494,21 @@ function register(ctx) {
     const { llmEngine, mcpToolServer, playwrightBrowser, browserManager, ragEngine, memoryStore, ConversationSummarizer, DEFAULT_SYSTEM_PREAMBLE, DEFAULT_COMPACT_PREAMBLE } = ctx;
 
     const modelStatus = llmEngine.getStatus();
+
+    // Wait for model to be ready before proceeding (prevents "Model not ready" errors)
+    if (!llmEngine.isReady) {
+      console.log('[AI Chat] Model not ready — waiting…');
+      const readyTimeout = Date.now() + 15000;
+      while (!llmEngine.isReady && Date.now() < readyTimeout) {
+        await new Promise(r => setTimeout(r, 500));
+      }
+      if (!llmEngine.isReady) {
+        if (mainWindow) mainWindow.webContents.send('llm-token', '\n*[Model is still loading — please wait and try again]*\n');
+        if (mainWindow) mainWindow.webContents.send('llm-done');
+        return;
+      }
+    }
+
     const hwContextSize = modelStatus.modelInfo?.contextSize || 32768;
 
     const estimateTokens = (text) => Math.ceil((text || '').length / 3.5);
@@ -539,7 +553,7 @@ function register(ctx) {
       // Preamble
       const savedSettings = _readConfig()?.userSettings;
       const userPreamble = savedSettings?.systemPrompt?.trim();
-      const contextIsConstrained = totalCtx < 4096;
+      const contextIsConstrained = totalCtx < 8192;
       const isSmallModel = modelProfile.prompt.style === 'compact' || contextIsConstrained;
       const defaultPreamble = isSmallModel ? (DEFAULT_COMPACT_PREAMBLE || DEFAULT_SYSTEM_PREAMBLE) : DEFAULT_SYSTEM_PREAMBLE;
       const preamble = userPreamble || defaultPreamble;
@@ -551,7 +565,7 @@ function register(ctx) {
         const toolPromptStyle = modelProfile.prompt.toolPromptStyle;
         const useCompactTools = toolPromptStyle === 'grammar-only' || toolPromptStyle === 'compact' || contextIsConstrained;
         if (useCompactTools) {
-          const compactHint = totalCtx < 4096
+          const compactHint = totalCtx < 8192
             ? mcpToolServer.getCompactToolHint(effectiveTaskType, { minimal: true })
             : mcpToolServer.getCompactToolHint(effectiveTaskType);
           appendIfBudget(compactHint + '\n');
@@ -1150,16 +1164,19 @@ function register(ctx) {
 
             let continuationMsg;
             const taskHint = message ? `[Task: ${message.substring(0, 100)}${message.length > 100 ? '...' : ''}]\n` : '';
+            // Include written-files manifest so model knows what already exists
+            const writtenPaths = Object.keys(writeFileHistory).filter(k => writeFileHistory[k].count > 0);
+            const fileManifest = writtenPaths.length > 0
+              ? `[Files already written this turn: ${writtenPaths.join(', ')}. Do NOT write to these files again. Use append_to_file or edit_file if changes needed.]\n`
+              : '';
             if (_hasUnclosedToolFence) {
               const partialFence = _stitchedForMcp.slice(_fenceIdx);
               _pendingPartialBlock = partialFence;
-              // FIX-B: Only send short tail (500 chars) to prevent prompt bloat
-              const tail = partialFence.length > 500 ? '\u2026' + partialFence.slice(-500) : partialFence;
-              continuationMsg = `${taskHint}[Continue the tool call JSON from exactly where it was cut. Output ONLY the JSON continuation. Do NOT restart the tool call. Continue from:\n${tail}]`;
+              const tail = partialFence.length > 1000 ? '\u2026' + partialFence.slice(-1000) : partialFence;
+              continuationMsg = `${taskHint}${fileManifest}[Continue the tool call JSON from exactly where it was cut. Output ONLY the JSON continuation. Do NOT restart the tool call. Continue from:\n${tail}]`;
             } else {
-              // FIX: Use 500 chars of tail (not 200) for better continuation context
-              const tail = responseText.length > 500 ? '\u2026' + responseText.slice(-500) : responseText;
-              continuationMsg = `${taskHint}[Continue your response exactly where you left off. Do not restart or repeat content. Here is the end of what you wrote:\n${tail}]`;
+              const tail = responseText.length > 1000 ? '\u2026' + responseText.slice(-1000) : responseText;
+              continuationMsg = `${taskHint}${fileManifest}[Continue your response exactly where you left off. Do not restart or repeat content. Here is the end of what you wrote:\n${tail}]`;
             }
 
             currentPrompt = {
@@ -1215,12 +1232,13 @@ function register(ctx) {
         toolResults = await executeNativeToolCalls({
           nativeFunctionCalls, responseText, mcpToolServer, modelTier,
           writeFileHistory, allToolResults, gatheredWebData,
-          isStale, waitWhilePaused,
+          isStale, waitWhilePaused, continuationCount,
         });
       } else {
         const textOpts = {
           toolPaceMs: 50, skipWriteDeferral: modelTier.tier === 'tiny',
           userMessage: message, lastDroppedFilePaths: _pendingDroppedFilePaths, writeFileHistory,
+          continuationCount,
         };
         toolResults = await mcpToolServer.processResponse(_stitchedForMcp, textOpts);
         _pendingDroppedFilePaths = toolResults.droppedFilePaths || [];
@@ -1604,7 +1622,7 @@ function preGenerationContextCheck(opts) {
  */
 async function executeNativeToolCalls(opts) {
   const { nativeFunctionCalls, responseText, mcpToolServer, modelTier,
-    writeFileHistory, allToolResults, gatheredWebData, isStale, waitWhilePaused } = opts;
+    writeFileHistory, allToolResults, gatheredWebData, isStale, waitWhilePaused, continuationCount } = opts;
 
   // Normalize to {tool, params} format
   let calls = nativeFunctionCalls.map(fc => ({
@@ -1654,11 +1672,12 @@ async function executeNativeToolCalls(opts) {
       if (call.tool.startsWith('browser_')) call.params = mcpToolServer._normalizeBrowserParams(call.tool, call.params);
       else call.params = mcpToolServer._normalizeFsParams(call.tool, call.params);
 
-      // Cross-iteration write dedup
+      // Cross-iteration write dedup (stricter during continuation)
       if (call.tool === 'write_file') {
         const filePath = call.params?.filePath || call.params?.path;
-        if (filePath && writeFileHistory[filePath]?.count >= 2) {
-          results.push({ tool: call.tool, params: call.params, result: { success: false, error: `BLOCKED: "${filePath}" already written ${writeFileHistory[filePath].count} times.` } });
+        const writeLimit = (continuationCount || 0) > 0 ? 1 : 2;
+        if (filePath && writeFileHistory[filePath]?.count >= writeLimit) {
+          results.push({ tool: call.tool, params: call.params, result: { success: false, error: `BLOCKED: "${filePath}" already written ${writeFileHistory[filePath].count} times. Use append_to_file or edit_file instead.` } });
           continue;
         }
       }

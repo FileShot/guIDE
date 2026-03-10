@@ -47,6 +47,7 @@ function register(ctx) {
       await fs.writeFile(filePath, finalContent, 'utf8');
       const win = ctx.getMainWindow();
       if (win) win.webContents.send('files-changed');
+      if (ctx.scheduleIncrementalReindex) ctx.scheduleIncrementalReindex();
       try { require('./liveServerHandlers').notifyReload(); } catch {}
       return { success: true };
     } catch (error) { return { success: false, error: error.message }; }
@@ -80,47 +81,47 @@ function register(ctx) {
 
   ipcMain.handle('create-directory', async (_, dirPath) => {
     if (!ctx.isPathAllowed(dirPath)) return { success: false, error: 'Access denied: path outside allowed directories' };
-    try { await fs.mkdir(dirPath, { recursive: true }); return { success: true }; }
+    try { await fs.mkdir(dirPath, { recursive: true }); if (ctx.scheduleIncrementalReindex) ctx.scheduleIncrementalReindex(); return { success: true }; }
     catch (error) { return { success: false, error: error.message }; }
   });
 
   ipcMain.handle('delete-file', async (_, filePath) => {
     if (!ctx.isPathAllowed(filePath)) return { success: false, error: 'Access denied: path outside allowed directories' };
-    try { await fs.unlink(filePath); return { success: true }; }
+    try { await fs.unlink(filePath); if (ctx.scheduleIncrementalReindex) ctx.scheduleIncrementalReindex(); return { success: true }; }
     catch (error) { return { success: false, error: error.message }; }
   });
 
   ipcMain.handle('delete-directory', async (_, dirPath) => {
     if (!ctx.isPathAllowed(dirPath)) return { success: false, error: 'Access denied: path outside allowed directories' };
-    try { await fs.rm(dirPath, { recursive: true, force: true }); return { success: true }; }
+    try { await fs.rm(dirPath, { recursive: true, force: true }); if (ctx.scheduleIncrementalReindex) ctx.scheduleIncrementalReindex(); return { success: true }; }
     catch (error) { return { success: false, error: error.message }; }
   });
 
   ipcMain.handle('copy-file', async (_, src, dest) => {
     if (!ctx.isPathAllowed(src)) return { success: false, error: 'Access denied: source path outside allowed directories' };
     if (!ctx.isPathAllowed(dest)) return { success: false, error: 'Access denied: destination path outside allowed directories' };
-    try { await fs.copyFile(src, dest); return { success: true }; }
+    try { await fs.copyFile(src, dest); if (ctx.scheduleIncrementalReindex) ctx.scheduleIncrementalReindex(); return { success: true }; }
     catch (error) { return { success: false, error: error.message }; }
   });
 
   ipcMain.handle('copy-directory', async (_, src, dest) => {
     if (!ctx.isPathAllowed(src)) return { success: false, error: 'Access denied: source path outside allowed directories' };
     if (!ctx.isPathAllowed(dest)) return { success: false, error: 'Access denied: destination path outside allowed directories' };
-    try { await fs.cp(src, dest, { recursive: true }); return { success: true }; }
+    try { await fs.cp(src, dest, { recursive: true }); if (ctx.scheduleIncrementalReindex) ctx.scheduleIncrementalReindex(); return { success: true }; }
     catch (error) { return { success: false, error: error.message }; }
   });
 
   ipcMain.handle('move-file', async (_, src, dest) => {
     if (!ctx.isPathAllowed(src)) return { success: false, error: 'Access denied: source path outside allowed directories' };
     if (!ctx.isPathAllowed(dest)) return { success: false, error: 'Access denied: destination path outside allowed directories' };
-    try { await fs.rename(src, dest); return { success: true }; }
+    try { await fs.rename(src, dest); if (ctx.scheduleIncrementalReindex) ctx.scheduleIncrementalReindex(); return { success: true }; }
     catch (error) { return { success: false, error: error.message }; }
   });
 
   ipcMain.handle('rename-file', async (_, oldPath, newPath) => {
     if (!ctx.isPathAllowed(oldPath)) return { success: false, error: 'Access denied: source path outside allowed directories' };
     if (!ctx.isPathAllowed(newPath)) return { success: false, error: 'Access denied: destination path outside allowed directories' };
-    try { await fs.rename(oldPath, newPath); return { success: true }; }
+    try { await fs.rename(oldPath, newPath); if (ctx.scheduleIncrementalReindex) ctx.scheduleIncrementalReindex(); return { success: true }; }
     catch (error) { return { success: false, error: error.message }; }
   });
 

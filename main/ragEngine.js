@@ -29,6 +29,7 @@ const IGNORE_RE = [
   /\.bin$/, /\.png$/, /\.jpe?g$/, /\.gif$/, /\.ico$/, /\.svg$/, /\.woff/,
   /\.ttf$/, /\.eot$/, /\.mp[34]$/, /\.avi$/, /\.zip$/, /\.tar$/, /\.gz$/,
   /\.rar$/, /\.7z$/, /package-lock\.json$/, /yarn\.lock$/, /pnpm-lock\.yaml$/,
+  /\.guide-memory/, /\.ide-memory/,
 ];
 
 /* ── RAGEngine ───────────────────────────────────────────────────── */

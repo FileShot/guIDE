@@ -2476,9 +2476,10 @@ class MCPToolServer {
           }
           if (options.writeFileHistory && call.tool === 'write_file') {
             const wfPath = call.params?.filePath || call.params?.path || call.params?.file_path;
-            if (wfPath && options.writeFileHistory[wfPath] && options.writeFileHistory[wfPath].count >= 2) {
+            const wfLimit = (options.continuationCount || 0) > 0 ? 1 : 2;
+            if (wfPath && options.writeFileHistory[wfPath] && options.writeFileHistory[wfPath].count >= wfLimit) {
               console.log(`[MCP] Write dedup: blocking ${call.tool} to "${wfPath}" (already written ${options.writeFileHistory[wfPath].count}x)`);
-              results.push({ tool: call.tool, params: call.params, result: { success: false, error: `BLOCKED: "${wfPath}" has already been written ${options.writeFileHistory[wfPath].count} times this conversation. The file is COMPLETE. Do NOT write to it again.` } });
+              results.push({ tool: call.tool, params: call.params, result: { success: false, error: `BLOCKED: "${wfPath}" has already been written ${options.writeFileHistory[wfPath].count} times this conversation. Use append_to_file or edit_file instead.` } });
               continue;
             }
           }
@@ -2548,9 +2549,10 @@ class MCPToolServer {
       }
       if (options.writeFileHistory && call.tool === 'write_file') {
         const wfPath = call.params?.filePath || call.params?.path || call.params?.file_path;
-        if (wfPath && options.writeFileHistory[wfPath] && options.writeFileHistory[wfPath].count >= 2) {
+        const wfLimit = (options.continuationCount || 0) > 0 ? 1 : 2;
+        if (wfPath && options.writeFileHistory[wfPath] && options.writeFileHistory[wfPath].count >= wfLimit) {
           console.log(`[MCP] Write dedup: blocking ${call.tool} to "${wfPath}" (already written ${options.writeFileHistory[wfPath].count}x)`);
-          results.push({ tool: call.tool, params: call.params, result: { success: false, error: `BLOCKED: "${wfPath}" has already been written ${options.writeFileHistory[wfPath].count} times this conversation. The file is COMPLETE. Do NOT write to it again.` } });
+          results.push({ tool: call.tool, params: call.params, result: { success: false, error: `BLOCKED: "${wfPath}" has already been written ${options.writeFileHistory[wfPath].count} times this conversation. Use append_to_file or edit_file instead.` } });
           continue;
         }
       }

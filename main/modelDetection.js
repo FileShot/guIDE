@@ -55,6 +55,7 @@ function detectParamSize(modelPath) {
   }
 
   // Phi model fallbacks (version-based size inference)
+  if (base.includes('phi-4') && base.includes('mini')) return 3.8;
   if (base.includes('phi-4')) return 14;
   if (base.includes('phi-3') && base.includes('mini')) return 3.8;
   if (base.includes('phi-3') && base.includes('medium')) return 14;

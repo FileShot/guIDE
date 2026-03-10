@@ -557,7 +557,7 @@ function register(ctx) {
           appendIfBudget(compactHint + '\n');
 
           // Few-shot examples
-          const fewShotCount = modelProfile.generation?.fewShotExamples ?? 0;
+          const fewShotCount = modelProfile.prompt?.fewShotExamples ?? 0;
           if (fewShotCount > 0 && tokenBudget > 150) {
             const fewShotExample = '### Tool Call Example\nUser: Create an HTML page called hello.html with a greeting\nAssistant:\n```json\n{"tool":"write_file","params":{"filePath":"hello.html","content":"<!DOCTYPE html>\\n<html><head><title>Hello</title></head><body><h1>Hello!</h1></body></html>"}}\n```\n';
             appendIfBudget(fewShotExample);
@@ -682,6 +682,8 @@ function register(ctx) {
     let consecutiveEmptyGrammarRetries = 0;
     let continuationCount = 0;
     let _contLowProgressCount = 0;
+    let _contRepeatCount = 0;
+    let _lastContText = '';
     let _pendingPartialBlock = null;
     let lastIterationResponse = '';
     let nonContextRetries = 0;
@@ -1067,15 +1069,19 @@ function register(ctx) {
       const _stitchedForMcp = _pendingPartialBlock ? _pendingPartialBlock + responseText : responseText;
       _pendingPartialBlock = null;
       const _fenceIdx = _stitchedForMcp.search(/```(?:json|tool_call|tool)\b/);
-      let _hasUnclosedToolFence = _fenceIdx !== -1 && !_stitchedForMcp.slice(_fenceIdx).includes('\n```');
+      const _afterFence = _fenceIdx !== -1 ? _stitchedForMcp.slice(_fenceIdx) : '';
+      // Check for closing ``` — with or without leading newline
+      let _hasUnclosedToolFence = _fenceIdx !== -1 &&
+        !_afterFence.match(/```(?:json|tool_call|tool)\b[\s\S]*?\n```/) &&
+        !_afterFence.match(/```(?:json|tool_call|tool)\b[\s\S]*?[^`]```\s*$/);
 
       // If the unclosed fence contains a complete JSON tool call, don't treat as truncated
       if (_hasUnclosedToolFence) {
-        const fenceContent = _stitchedForMcp.slice(_fenceIdx);
-        const jsonMatch = fenceContent.match(/```(?:json|tool_call|tool)\s*\n?([\s\S]*)/);
+        const jsonMatch = _afterFence.match(/```(?:json|tool_call|tool)\s*\n?([\s\S]*)/);
         if (jsonMatch) {
           try {
-            const parsed = JSON.parse(jsonMatch[1].trim());
+            const jsonContent = jsonMatch[1].replace(/```\s*$/, '').trim();
+            const parsed = JSON.parse(jsonContent);
             if (parsed && typeof parsed.tool === 'string') {
               _hasUnclosedToolFence = false;
             }
@@ -1123,10 +1129,19 @@ function register(ctx) {
             _contLowProgressCount = 0;
           }
 
-          if (_contLowProgressCount >= 3) {
-            console.log('[AI Chat] Continuation aborted: no forward progress');
+          // Detect repeated identical content (model stuck in loop)
+          if (responseText.trim() === _lastContText.trim() && responseText.length > 0) {
+            _contRepeatCount++;
+          } else {
+            _contRepeatCount = 0;
+          }
+          _lastContText = responseText;
+
+          if (_contLowProgressCount >= 3 || _contRepeatCount >= 2) {
+            console.log(`[AI Chat] Continuation aborted: ${_contRepeatCount >= 2 ? 'repeated identical content' : 'no forward progress'}`);
             continuationCount = 0;
             _contLowProgressCount = 0;
+            _contRepeatCount = 0;
             // Fall through
           } else {
             const truncReason = _hasUnclosedToolFence ? 'unclosed fence' : 'maxTokens';
@@ -1258,10 +1273,17 @@ function register(ctx) {
           break;
         }
 
-        // Code-dump nudge — only for large blocks likely to be full files
+        // Code-dump nudge — detect large code blocks (fenced or raw) that should be files
         const _codeBlockMatch = responseText.match(/```(?:html?|css|javascript|js|typescript|ts|python|py|json)\s*\n([\s\S]*?)```/i);
         const hasCodeBlocks = _codeBlockMatch && _codeBlockMatch[1].length > 500;
-        if (hasCodeBlocks && nudgesRemaining > 0 && iteration < MAX_AGENTIC_ITERATIONS - 1) {
+        // Also detect unclosed code fences (model hit maxTokens before closing ```)
+        const _unclosedFenceMatch = !hasCodeBlocks && responseText.match(/```(?:html?|css|javascript|js|typescript|ts|python|py|json)\s*\n([\s\S]{500,})$/i);
+        const hasUnclosedLargeBlock = !!_unclosedFenceMatch;
+        // Detect raw HTML/code dumped without fences (model obeyed "no code blocks" but didn't use write_file)
+        const hasRawCodeDump = !hasCodeBlocks && !hasUnclosedLargeBlock && responseText.length > 500 &&
+          (/<html[\s>]/i.test(responseText) || /<style[\s>]/i.test(responseText) || /<script[\s>]/i.test(responseText) ||
+           (/<\w+[\s>]/.test(responseText) && (responseText.match(/<\w+/g) || []).length > 10));
+        if ((hasCodeBlocks || hasUnclosedLargeBlock || hasRawCodeDump) && nudgesRemaining > 0 && iteration < MAX_AGENTIC_ITERATIONS - 1) {
           nudgesRemaining--;
           currentPrompt = {
             systemContext: currentPrompt.systemContext,

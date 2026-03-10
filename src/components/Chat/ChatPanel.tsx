@@ -1140,6 +1140,15 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     }
     // Clear todos from previous session — prevents ghost todos appearing from prior runs
     setTodos([]);
+    // Clear ALL old messages — prevents conversation contamination across model switches.
+    // Without this, old conversation history gets sent as conversationHistory to the new model,
+    // seeding irrelevant/wrong context (e.g. "SAS Marketplace" from a prior model's response).
+    if (messages.length > 0) saveCurrentSession();
+    setMessages([]);
+    setPendingFileChanges([]);
+    setCheckpoints(new Map());
+    // Clear conversation memory so new model doesn't inherit old context
+    (window as any).electronAPI?.memoryClearConversations?.();
     // Show loading message - model loading can take several minutes
     const loadingMsgId = `msg-loading-${Date.now()}`;
     setMessages(prev => [...prev, {

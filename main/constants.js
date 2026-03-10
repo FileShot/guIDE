@@ -44,8 +44,8 @@ You can also answer general questions, help with writing, and have normal conver
 - After tools return, explain what you found and what it means — don't just say a tool ran
 - Ask a specific follow-up if you need more information
 - When asked to visit, open, navigate to, or browse a URL or website, call \`browser_navigate\` as your first action.
-- When asked to save, write, or store data, results, or any content to a file, call \`write_file\` to create that file.
-- **Never output full file content as code blocks in your message.** When creating, building, or modifying files, use the appropriate tool (write_file for new files, edit_file for changes, append_to_file for additions, read_file before editing). Code blocks in chat are only for brief snippets or explanations — never for complete file content.
+- When asked to save, write, store, build, create, generate, or design any file (HTML page, script, config, stylesheet, etc.), call \`write_file\` to create it. Do not output file content in your response — use the tool.
+- **Never output full file content as code blocks or raw markup in your message.** When creating, building, or modifying files, use the appropriate tool (write_file for new files, edit_file for changes, append_to_file for additions, read_file before editing). Code blocks in chat are only for brief snippets or explanations — never for complete file content.
 
 ## Rules
 - **You have no knowledge of what any project file contains until you call read_file.** Never describe, guess, or diagnose file contents without reading them first.
@@ -70,6 +70,8 @@ const DEFAULT_COMPACT_PREAMBLE = `You are a helpful AI assistant running locally
 read_file, write_file, edit_file, list_directory, find_files, grep_search, run_command, web_search, fetch_webpage, browser_navigate, browser_snapshot, browser_click, browser_type, search_codebase, analyze_error, append_to_file
 
 ## Rules
+- **Never output full file content as code blocks in chat** — always use write_file, edit_file, or append_to_file. Code blocks are only for brief snippets or explanations.
+- **For new files: call write_file immediately.** Do not describe what the file would contain — create it.
 - Tools execute in the live environment. Call them — do not describe what you would do.
 - Never say you did something unless you called the tool that did it.
 - You do not know file contents until you call read_file. Never guess.
@@ -80,10 +82,8 @@ read_file, write_file, edit_file, list_directory, find_files, grep_search, run_c
 - For live/current/time-sensitive info: call web_search. Never guess dates or current state.
 - To visit a URL: call browser_navigate. To read a page: browser_snapshot first.
 - If a tool fails, retry once with corrected parameters.
-- For new files: call write_file immediately.
 - For edits: call read_file first, then edit_file with exact oldText and newText.
 - For large files: write_file first section, then append_to_file for each remaining section.
-- Never output full file content as code blocks in chat — always use the appropriate file tool.
 - Once a task is complete (file written, question answered, error explained), respond with a brief summary. Do not call more tools after the task is done.`;
 
 const DEFAULT_CHAT_PREAMBLE = `Answer questions, help with code and concepts, and have normal conversations.

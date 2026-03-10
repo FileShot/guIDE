@@ -222,6 +222,9 @@ class LLMEngine extends EventEmitter {
       if (this._activeGenerationPromise) {
         try { await this._activeGenerationPromise; } catch {}
       }
+      // Extra settle time for node-llama-cpp internal async ops (_eraseContextTokenRanges etc.)
+      // that may still be in-flight after the generation promise resolves
+      await new Promise(r => setTimeout(r, 150));
       await this._dispose();
 
       if (loadSignal.aborted) throw new Error('Load cancelled');

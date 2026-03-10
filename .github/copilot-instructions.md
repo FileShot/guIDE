@@ -545,6 +545,26 @@ These rules apply whenever running an iterative optimization loop on model promp
 - Tool implementations
 - `src/` directory (UI)
 
+---
+
+### NEVER stop investigating with open unknowns — MANDATORY
+**Added 2026-03-09 after violation where agent listed 4 unknowns and stopped investigating.**
+
+When the user reports bugs and you are tasked with investigating:
+- You MUST close EVERY unknown before presenting a plan. No exceptions.
+- "What I have not read" / "What I don't know" sections in your analysis are WORK ITEMS, not disclaimers. They mean you are not done investigating.
+- If you list something you don't know, your next action MUST be to go find out. Not to present the plan anyway.
+- You cannot present a fix plan while acknowledging unknowns. The unknowns must become knowns first.
+- If after exhaustive investigation something truly cannot be determined from code alone, state EXACTLY what diagnostic step is needed (specific log line, specific runtime check) — not a vague "needs more investigation."
+- Stopping an investigation with open unknowns and presenting a partial analysis is the same as lying about completion. It violates the "never say done without proof" rule.
+- The ONLY acceptable reason to stop investigating is: every code path has been read, every function in the chain has been traced, and the remaining unknown requires runtime data that cannot be obtained from source code alone. In that case, state the EXACT diagnostic needed.
+
+**Files NOT in scope for optimization:**
+- `main/llmEngine.js` — inference engine internals
+- `main/agenticChat.js` — agentic loop logic
+- Tool implementations
+- `src/` directory (UI)
+
 ### NEVER tailor changes to make tests pass
 - The test suite exists to reveal REAL behavior. It is not a target to satisfy.
 - Do NOT write code changes that are designed to pass a specific test case.

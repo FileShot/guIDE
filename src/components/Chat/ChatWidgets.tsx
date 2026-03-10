@@ -330,7 +330,7 @@ export const CodeBlock: React.FC<{ code: string; language: string; onApply: () =
   const [copied, setCopied] = useState(false);
   const lineCount = code.split('\n').length;
   const isLong = lineCount > COLLAPSE_LINE_THRESHOLD;
-  const [expanded, setExpanded] = useState(!isLong); // Start collapsed if long
+  const [expanded, setExpanded] = useState(!isLong || !!isToolCall); // Tool call results start expanded
 
   const handleCopy = () => {
     navigator.clipboard.writeText(code);

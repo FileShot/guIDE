@@ -37,6 +37,7 @@ When the user says "read your instructions", "read the instructions", "read copi
 - It does NOT matter if you think you remember them.
 - You MUST read every single character, every single line, every single time the user says it.
 - After reading, explicitly acknowledge every section by name and state which rules apply to the current task.
+- "Reading" means FOLLOWING. Reading the instructions without following them is the same as not reading them. Every rule read must be applied to the current task immediately.
 - There are NO exceptions to this rule. None. Ever.
 
 ---

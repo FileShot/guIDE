@@ -1303,9 +1303,14 @@ function register(ctx) {
            (/<\w+[\s>]/.test(responseText) && (responseText.match(/<\w+/g) || []).length > 10));
         if ((hasCodeBlocks || hasUnclosedLargeBlock || hasRawCodeDump) && nudgesRemaining > 0 && iteration < MAX_AGENTIC_ITERATIONS - 1) {
           nudgesRemaining--;
+          // Strip the raw code dump from accumulated response to free context budget.
+          // The model will regenerate the content properly via write_file.
+          fullResponseText = '';
+          try { await llmEngine.resetSession(true); } catch (_) {}
+          sessionJustRotated = true;
           currentPrompt = {
-            systemContext: currentPrompt.systemContext,
-            userMessage: '[SYSTEM: You wrote code directly in chat. Use write_file tool to save it. Format: ```json\n{"tool":"write_file","params":{"filePath":"filename.ext","content":"..."}}\n```]',
+            systemContext: buildStaticPrompt(),
+            userMessage: buildDynamicContext(Math.floor(maxPromptTokens * 0.10)) + '\n' + message + '\n\n[SYSTEM: You wrote code directly in chat. Use write_file tool to save it. Format: ```json\n{"tool":"write_file","params":{"filePath":"filename.ext","content":"..."}}\n```]',
           };
           continue;
         }
@@ -1315,13 +1320,6 @@ function register(ctx) {
       }
 
       lastIterationResponse = responseText;
-
-      // Send live tool execution indicators
-      if (mainWindow) {
-        for (const tr of toolResults.results) {
-          mainWindow.webContents.send('tool-executing', { tool: tr.tool, params: tr.params });
-        }
-      }
 
       if (isStale()) break;
 

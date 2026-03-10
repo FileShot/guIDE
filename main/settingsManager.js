@@ -68,6 +68,33 @@ function registerSettingsHandlers(ctx) {
   ipcMain.handle('save-settings', (_evt, settings) => _writeConfig(settings));
   ipcMain.handle('load-settings', () => _readConfig());
 
+  // ── Model persistence ──
+  ipcMain.handle('set-last-used-model', (_evt, modelPath) => {
+    try {
+      const config = _readConfig();
+      config.lastUsedModel = modelPath || null;
+      return _writeConfig(config);
+    } catch (e) { return { success: false, error: e.message }; }
+  });
+
+  ipcMain.handle('get-last-used-model', () => {
+    const config = _readConfig();
+    return config.lastUsedModel || null;
+  });
+
+  ipcMain.handle('set-default-model', (_evt, modelPath) => {
+    try {
+      const config = _readConfig();
+      config.defaultModelPath = modelPath || null;
+      return _writeConfig(config);
+    } catch (e) { return { success: false, error: e.message }; }
+  });
+
+  ipcMain.handle('get-default-model', () => {
+    const config = _readConfig();
+    return config.defaultModelPath || null;
+  });
+
   ipcMain.handle('get-system-prompt-preview', (_evt, opts) => {
     // Return the effective system prompt that would be sent to the model
     const { DEFAULT_SYSTEM_PREAMBLE, DEFAULT_COMPACT_PREAMBLE } = require('./constants');

@@ -123,6 +123,9 @@ export interface ElectronAPI {
   modelsAdd(): Promise<{ success: boolean; models: AvailableModel[] }>;
   modelsRemove(modelPath: string): Promise<{ success: boolean }>;
   onModelsAvailable(callback: (models: AvailableModel[]) => void): (() => void) | void;
+  onModelAutoLoaded(callback: (data: { path: string; name: string }) => void): (() => void) | void;
+  setDefaultModel(modelPath: string): Promise<{ success: boolean }>;
+  getDefaultModelPath(): Promise<string | null>;
 
   // Hardware & Model Recommendations
   getHardwareInfo(): Promise<{ vramGB: number; gpuName: string; totalRAM: number; freeRAM: number; cpuModel: string; cpuCores: number }>;

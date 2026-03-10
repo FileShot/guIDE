@@ -524,6 +524,30 @@ function register(ctx) {
     const sysPromptReserve = estimateTokens(actualSystemPrompt) + 50 + toolSchemaTokenEstimate;
     console.log(`[AI Chat] Profile: ${modelProfile._meta.profileSource} | ctx=${totalCtx} (hw=${hwContextSize}) | sysReserve=${sysPromptReserve}`);
 
+    // Guard: if system prompt + tool schemas exceed available context, fall back to compact preamble
+    let usedCompactFallback = false;
+    if (sysPromptReserve >= totalCtx * 0.9) {
+      const compactPrompt = llmEngine._getCompactSystemPrompt();
+      const compactReserve = estimateTokens(compactPrompt) + 50 + toolSchemaTokenEstimate;
+      if (compactReserve < totalCtx * 0.9) {
+        console.log(`[AI Chat] sysReserve (${sysPromptReserve}) exceeds ctx (${totalCtx}), switching to compact preamble (reserve=${compactReserve})`);
+        // Reset session with compact prompt
+        try { await llmEngine.resetSession(true); } catch (_) {}
+        usedCompactFallback = true;
+      } else {
+        // Even compact preamble doesn't fit — inform user
+        console.error(`[AI Chat] FATAL: Even compact preamble (${compactReserve} tokens) exceeds context (${totalCtx}). Cannot generate.`);
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('llm-response-chunk', {
+            text: `\n\n**Error:** This model's context window (${totalCtx} tokens) is too small for tool-assisted generation. The system prompt alone requires ~${compactReserve} tokens. Please load a model with a larger context window, or use Cloud AI.`,
+            done: true,
+          });
+        }
+        return;
+      }
+    }
+    console.log(`[AI Chat] Model: ${modelTier.family} (${modelTier.paramLabel} ${modelTier.family}) \u2014 tools=${modelProfile.generation?.maxToolsPerTurn ?? 0}, grammar=${modelProfile.generation?.grammarConstrained ? 'strict' : 'limited'}`);
+
     const maxResponseTokens = Math.min(
       Math.floor(totalCtx * modelProfile.context.responseReservePct),
       modelProfile.context.maxResponseTokens
@@ -883,7 +907,7 @@ function register(ctx) {
               }
               if (_tStart !== -1 && _tName && mainWindow && !mainWindow.isDestroyed()) {
                 const raw = _tb.slice(_tStart);
-                const paramsText = raw.length > 4000 ? raw.slice(-4000) : raw;
+                const paramsText = raw.length > 4000 ? raw.slice(0, 4000) : raw;
                 mainWindow.webContents.send('llm-tool-generating', {
                   callIndex: _tIdx, functionName: _tName, paramsText, done: false,
                 });
@@ -1090,6 +1114,21 @@ function register(ctx) {
           if (responseText.startsWith(suffix)) { overlap = len; break; }
         }
         _stitchedForMcp = _pendingPartialBlock + responseText.slice(overlap);
+
+        // Fence-aware cleanup: if stitching produced duplicate ```json fences,
+        // keep only the LAST complete one (the continuation's fresh attempt)
+        const fencePattern = /```(?:json|tool_call|tool)\b/g;
+        const fencePositions = [];
+        let fm;
+        while ((fm = fencePattern.exec(_stitchedForMcp)) !== null) fencePositions.push(fm.index);
+        if (fencePositions.length >= 2) {
+          // Multiple fence opens — the first is from the truncated pass, the second from continuation
+          // Keep from the last fence open onward (it has the complete JSON)
+          const lastFenceStart = fencePositions[fencePositions.length - 1];
+          const textBeforeFences = _stitchedForMcp.slice(0, fencePositions[0]);
+          _stitchedForMcp = textBeforeFences + _stitchedForMcp.slice(lastFenceStart);
+          console.log(`[AI Chat] Fence dedup: removed ${fencePositions.length - 1} duplicate fence(s)`);
+        }
       } else {
         _stitchedForMcp = responseText;
       }

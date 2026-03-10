@@ -102,6 +102,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   modelsAdd: () => ipcRenderer.invoke('models-add'),
   modelsRemove: (modelPath) => ipcRenderer.invoke('models-remove', modelPath),
   onModelsAvailable: (callback) => _on('models-available', callback),
+  onModelAutoLoaded: (callback) => _on('model-auto-loaded', callback),
+  setDefaultModel: (modelPath) => ipcRenderer.invoke('set-default-model', modelPath),
+  getDefaultModelPath: () => ipcRenderer.invoke('get-default-model'),
 
   // ── Hardware & Model Recommendations ──
   getHardwareInfo: () => ipcRenderer.invoke('get-hardware-info'),

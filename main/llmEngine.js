@@ -1074,12 +1074,13 @@ class LLMEngine extends EventEmitter {
     // Reuse existing sequence — just clear KV cache
     if (this.sequence && !this.sequence._disposed) {
       try {
-        this.sequence.eraseContextTokenRanges([{ start: 0, end: this.sequence.nTokens }]);
+        // Await the erase to prevent race with pending async operations
+        await this.sequence.eraseContextTokenRanges([{ start: 0, end: this.sequence.nTokens }]);
       } catch {
-        // If erase fails, get a new sequence
-        this.sequence = this.context.getSequence();
+        // If erase fails (e.g. sequence disposed mid-flight), get a new sequence
+        try { this.sequence = this.context.getSequence(); } catch { /* context may also be gone */ }
       }
-    } else {
+    } else if (this.context) {
       this.sequence = this.context.getSequence();
     }
 

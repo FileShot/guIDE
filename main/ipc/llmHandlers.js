@@ -60,6 +60,21 @@ function register(ctx) {
         await new Promise(r => setTimeout(r, 100));
       }
       const modelInfo = await ctx.llmEngine.initialize(modelPath);
+      // Persist as last-used model for auto-load on next startup
+      try {
+        const { ipcMain: _ipc } = require('electron');
+        // Write directly to settings file to avoid IPC roundtrip
+        const fs = require('fs');
+        const path = require('path');
+        const { app } = require('electron');
+        const settingsPath = path.join(app.getPath('userData'), 'settings.json');
+        let config = {};
+        try { config = JSON.parse(fs.readFileSync(settingsPath, 'utf8')); } catch {}
+        config.lastUsedModel = modelPath;
+        fs.writeFileSync(settingsPath + '.tmp', JSON.stringify(config, null, 2));
+        fs.renameSync(settingsPath + '.tmp', settingsPath);
+        console.log(`[LLM] Persisted lastUsedModel: ${path.basename(modelPath)}`);
+      } catch (e) { console.warn('[LLM] Failed to persist lastUsedModel:', e.message); }
       const win = ctx.getMainWindow();
       if (win && modelInfo?.contextSize) {
         win.webContents.send('context-usage', { used: 0, total: modelInfo.contextSize });

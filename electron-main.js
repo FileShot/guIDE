@@ -445,22 +445,54 @@ async function initializeServices() {
       mainWindow.webContents.send('memory-stats', memoryStore.getStats());
       mainWindow.webContents.send('mcp-tools-available', mcpToolServer.getToolDefinitions());
 
-      // Skip auto-loading — let user pick a model manually.
-      // This avoids blocking the UI for 1-5 minutes on startup.
-      const defaultModel = modelManager.getDefaultModel();
-      if (defaultModel) {
-        console.log(`[IDE] Default model available: ${defaultModel.name} (not auto-loading)`);
+      // Auto-load last used model if persisted, otherwise show available model
+      const fs = require('fs');
+      const settingsPath = require('path').join(userDataPath, 'settings.json');
+      let lastUsedModel = null;
+      try {
+        const config = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+        if (config.lastUsedModel && fs.existsSync(config.lastUsedModel)) {
+          lastUsedModel = config.lastUsedModel;
+        }
+      } catch {}
+
+      if (lastUsedModel) {
+        const modelName = require('path').basename(lastUsedModel).replace(/\.gguf$/i, '');
+        console.log(`[IDE] Auto-loading last used model: ${modelName}`);
         mainWindow.webContents.send('llm-status', {
-          state: 'idle',
-          message: `Model ready: ${defaultModel.name}. Click to load.`,
+          state: 'loading',
+          message: `Loading ${modelName}...`,
+        });
+        // Non-blocking auto-load — UI is usable while model loads
+        llmEngine.initialize(lastUsedModel).then((modelInfo) => {
+          console.log(`[IDE] Auto-loaded model: ${modelName}`);
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('llm-status', { state: 'ready', message: `Model loaded: ${modelName}` });
+            if (modelInfo?.contextSize) {
+              mainWindow.webContents.send('context-usage', { used: 0, total: modelInfo.contextSize });
+            }
+            mainWindow.webContents.send('model-auto-loaded', { path: lastUsedModel, name: modelName });
+          }
+        }).catch((err) => {
+          console.warn(`[IDE] Auto-load failed: ${err.message}`);
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('llm-status', { state: 'idle', message: `Auto-load failed. Click a model to load.` });
+          }
         });
       } else {
-        // No local GGUF model — normal on first install. Cloud AI (Cerebras/Groq)
-        // is active by default so the user can start immediately.
-        mainWindow.webContents.send('llm-status', {
-          state: 'idle',
-          message: 'Cloud AI active (Cerebras/Groq). Download a .gguf model to enable local GPU inference.',
-        });
+        const defaultModel = modelManager.getDefaultModel();
+        if (defaultModel) {
+          console.log(`[IDE] Default model available: ${defaultModel.name} (not auto-loading)`);
+          mainWindow.webContents.send('llm-status', {
+            state: 'idle',
+            message: `Model ready: ${defaultModel.name}. Click to load.`,
+          });
+        } else {
+          mainWindow.webContents.send('llm-status', {
+            state: 'idle',
+            message: 'Cloud AI active (Cerebras/Groq). Download a .gguf model to enable local GPU inference.',
+          });
+        }
       }
       // Non-blocking: detect NVIDIA GPU and download CUDA backends in the background.
       // App is fully usable via cloud AI while this runs (or if no GPU is found).

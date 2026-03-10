@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   FolderOpen, Plus, Clock, ChevronRight, ArrowRight,
   Download, CheckCircle, Loader2, Zap, Code2, Brain, Package,
-  Cloud, LogOut, UserCircle,
+  Cloud, LogOut, UserCircle, Star,
 } from 'lucide-react';
 import type { LicenseStatus } from '@/types/electron';
 
@@ -39,6 +39,10 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onOpenFolder, onNe
   const [licenseStatus, setLicenseStatus] = useState<LicenseStatus | null>(null);
   const [licenseLoading, setLicenseLoading] = useState(false);
   const [cloudAILoading, setCloudAILoading] = useState(false);
+  // Track which model is currently active (loaded)
+  const [activeModel, setActiveModel] = useState<string | null>(null);
+  // Track which model is set as default
+  const [defaultModelPath, setDefaultModelPath] = useState<string | null>(null);
 
   useEffect(() => {
     try {
@@ -68,6 +72,13 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onOpenFolder, onNe
   // Load license status for sign-in strip
   useEffect(() => {
     window.electronAPI?.licenseGetStatus?.().then(s => { if (s) setLicenseStatus(s); }).catch(() => {});
+    // Load default model path from settings
+    window.electronAPI?.getDefaultModelPath?.().then(p => { if (p) setDefaultModelPath(p); }).catch(() => {});
+    // Listen for auto-loaded model on startup
+    const cleanup = window.electronAPI?.onModelAutoLoaded?.((data: { path: string; name: string }) => {
+      setActiveModel(data.path);
+    });
+    return () => { if (typeof cleanup === 'function') cleanup(); };
   }, []);
 
   const openRecent = (path: string) => {
@@ -88,9 +99,17 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onOpenFolder, onNe
       await window.electronAPI?.llmLoadModel?.(modelPath);
       // Switch app to local model — clear cloud provider preference so ChatPanel defaults to local
       try { localStorage.removeItem('guide-cloud-provider'); } catch {}
+      setActiveModel(modelPath);
     } finally {
       setLoadingModel(null);
     }
+  };
+
+  const setAsDefault = async (modelPath: string) => {
+    try {
+      await window.electronAPI?.setDefaultModel?.(modelPath);
+      setDefaultModelPath(modelPath);
+    } catch {}
   };
 
   const useCloudAI = () => {
@@ -309,25 +328,47 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onOpenFolder, onNe
                 <div className="flex flex-col gap-1">
                   {installedModels.slice(0, 4).map((model) => {
                     const label = (model.name || (model.path || '').split(/[/\\]/).pop() || 'Unknown').replace(/\.gguf$/i, '');
+                    const mp = model.path || model.name;
+                    const isActive = activeModel === mp;
+                    const isDefault = defaultModelPath === mp;
+                    const isLoading = loadingModel === mp;
                     return (
                       <div
-                        key={model.path || model.name}
+                        key={mp}
                         className="flex items-center gap-2 px-3 py-1.5 rounded-lg"
-                        style={{ backgroundColor: 'var(--theme-bg-secondary)', border: '1px solid var(--theme-border)' }}
+                        style={{
+                          backgroundColor: isActive ? 'color-mix(in srgb, var(--theme-accent) 10%, var(--theme-bg-secondary))' : 'var(--theme-bg-secondary)',
+                          border: isActive ? '1px solid var(--theme-accent)' : '1px solid var(--theme-border)',
+                        }}
                       >
+                        {/* Set as default star */}
+                        <button
+                          onClick={() => setAsDefault(mp)}
+                          className="flex-shrink-0 transition-colors"
+                          style={{ color: isDefault ? 'var(--theme-accent)' : 'var(--theme-foreground-subtle)', cursor: 'pointer' }}
+                          title={isDefault ? 'Default model' : 'Set as default'}
+                        >
+                          <Star size={12} fill={isDefault ? 'currentColor' : 'none'} />
+                        </button>
                         <span className="flex-1 min-w-0 text-[12px] truncate" style={{ color: 'var(--theme-foreground)' }} title={label}>
                           {label}
                         </span>
                         <button
-                          onClick={() => useModel(model.path || model.name)}
-                          disabled={loadingModel === (model.path || model.name)}
+                          onClick={() => !isActive && useModel(mp)}
+                          disabled={isLoading || isActive}
                           className="flex-shrink-0 text-[11px] px-2 py-0.5 rounded font-medium flex items-center justify-center gap-1 transition-opacity"
-                          style={{ backgroundColor: 'var(--theme-accent)', color: 'var(--theme-bg)', minWidth: 36, opacity: loadingModel === (model.path || model.name) ? 0.7 : 1 }}
-                          onMouseEnter={(e) => { if (loadingModel !== (model.path || model.name)) (e.currentTarget as HTMLElement).style.opacity = '0.8'; }}
-                          onMouseLeave={(e) => { if (loadingModel !== (model.path || model.name)) (e.currentTarget as HTMLElement).style.opacity = '1'; }}
-                          title={loadingModel === (model.path || model.name) ? 'Loading...' : `Load ${label}`}
+                          style={{
+                            backgroundColor: isActive ? '#89d185' : 'var(--theme-accent)',
+                            color: 'var(--theme-bg)',
+                            minWidth: 46,
+                            opacity: isLoading ? 0.7 : 1,
+                            cursor: isActive ? 'default' : 'pointer',
+                          }}
+                          onMouseEnter={(e) => { if (!isLoading && !isActive) (e.currentTarget as HTMLElement).style.opacity = '0.8'; }}
+                          onMouseLeave={(e) => { if (!isLoading && !isActive) (e.currentTarget as HTMLElement).style.opacity = '1'; }}
+                          title={isActive ? 'Model is active' : isLoading ? 'Loading...' : `Load ${label}`}
                         >
-                          {loadingModel === (model.path || model.name) ? <Loader2 size={10} className="animate-spin" /> : 'Use'}
+                          {isLoading ? <Loader2 size={10} className="animate-spin" /> : isActive ? 'Active' : 'Use'}
                         </button>
                       </div>
                     );

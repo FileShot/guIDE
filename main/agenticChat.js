@@ -883,7 +883,7 @@ function register(ctx) {
               }
               if (_tStart !== -1 && _tName && mainWindow && !mainWindow.isDestroyed()) {
                 const raw = _tb.slice(_tStart);
-                const paramsText = raw.length > 4000 ? '\u2026' + raw.slice(-4000) : raw;
+                const paramsText = raw;
                 mainWindow.webContents.send('llm-tool-generating', {
                   callIndex: _tIdx, functionName: _tName, paramsText, done: false,
                 });
@@ -1172,11 +1172,9 @@ function register(ctx) {
             if (_hasUnclosedToolFence) {
               const partialFence = _stitchedForMcp.slice(_fenceIdx);
               _pendingPartialBlock = partialFence;
-              const tail = partialFence.length > 1000 ? '\u2026' + partialFence.slice(-1000) : partialFence;
-              continuationMsg = `${taskHint}${fileManifest}[Continue the tool call JSON from exactly where it was cut. Output ONLY the JSON continuation. Do NOT restart the tool call. Continue from:\n${tail}]`;
+              continuationMsg = `${taskHint}${fileManifest}[Continue the tool call JSON from exactly where it was cut. Output ONLY the JSON continuation. Do NOT restart the tool call. Continue from:\n${partialFence}]`;
             } else {
-              const tail = responseText.length > 1000 ? '\u2026' + responseText.slice(-1000) : responseText;
-              continuationMsg = `${taskHint}${fileManifest}[Continue your response exactly where you left off. Do not restart or repeat content. Here is the end of what you wrote:\n${tail}]`;
+              continuationMsg = `${taskHint}${fileManifest}[Continue your response exactly where you left off. Do not restart or repeat content. Here is the end of what you wrote:\n${responseText}]`;
             }
 
             currentPrompt = {

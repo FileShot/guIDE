@@ -1530,6 +1530,11 @@ function register(ctx) {
           // Strip the raw code dump from accumulated response to free context budget.
           // The model will regenerate the content properly via write_file.
           fullResponseText = '';
+          // Clear the UI stream buffer so the pre-nudge code dump is not visible to the user
+          if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('llm-stream-reset');
+          // Preserve conversation summary before wiping chat history (same as normal rotation path)
+          summarizer.markRotation();
+          lastConvSummary = summarizer.generateQuickSummary(mcpToolServer?._todos);
           // Timeout-guarded resetSession to prevent indefinite hang from degraded C++ KV cache
           try {
             await Promise.race([

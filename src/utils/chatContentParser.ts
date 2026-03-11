@@ -193,13 +193,16 @@ export function splitInlineToolCalls(text: string): ContentSegment[] {
         // Look for the next clearly non-JSON content boundary: a line starting with
         // a letter/header/markdown that isn't part of code content, or end of text
         const afterBlob = text.substring(endIdx);
-        const nextBoundary = afterBlob.search(/\n(?:#{1,3}\s|[A-Z][a-z]+ [a-z]|$|\n\n)/m);
-        if (nextBoundary > 0) {
-          skipEnd = endIdx + nextBoundary;
-        } else if (afterBlob.length < 5000) {
-          // Small remainder — likely all part of the leaked blob, consume it entirely
-          skipEnd = text.length;
+        // Find the next double-newline paragraph break — content before it is likely
+        // leaked code from the blob, content after it is likely the model's prose response.
+        const paraBreak = afterBlob.indexOf('\n\n');
+        if (paraBreak > 0) {
+          // Only extend to the paragraph break — preserve everything after it
+          skipEnd = endIdx + paraBreak;
         }
+        // If no paragraph break found, DON'T consume to end — the brace counter's endIdx
+        // is the best we have. Some content may leak, but that's better than swallowing
+        // the model's actual follow-up prose.
       }
       lastIndex = skipEnd;
       jsonRegex.lastIndex = lastIndex;

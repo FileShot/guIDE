@@ -1107,10 +1107,11 @@ function register(ctx) {
 
       fullResponseText += responseText;
 
-      // Strip tool fences from display copy
+      // Strip tool fences and raw inline JSON tool calls from display copy
       let displayChunk = responseText
         .replace(/\n?```(?:json|tool_call|tool)\b[\s\S]*?```\n?/g, '')
         .replace(/\n?```(?:json|tool_call|tool)\b[\s\S]*$/g, '')
+        .replace(/\[?\s*\{\s*"(?:tool|name)"\s*:\s*"[^"]*"[\s\S]*?\}\s*\]?/g, '')
         .replace(/\n{3,}/g, '\n\n');
       if (continuationCount > 0) {
         displayChunk = displayChunk.replace(/\[(?:Continue your response|You were generating a tool call)[\s\S]*?\]/gi, '');
@@ -1576,6 +1577,8 @@ function register(ctx) {
     cleanResponse = cleanResponse.replace(/\n?```(?:json|tool_call|tool)\b[\s\S]*?```\n?/g, '');
     cleanResponse = cleanResponse.replace(/\n?```(?:json|tool_call|tool)\b[\s\S]*/g, '');
     cleanResponse = cleanResponse.replace(/^\s*```\s*$/gm, '');
+    // Strip raw inline JSON tool calls (same regex the cloud path uses)
+    cleanResponse = cleanResponse.replace(/\[?\s*\{\s*"(?:tool|name)"\s*:\s*"[^"]*"[\s\S]*?\}\s*\]?/g, '');
     cleanResponse = cleanResponse.replace(/\n{3,}/g, '\n\n').trim();
 
     if (!cleanResponse) {

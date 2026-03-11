@@ -1105,10 +1105,27 @@ function register(ctx) {
         consecutiveEmptyGrammarRetries = 0;
       }
 
-      fullResponseText += responseText;
+      // ── Overlap de-duplication for ALL continuation passes ──
+      // Detect if model repeated the tail we sent as context.
+      // Applied BEFORE accumulating to fullResponseText/displayResponseText
+      // so duplicate content never enters the display pipeline.
+      let _overlapLen = 0;
+      if (_pendingPartialBlock && continuationCount > 0) {
+        const maxCheck = Math.min(_pendingPartialBlock.length, responseText.length, 2000);
+        for (let len = maxCheck; len >= 20; len--) {
+          const suffix = _pendingPartialBlock.slice(-len);
+          if (responseText.startsWith(suffix)) { _overlapLen = len; break; }
+        }
+        if (_overlapLen > 0) {
+          console.log(`[AI Chat] Continuation overlap: removed ${_overlapLen} duplicate chars`);
+        }
+      }
+      const newContent = _overlapLen > 0 ? responseText.slice(_overlapLen) : responseText;
+
+      fullResponseText += newContent;
 
       // Strip tool fences and raw inline JSON tool calls from display copy
-      let displayChunk = responseText
+      let displayChunk = newContent
         .replace(/\n?```(?:json|tool_call|tool)\b[\s\S]*?```\n?/g, '')
         .replace(/\n?```(?:json|tool_call|tool)\b[\s\S]*$/g, '')
         .replace(/\[?\s*\{\s*"(?:tool|name)"\s*:\s*"[^"]*"[\s\S]*?\}\s*\]?/g, '')
@@ -1118,17 +1135,18 @@ function register(ctx) {
       }
       displayResponseText += displayChunk;
 
-      // ── SEAMLESS CONTINUATION ──
+      // Correct UI stream buffer: the overlapping tokens were already streamed
+      // during generation. Trim them by resetting to iteration start and
+      // re-sending just the de-duplicated new content.
+      if (_overlapLen > 0 && mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('llm-stream-reset');
+        if (displayChunk) mainWindow.webContents.send('llm-token', displayChunk);
+      }
+
+      // ── SEAMLESS CONTINUATION — stitch for MCP tool detection ──
       let _stitchedForMcp;
       if (_pendingPartialBlock) {
-        // Overlap de-duplication: detect if model repeated the tail we sent
-        let overlap = 0;
-        const maxCheck = Math.min(_pendingPartialBlock.length, responseText.length, 2000);
-        for (let len = maxCheck; len >= 20; len--) {
-          const suffix = _pendingPartialBlock.slice(-len);
-          if (responseText.startsWith(suffix)) { overlap = len; break; }
-        }
-        _stitchedForMcp = _pendingPartialBlock + responseText.slice(overlap);
+        _stitchedForMcp = _pendingPartialBlock + responseText.slice(_overlapLen);
 
         // Fence-aware cleanup: if stitching produced duplicate ```json fences,
         // keep only the LAST complete one (the continuation's fresh attempt)
@@ -1289,6 +1307,7 @@ function register(ctx) {
               const tailForModel = partialFence.length > maxTailChars ? partialFence.slice(-maxTailChars) : partialFence;
               continuationMsg = `${taskHint}${fileManifest}[Continue the tool call JSON from exactly where it was cut. Output ONLY the JSON continuation. Do NOT restart the tool call. Continue from:\n${tailForModel}]`;
             } else {
+              _pendingPartialBlock = responseText; // enable overlap detection for ALL continuation types
               const tailForModel = responseText.length > maxTailChars ? responseText.slice(-maxTailChars) : responseText;
               continuationMsg = `${taskHint}${fileManifest}[Continue your response exactly where you left off. Do not restart or repeat content. Here is the end of what you wrote:\n${tailForModel}]`;
             }
@@ -1412,15 +1431,38 @@ function register(ctx) {
         const _unclosedFenceMatch = !hasCodeBlocks && responseText.match(/```(?:html?|css|javascript|js|typescript|ts|python|py|json)\s*\n([\s\S]{500,})$/i);
         const hasUnclosedLargeBlock = !!_unclosedFenceMatch;
         // Detect raw HTML/code dumped without fences (model obeyed "no code blocks" but didn't use write_file)
-        const hasRawCodeDump = !hasCodeBlocks && !hasUnclosedLargeBlock && responseText.length > 500 &&
-          (/<html[\s>]/i.test(responseText) || /<style[\s>]/i.test(responseText) || /<script[\s>]/i.test(responseText) ||
-           (/<\w+[\s>]/.test(responseText) && (responseText.match(/<\w+/g) || []).length > 10));
-        if ((hasCodeBlocks || hasUnclosedLargeBlock || hasRawCodeDump) && nudgesRemaining > 0 && iteration < MAX_AGENTIC_ITERATIONS - 1) {
+        // Requires STRUCTURAL HTML document tags (<!DOCTYPE, <html, <head, <body) to avoid false
+        // positives on plain-text descriptions that mention individual element names like <div>, <section>.
+        const hasRawCodeDump = !hasCodeBlocks && !hasUnclosedLargeBlock && responseText.length > 500 && (
+          (/<html[\s>]/i.test(responseText) && (/<head[\s>]/i.test(responseText) || /<body[\s>]/i.test(responseText))) ||
+          (/<style[\s>]/i.test(responseText) && (responseText.match(/[{};]\s*\w+\s*:/g) || []).length > 5) ||
+          (/<script[\s>]/i.test(responseText) && (responseText.match(/(?:function |const |let |var |=>)/g) || []).length > 3)
+        );
+
+        // Skip nudge when context is critically small — resetSession can hang on degraded KV cache
+        // and the model can't do better with even less context.
+        let contextTooSmallForNudge = false;
+        if (totalCtx <= 4096) {
+          let _nudgeUsed = 0;
+          try { if (llmEngine.sequence?.nTokens) _nudgeUsed = llmEngine.sequence.nTokens; } catch (_) {}
+          if (_nudgeUsed > 0 && _nudgeUsed / totalCtx > 0.50) contextTooSmallForNudge = true;
+        }
+
+        if ((hasCodeBlocks || hasUnclosedLargeBlock || hasRawCodeDump) && nudgesRemaining > 0 && iteration < MAX_AGENTIC_ITERATIONS - 1 && !contextTooSmallForNudge) {
           nudgesRemaining--;
+          console.log(`[AI Chat] Code-dump nudge firing (codeBlocks=${hasCodeBlocks}, unclosed=${hasUnclosedLargeBlock}, rawDump=${hasRawCodeDump})`);
           // Strip the raw code dump from accumulated response to free context budget.
           // The model will regenerate the content properly via write_file.
           fullResponseText = '';
-          try { await llmEngine.resetSession(true); } catch (_) {}
+          // Timeout-guarded resetSession to prevent indefinite hang from degraded C++ KV cache
+          try {
+            await Promise.race([
+              llmEngine.resetSession(true),
+              new Promise((_, rej) => setTimeout(() => rej(new Error('resetSession timeout')), 8000)),
+            ]);
+          } catch (resetErr) {
+            console.warn(`[AI Chat] Code-dump nudge resetSession failed: ${resetErr.message}`);
+          }
           sessionJustRotated = true;
           currentPrompt = {
             systemContext: buildStaticPrompt(),

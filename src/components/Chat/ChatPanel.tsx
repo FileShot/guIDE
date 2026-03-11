@@ -194,6 +194,19 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     }]);
   }, []);
 
+  // Save code block as a new file via Save dialog
+  const handleSaveAsFile = useCallback(async (code: string, language: string) => {
+    const api = window.electronAPI;
+    if (!api) return;
+    const LANG_EXT: Record<string, string> = { typescript: 'ts', javascript: 'js', python: 'py', rust: 'rs', html: 'html', css: 'css', json: 'json', markdown: 'md', bash: 'sh', batch: 'bat', yaml: 'yml', xml: 'xml', sql: 'sql', csharp: 'cs', cpp: 'cpp', java: 'java', go: 'go', tsx: 'tsx', jsx: 'jsx' };
+    const ext = LANG_EXT[language] || language || 'txt';
+    const result = await api.showSaveDialog({ defaultPath: `file.${ext}`, filters: [{ name: 'All Files', extensions: ['*'] }] });
+    if (!result.canceled && result.filePath) {
+      await api.writeFile(result.filePath, code);
+      onOpenFile(result.filePath);
+    }
+  }, [onOpenFile]);
+
   // Close all dropdowns/panels when clicking outside their trigger area
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -393,11 +406,11 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
 
     let executingTimeout: ReturnType<typeof setTimeout> | null = null;
 
-    const cleanupExecuting = api.onToolExecuting?.((data: { tool: string; params: any }) => {
+    const cleanupExecuting = api.onToolExecuting?.((data: { tool: string; params: any; result?: any }) => {
       // Tool is now executing — clear the generating-phase bubble
       generatingToolCallsRef.current = [];
       setGeneratingToolCalls([]);
-      const updated = [...executingToolsRef.current, { tool: data.tool, params: data.params }];
+      const updated = [...executingToolsRef.current, { tool: data.tool, params: data.params, result: data.result }];
       executingToolsRef.current = updated;
       setExecutingTools(updated);
       // Safety timeout: clear executing status after 60s in case mcp-tool-results is missed
@@ -408,14 +421,21 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       }, 60000);
     });
 
-    const cleanupResults = api.onMcpToolResults?.(() => {
+    const cleanupResults = api.onMcpToolResults?.((resultsData?: any[]) => {
       if (executingTimeout) clearTimeout(executingTimeout);
       // Clear any lingering generating-phase bubbles
       generatingToolCallsRef.current = [];
       setGeneratingToolCalls([]);
       // BUG-NEW-A: Move currently-executing tools to completed so their pills stay visible
       // as ✓ checkmarks instead of vanishing the instant the tool finishes.
-      const finished = executingToolsRef.current;
+      let finished = executingToolsRef.current;
+      // Merge results from IPC payload into completed tools
+      if (resultsData && Array.isArray(resultsData) && finished.length > 0) {
+        finished = finished.map((ft, idx) => {
+          const matchResult = resultsData.find(r => r.tool === ft.tool && JSON.stringify(r.params) === JSON.stringify(ft.params));
+          return matchResult ? { ...ft, result: matchResult.result } : ft;
+        });
+      }
       if (finished.length > 0) {
         setCompletedStreamingTools(prev => [...prev, ...finished]);
       }
@@ -842,11 +862,11 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
         context.stackTrace = effectiveText;
       }
 
-      const result = await api.aiChat(effectiveText, context);
+      const result = await api.aiChat(effectiveText, context) || { success: false, error: 'No response from backend' };
 
       // BUG-FIX: If the backend returned no text, yield one event-loop tick so any
       // in-flight llm-token IPC events finish processing before we read streamBufferRef.
-      if (result.success && !result.text) {
+      if (result?.success && !result.text) {
         await new Promise(r => setTimeout(r, 0));
       }
 
@@ -856,19 +876,19 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       // to the renderer faster than the 100 chars/sec typewriter can reveal them.
       // For local models this resolves instantly (typewriter always caught up in real-time).
       // Only runs when a buffer is present and the generation epoch is still valid.
-      if (result.success && streamBufferRef.current.length > 0 && streamEpochRef.current === activeEpochRef.current) {
+      if (result?.success && streamBufferRef.current.length > 0 && streamEpochRef.current === activeEpochRef.current) {
         await waitForTypewriterDone();
       }
 
       // BUG-026: If model is unavailable, clear the queue — retrying queued messages
       // is pointless until the user loads a model, and draining them causes a stampede.
-      if (!result.success && /model not loaded|no model loaded/i.test(result.error || '')) {
+      if (!result?.success && /model not loaded|no model loaded/i.test(result?.error || '')) {
         messageQueueRef.current = [];
         setMessageQueue([]);
       }
 
       // Handle license block
-      if (!result.success && result.error === '__LICENSE_BLOCKED__') {
+      if (!result?.success && result?.error === '__LICENSE_BLOCKED__') {
         setMessages(prev => [...prev, {
           id: `msg-license-${Date.now()}`,
           role: 'assistant',
@@ -886,7 +906,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       }
 
       // Handle Guide Cloud AI free-tier quota exceeded
-      if (!result.success && (result.error === '__QUOTA_EXCEEDED__' || (result as any).isQuotaError)) {
+      if (!result?.success && (result?.error === '__QUOTA_EXCEEDED__' || (result as any)?.isQuotaError)) {
         setMessages(prev => [...prev, {
           id: `msg-quota-${Date.now()}`,
           role: 'assistant',
@@ -911,7 +931,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       const assistantMsg: ChatMessage = {
         id: `msg-${Date.now()}-resp`,
         role: 'assistant',
-        content: result.success
+        content: result?.success
           ? (() => {
               // Prefer what the backend explicitly computed (includes savedExplanationText prepend etc.)
               const backendText = result.text?.trim() ?? '';
@@ -924,7 +944,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
               // silently appends a summary that was never streamed to the renderer.
               return bufferText || backendText || (hasThinking ? '' : 'No response generated.');
             })()
-          : `Error: ${result.error}`,
+          : `Error: ${result?.error || 'Unknown error'}`,
         timestamp: Date.now(),
         model: result.model,
         webSearchUsed: useWebSearch,
@@ -938,7 +958,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       }
 
       // TTS: speak the response if enabled
-      if (ttsEnabled && result.success && result.text) {
+      if (ttsEnabled && result?.success && result.text) {
         speakText(result.text);
       }
     } catch (e: any) {
@@ -1661,7 +1681,7 @@ ${e.message}`,
           );
         } else {
           pendingWriteFP = null;
-          elements.push(<CodeBlock key={i} code={code} language={lang} onApply={() => onApplyCode(currentFile, code)} />);
+          elements.push(<CodeBlock key={i} code={code} language={lang} onApply={() => onApplyCode(currentFile, code)} onSaveAsFile={handleSaveAsFile} />);
         }
         continue;
       }
@@ -1836,13 +1856,31 @@ ${e.message}`,
             <ToolCallGroup key="msg-tools" count={nonWriteMsgTools.length}>
               {nonWriteMsgTools.map((tu, i) => {
                 const isOk = tu.result?.success !== false;
+                const resultDisplay = tu.result
+                  ? (tu.tool === 'edit_file' && tu.result?.success
+                    ? `Edited ${tu.params?.filePath || 'file'}`
+                    : tu.tool === 'read_file' && tu.result?.success
+                    ? (tu.result.content || tu.result.text || '').substring(0, 500) + ((tu.result.content || tu.result.text || '').length > 500 ? '…' : '')
+                    : typeof tu.result === 'object'
+                    ? JSON.stringify(tu.result, null, 2).substring(0, 800)
+                    : String(tu.result).substring(0, 800))
+                  : 'Completed';
                 return (
                   <CollapsibleToolBlock
                     key={`msg-tu-${i}`}
                     label={getToolLabel(tu, isOk ? 'ok' : 'fail')}
                     icon={isOk ? '✓' : '✗'}
                   >
-                    <div className="text-[11px] text-[#858585]">Completed</div>
+                    <div>
+                      {tu.params && Object.keys(tu.params).length > 0 && (
+                        <>
+                          <div className="text-[10px] text-[#858585] mb-1 font-medium tracking-wide">PARAMETERS</div>
+                          <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2 mb-2 max-h-[200px] overflow-y-auto">{JSON.stringify(tu.params, null, 2)}</pre>
+                        </>
+                      )}
+                      <div className={`text-[10px] mb-1 font-medium tracking-wide ${isOk ? 'text-[#89d185]' : 'text-[#f14c4c]'}`}>RESULT</div>
+                      <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2 max-h-[300px] overflow-y-auto">{resultDisplay}</pre>
+                    </div>
                   </CollapsibleToolBlock>
                 );
               })}
@@ -1972,7 +2010,7 @@ ${e.message}`,
       } else if (lang === 'mermaid') {
         parts.push(<MermaidDiagram key={`b-${idx}`} code={code} />);
       } else {
-        parts.push(<CodeBlock key={`b-${idx}`} code={code} language={lang} onApply={() => onApplyCode(currentFile, code)} />);
+        parts.push(<CodeBlock key={`b-${idx}`} code={code} language={lang} onApply={() => onApplyCode(currentFile, code)} onSaveAsFile={handleSaveAsFile} />);
       }
       lastIndex = match.index + match[0].length;
       idx++;
@@ -2671,7 +2709,10 @@ ${e.message}`,
                                 ) : (
                                   <div className="flex items-center gap-2 px-2 py-1.5 bg-[#1e1e1e] rounded-md">
                                     <Loader2 size={10} className="animate-spin text-[#007acc]" />
-                                    <span className="text-[11px] text-[#858585]">Generating {fname || 'file'}…</span>
+                                    <span className="text-[11px] text-[#858585]">
+                                      {fp ? `Creating ${fname}` : `Generating ${tc.functionName}`}
+                                      <span className="animate-pulse">…</span>
+                                    </span>
                                   </div>
                                 )}
                               </div>
@@ -2737,7 +2778,7 @@ ${e.message}`,
                                 {doneContent ? (
                                   <CodeBlock code={doneContent} language={doneLang} onApply={() => onApplyCode(currentFile, doneContent)} isToolCall={true} />
                                 ) : (
-                                  <div className="text-[11px] text-[#858585] px-0.5">Completed</div>
+                                  <div className="text-[11px] text-[#89d185] px-0.5">Written</div>
                                 )}
                               </div>
                             );
@@ -2763,11 +2804,27 @@ ${e.message}`,
                           {(nonWriteDone.length > 0 || nonWriteExec.length > 0) && (
                             <div className="mt-2">
                               <ToolCallGroup count={nonWriteDone.length + nonWriteExec.length}>
-                                {nonWriteDone.map((toolData, i) => (
-                                  <CollapsibleToolBlock key={`done-${i}`} label={getToolLabel(toolData, 'ok')} icon="✓">
-                                    <div className="text-[11px] text-[#858585]">Completed</div>
-                                  </CollapsibleToolBlock>
-                                ))}
+                                {nonWriteDone.map((toolData, i) => {
+                                  const rdResult = (toolData as any).result;
+                                  const rdIsOk = rdResult?.success !== false;
+                                  const rdDisplay = rdResult
+                                    ? (typeof rdResult === 'object' ? JSON.stringify(rdResult, null, 2).substring(0, 600) : String(rdResult).substring(0, 600))
+                                    : 'Completed';
+                                  return (
+                                    <CollapsibleToolBlock key={`done-${i}`} label={getToolLabel(toolData, 'ok')} icon="✓">
+                                      <div>
+                                        {toolData.params && Object.keys(toolData.params).length > 0 && (
+                                          <>
+                                            <div className="text-[10px] text-[#858585] mb-1 font-medium tracking-wide">PARAMETERS</div>
+                                            <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2 mb-2 max-h-[150px] overflow-y-auto">{JSON.stringify(toolData.params, null, 2)}</pre>
+                                          </>
+                                        )}
+                                        <div className={`text-[10px] mb-1 font-medium tracking-wide ${rdIsOk ? 'text-[#89d185]' : 'text-[#f14c4c]'}`}>RESULT</div>
+                                        <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2 max-h-[200px] overflow-y-auto">{rdDisplay}</pre>
+                                      </div>
+                                    </CollapsibleToolBlock>
+                                  );
+                                })}
                                 {nonWriteExec.map((toolData, i) => (
                                   <CollapsibleToolBlock key={`exec-${i}`} label={getToolLabel(toolData, 'running')} icon="⟳">
                                     <div>

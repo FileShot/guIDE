@@ -69,7 +69,7 @@ function sendToolExecutionEvents(mainWindow, toolResults, playwrightBrowser, opt
   let filesChanged = false;
 
   for (const tr of toolResults) {
-    mainWindow.webContents.send('tool-executing', { tool: tr.tool, params: tr.params });
+    mainWindow.webContents.send('tool-executing', { tool: tr.tool, params: tr.params, result: tr.result });
     if (tr.tool?.startsWith('browser_') && !playwrightBrowser?.isLaunched) {
       mainWindow.webContents.send('show-browser', { url: tr.params?.url || '' });
     }

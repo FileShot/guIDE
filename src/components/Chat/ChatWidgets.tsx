@@ -3,7 +3,7 @@
  * These components have no shared state with ChatPanel — they receive everything via props.
  */
 import React, { useState, useRef, useEffect } from 'react';
-import { Loader2, Copy, Check, Play, Wrench, X as XIcon } from 'lucide-react';
+import { Loader2, Copy, Check, Play, Wrench, X as XIcon, Save } from 'lucide-react';
 import { sanitizeSVG, markdownInlineToHTML } from '@/utils/sanitize';
 
 // ── Animated ellipsis dots for tool call in-progress state ──
@@ -326,7 +326,7 @@ export const ToolCallGroup: React.FC<{ children: React.ReactNode; count: number 
 // ── Code Block with Copy/Apply ──
 const COLLAPSE_LINE_THRESHOLD = 6; // Collapse code blocks taller than this many lines
 
-export const CodeBlock: React.FC<{ code: string; language: string; onApply: () => void; isToolCall?: boolean; isStreaming?: boolean; isAlreadyWritten?: boolean }> = ({ code, language, onApply, isToolCall, isStreaming, isAlreadyWritten }) => {
+export const CodeBlock: React.FC<{ code: string; language: string; onApply: () => void; isToolCall?: boolean; isStreaming?: boolean; isAlreadyWritten?: boolean; onSaveAsFile?: (code: string, language: string) => void }> = ({ code, language, onApply, isToolCall, isStreaming, isAlreadyWritten, onSaveAsFile }) => {
   const [copied, setCopied] = useState(false);
   const lineCount = code.split('\n').length;
   const isLong = lineCount > COLLAPSE_LINE_THRESHOLD;
@@ -373,17 +373,28 @@ export const CodeBlock: React.FC<{ code: string; language: string; onApply: () =
                 Written
               </span>
             ) : (
-              <button
-                className={`flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded ${
-                  isToolCall 
-                    ? 'text-[#89d185] hover:text-white hover:bg-[#89d185]' 
-                    : 'text-[#007acc] hover:text-white hover:bg-[#007acc]'
-                }`}
-                onClick={onApply}
-              >
-                <Play size={10} />
-                {isToolCall ? 'Run' : 'Apply'}
-              </button>
+              <>
+                {onSaveAsFile && (
+                  <button
+                    className="flex items-center gap-1 text-[10px] text-[#c586c0] hover:text-white px-1.5 py-0.5 rounded hover:bg-[#c586c0]"
+                    onClick={() => onSaveAsFile(code, language)}
+                  >
+                    <Save size={10} />
+                    Save as File
+                  </button>
+                )}
+                <button
+                  className={`flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded ${
+                    isToolCall 
+                      ? 'text-[#89d185] hover:text-white hover:bg-[#89d185]' 
+                      : 'text-[#007acc] hover:text-white hover:bg-[#007acc]'
+                  }`}
+                  onClick={onApply}
+                >
+                  <Play size={10} />
+                  {isToolCall ? 'Run' : 'Apply'}
+                </button>
+              </>
             )
           )}
         </div>

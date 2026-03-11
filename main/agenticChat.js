@@ -413,7 +413,7 @@ function register(ctx) {
 
       sendToolExecutionEvents(mainWindow, iterationToolResults, playwrightBrowser);
       capArray(allCloudToolResults, 50);
-      if (mainWindow) mainWindow.webContents.send('mcp-tool-results');
+      if (mainWindow) mainWindow.webContents.send('mcp-tool-results', iterationToolResults);
 
       // Build tool feedback
       const toolSummaryParts = [];
@@ -505,7 +505,7 @@ function register(ctx) {
       if (!llmEngine.isReady) {
         if (mainWindow) mainWindow.webContents.send('llm-token', '\n*[Model is still loading — please wait and try again]*\n');
         if (mainWindow) mainWindow.webContents.send('llm-done');
-        return;
+        return { success: false, error: 'Model is still loading — please wait and try again' };
       }
     }
 
@@ -543,7 +543,7 @@ function register(ctx) {
             done: true,
           });
         }
-        return;
+        return { success: false, error: `Context window too small (${totalCtx} tokens) for tool-assisted generation` };
       }
     }
     console.log(`[AI Chat] Model: ${modelTier.family} (${modelTier.paramLabel} ${modelTier.family}) \u2014 tools=${modelProfile.generation?.maxToolsPerTurn ?? 0}, grammar=${modelProfile.generation?.grammarConstrained ? 'strict' : 'limited'}`);
@@ -722,6 +722,7 @@ function register(ctx) {
     let _contLowProgressCount = 0;
     let _contRepeatCount = 0;
     let _lastContText = '';
+    let _contCharSizes = []; // Track char counts for pattern detection
     let _pendingPartialBlock = null;
     let lastIterationResponse = '';
     let nonContextRetries = 0;
@@ -907,7 +908,20 @@ function register(ctx) {
               }
               if (_tStart !== -1 && _tName && mainWindow && !mainWindow.isDestroyed()) {
                 const raw = _tb.slice(_tStart);
-                const paramsText = raw.length > 4000 ? raw.slice(0, 4000) : raw;
+                // Smart truncation: ensure "content" key is always visible for preview
+                let paramsText;
+                if (raw.length <= 8000) {
+                  paramsText = raw;
+                } else {
+                  // Keep first 1000 chars (covers tool name, filePath) + last 4000 chars (covers content tail)
+                  const contentIdx = raw.indexOf('"content"');
+                  if (contentIdx !== -1 && contentIdx < raw.length) {
+                    // Keep from content key onward (up to 6000 chars) plus the header
+                    paramsText = raw.slice(0, Math.min(contentIdx + 6000, raw.length));
+                  } else {
+                    paramsText = raw.slice(0, 4000);
+                  }
+                }
                 mainWindow.webContents.send('llm-tool-generating', {
                   callIndex: _tIdx, functionName: _tName, paramsText, done: false,
                 });
@@ -1197,16 +1211,58 @@ function register(ctx) {
           // Detect repeated identical content (model stuck in loop)
           if (responseText.trim() === _lastContText.trim() && responseText.length > 0) {
             _contRepeatCount++;
+          } else if (_lastContText.length > 0 && responseText.length > 0) {
+            // Similarity-based detection: if >80% of chars overlap, count as repeat
+            const a = responseText.trim(), b = _lastContText.trim();
+            const shorter = Math.min(a.length, b.length), longer = Math.max(a.length, b.length);
+            if (shorter > 50 && longer > 0) {
+              // Simple char overlap ratio: count matching chars at same positions
+              let matches = 0;
+              for (let ci = 0; ci < shorter; ci++) { if (a[ci] === b[ci]) matches++; }
+              const similarity = matches / longer;
+              if (similarity > 0.8) {
+                _contRepeatCount++;
+                console.log(`[AI Chat] Near-identical continuation detected (similarity=${(similarity * 100).toFixed(1)}%)`);
+              } else {
+                _contRepeatCount = 0;
+              }
+            } else {
+              _contRepeatCount = 0;
+            }
           } else {
             _contRepeatCount = 0;
           }
           _lastContText = responseText;
 
-          if (_contLowProgressCount >= 3 || _contRepeatCount >= 2) {
-            console.log(`[AI Chat] Continuation aborted: ${_contRepeatCount >= 2 ? 'repeated identical content' : 'no forward progress'}`);
+          // Track output sizes for pattern detection (Step 9)
+          _contCharSizes.push(responseText.length);
+
+          // Hard total accumulated char limit: stop runaway continuation
+          const MAX_CONTINUATION_CHARS = 50000;
+          let _contAbortReason = '';
+          if (fullResponseText.length > MAX_CONTINUATION_CHARS) {
+            _contAbortReason = `total output exceeds ${MAX_CONTINUATION_CHARS} chars`;
+          } else if (_contLowProgressCount >= 3) {
+            _contAbortReason = 'no forward progress';
+          } else if (_contRepeatCount >= 2) {
+            _contAbortReason = 'repeated/near-identical content';
+          }
+
+          // Forward-progress scoring: after 5 passes, if avg chars per pass varies <10% from first pass, abort
+          if (!_contAbortReason && _contCharSizes.length >= 5) {
+            const firstSize = _contCharSizes[0];
+            const avgSize = _contCharSizes.reduce((s, v) => s + v, 0) / _contCharSizes.length;
+            if (firstSize > 0 && Math.abs(avgSize - firstSize) / firstSize < 0.10) {
+              _contAbortReason = `uniform output size (~${Math.round(avgSize)} chars/pass for ${_contCharSizes.length} passes)`;
+            }
+          }
+
+          if (_contAbortReason) {
+            console.log(`[AI Chat] Continuation aborted: ${_contAbortReason}`);
             continuationCount = 0;
             _contLowProgressCount = 0;
             _contRepeatCount = 0;
+            _contCharSizes = [];
             // Fall through
           } else {
             const truncReason = _hasUnclosedToolFence ? 'unclosed fence' : 'maxTokens';

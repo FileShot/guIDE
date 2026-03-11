@@ -1084,6 +1084,10 @@ class LLMEngine extends EventEmitter {
       this.sequence = this.context.getSequence();
     }
 
+    if (!this.sequence || this.sequence._disposed) {
+      throw new Error('Cannot reset session: sequence unavailable after all fallback attempts');
+    }
+
     const llamaCppPath = this._getNodeLlamaCppPath();
     const { LlamaChat } = await import(pathToFileURL(llamaCppPath).href);
     this.chat = new LlamaChat({ contextSequence: this.sequence });

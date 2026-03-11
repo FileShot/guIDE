@@ -96,9 +96,16 @@ export function splitInlineToolCalls(text: string): ContentSegment[] {
     const startIdx = match.index;
     let braceCount = 0;
     let endIdx = startIdx;
+    let inString = false;
+    let escaped = false;
     for (let j = startIdx; j < text.length; j++) {
-      if (text[j] === '{') braceCount++;
-      if (text[j] === '}') braceCount--;
+      const ch = text[j];
+      if (escaped) { escaped = false; continue; }
+      if (ch === '\\' && inString) { escaped = true; continue; }
+      if (ch === '"') { inString = !inString; continue; }
+      if (inString) continue;
+      if (ch === '{') braceCount++;
+      if (ch === '}') braceCount--;
       if (braceCount === 0) { endIdx = j + 1; break; }
     }
 
@@ -175,8 +182,12 @@ export function splitInlineToolCalls(text: string): ContentSegment[] {
 
   // Remaining text
   if (lastIndex < text.length) {
-    const remaining = stripToolArtifacts(text.substring(lastIndex));
-    const cleaned = remaining.replace(/^\s*[\],]\s*/, '').replace(/\[\s*$/, '').trim();
+    let remaining = stripToolArtifacts(text.substring(lastIndex));
+    let cleaned = remaining.replace(/^\s*[\],]\s*/, '').replace(/\[\s*$/, '').trim();
+    // Final safety net: suppress any residual JSON blobs that look like tool calls
+    if (cleaned) {
+      cleaned = cleaned.replace(/\{\s*"(?:tool|name)"\s*:\s*"[^"]*"[\s\S]*?\}\s*/g, '').trim();
+    }
     if (cleaned) results.push({ type: 'text', content: cleaned });
   }
 

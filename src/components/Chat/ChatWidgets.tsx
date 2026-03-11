@@ -253,7 +253,7 @@ export const CollapsibleToolBlock: React.FC<{ label: string; icon?: string; chil
         ) : (
           <Loader2 size={8} className="animate-spin text-[#dcdcaa] flex-shrink-0" />
         )}
-        <span className="text-[#d4d4d4] font-medium truncate">{label}</span>
+        <span className="text-[#d4d4d4] font-medium italic truncate">{label}</span>
         {isRunning && !isOk && !isFail && (
           <span className="ml-auto text-[9px] text-[#dcdcaa] animate-pulse flex-shrink-0">running</span>
         )}
@@ -267,34 +267,24 @@ export const CollapsibleToolBlock: React.FC<{ label: string; icon?: string; chil
   );
 };
 
-// ── Tool Call Group — wraps consecutive tool blocks under a single collapsible ──
+// ── Tool Call Group — flat container showing individual tool blocks ──
 export const ToolCallGroup: React.FC<{ children: React.ReactNode; count: number }> = ({ children, count }) => {
-  const [open, setOpen] = useState(false);
   const childArray = React.Children.toArray(children);
   const okCount = childArray.filter((c: any) => c?.props?.icon === '✓').length;
   const failCount = childArray.filter((c: any) => c?.props?.icon === '✗').length;
   const runningCount = count - okCount - failCount;
   const isRunning = runningCount > 0;
-
-  // Auto-open when tools are executing so user sees live updates without clicking
-  useEffect(() => {
-    if (isRunning) setOpen(true);
-  }, [isRunning]);
+  const allOk = failCount === 0 && !isRunning;
+  const hasFail = failCount > 0;
 
   const summaryParts: string[] = [];
   if (okCount > 0) summaryParts.push(`${okCount} passed`);
   if (failCount > 0) summaryParts.push(`${failCount} failed`);
   const summary = summaryParts.join(', ') || `${count} tools`;
-  const allOk = failCount === 0 && !isRunning;
-  const hasFail = failCount > 0;
 
   return (
     <div className="my-0.5 overflow-hidden">
-      <button
-        className="w-full flex items-center gap-1 py-0.5 text-[11px] text-[#d0d0d0] transition-colors leading-snug min-h-0"
-        onClick={() => setOpen(!open)}
-      >
-        <span className={`text-[8px] transition-transform duration-150 flex-shrink-0 ${open ? 'rotate-90' : ''}`}>▶</span>
+      <div className="flex items-center gap-1 py-0.5 text-[11px] text-[#d0d0d0] leading-snug min-h-0">
         {isRunning ? (
           <Loader2 size={12} className="text-[#dcdcaa] flex-shrink-0 animate-spin" />
         ) : (
@@ -303,22 +293,20 @@ export const ToolCallGroup: React.FC<{ children: React.ReactNode; count: number 
         {isRunning ? (
           <span className="text-[#d4d4d4] font-medium italic">{count} tool call{count !== 1 ? 's' : ''}<AnimatedDots /></span>
         ) : (
-          <span className="text-[#d4d4d4] font-medium">{count} tool call{count !== 1 ? 's' : ''}</span>
+          <span className="text-[#d4d4d4] font-medium italic">{count} tool call{count !== 1 ? 's' : ''}</span>
         )}
         {!isRunning && (
           <span className={`ml-auto text-[9px] flex-shrink-0 ${hasFail ? 'text-[#f14c4c]' : allOk ? 'text-[#89d185]' : 'text-[#dcdcaa]'}`}>{summary}</span>
         )}
-      </button>
-      {open && (
-        <div className="pl-3 py-1 border-t border-[#3c3c3c] flex flex-col gap-0">
-          {React.Children.map(children, (child: any) => {
-            if (child?.type === CollapsibleToolBlock) {
-              return React.cloneElement(child, { _isGrouped: true });
-            }
-            return child;
-          })}
-        </div>
-      )}
+      </div>
+      <div className="pl-3 py-1 flex flex-col gap-0">
+        {React.Children.map(children, (child: any) => {
+          if (child?.type === CollapsibleToolBlock) {
+            return React.cloneElement(child, { _isGrouped: true });
+          }
+          return child;
+        })}
+      </div>
     </div>
   );
 };

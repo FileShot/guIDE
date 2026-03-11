@@ -121,6 +121,8 @@ function fixQuoting(raw) {
   let fixed = raw.replace(/'([^'\\]*(?:\\.[^'\\]*)*)'/g, '"$1"');
   // Unquoted keys → double-quoted
   fixed = fixed.replace(/([{,]\s*)([a-zA-Z_]\w*)(\s*:)/g, '$1"$2"$3');
+  // Unquoted path values → double-quoted (e.g., "path":C:\Users\... → "path":"C:\Users\...")
+  fixed = fixed.replace(/:\s*([A-Za-z]:[\\/][^\s,}\]]+)/g, ':"$1"');
   return fixed;
 }
 
@@ -172,7 +174,44 @@ function extractJsonObjects(text) {
       if (depth === 0 && start >= 0) {
         const slice = text.slice(start, i + 1);
         const parsed = tryParseJson(slice);
-        if (parsed) objects.push(parsed);
+        if (parsed) {
+          objects.push(parsed);
+        } else {
+          // Regex-based recovery for tool calls with large content that breaks JSON.parse
+          // (e.g., write_file with huge HTML/CSS where encoding edge cases defeat sanitizeJson)
+          const toolMatch = slice.match(/"(?:tool|name)"\s*:\s*"([^"]+)"/);
+          if (toolMatch) {
+            const toolName = toolMatch[1];
+            const pathMatch = slice.match(/"(?:filePath|path)"\s*:\s*"([^"]+)"/);
+            if (pathMatch) {
+              const recovered = { tool: toolName, params: { filePath: pathMatch[1] }, _recovered: true };
+              // Try to extract content field for write/create/edit/append tools
+              const contentIdx = slice.indexOf('"content"');
+              if (contentIdx >= 0) {
+                const colonIdx = slice.indexOf(':', contentIdx + 9);
+                if (colonIdx >= 0) {
+                  const quoteIdx = slice.indexOf('"', colonIdx + 1);
+                  if (quoteIdx >= 0) {
+                    // Content runs from quoteIdx+1 to the last " before closing }}
+                    let endIdx = slice.length - 1;
+                    while (endIdx > quoteIdx && slice[endIdx] !== '"') endIdx--;
+                    if (endIdx > quoteIdx) {
+                      let rawContent = slice.slice(quoteIdx + 1, endIdx);
+                      try {
+                        rawContent = rawContent
+                          .replace(/\\n/g, '\n').replace(/\\t/g, '\t')
+                          .replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+                      } catch (_) {}
+                      recovered.params.content = rawContent;
+                    }
+                  }
+                }
+              }
+              objects.push(recovered);
+              console.log(`[ToolParser] Recovered tool call via regex: ${toolName} → ${pathMatch[1]}`);
+            }
+          }
+        }
         start = -1;
       }
     }

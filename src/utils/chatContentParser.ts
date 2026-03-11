@@ -78,6 +78,12 @@ export function stripToolArtifacts(text: string): string {
   cleaned = cleaned.replace(/\n*### \S+ \[(?:OK|FAIL)\]\n?[\s\S]*?(?=\n## |\n### [^\s]+ \[(?:OK|FAIL)\]|\n\n(?=[A-Z])|$)/g, '');
   // Remove orphan ### Tool Execution Results
   cleaned = cleaned.replace(/\n*###? Tool Execution Results\n?/g, '');
+  // Strip leaked CSS/HTML content from truncated write_file continuations — raw CSS rules
+  // (e.g., .classname { property: value; }) appearing as plain text outside code blocks.
+  // Only strip when it looks like bulk CSS rules (3+ consecutive CSS-like lines) not a brief mention.
+  cleaned = cleaned.replace(/(?:^|\n)((?:\s*[.#@][a-zA-Z][\w-]*(?:\s*[,>\s+~]?\s*[.#@a-zA-Z][\w-]*)*\s*\{[^}]*\}\s*\n?){3,})/g, '');
+  // Strip bulk HTML tag sequences leaked from write_file content (3+ consecutive lines of raw HTML)
+  cleaned = cleaned.replace(/(?:^|\n)((?:\s*<\/?[a-zA-Z][a-zA-Z0-9-]*(?:\s[^>]*)?\/?>\s*\n?){3,})/g, '');
   // Collapse excessive newlines
   cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
   return cleaned.trim();
@@ -171,11 +177,31 @@ export function splitInlineToolCalls(text: string): ContentSegment[] {
     } catch {
       // Malformed JSON (e.g. unescaped HTML inside content param) — skip the entire
       // blob so it doesn't leak into "remaining text" and appear as raw JSON in chat.
+      // When HTML/CSS content confuses the brace counter (unescaped quotes make inString
+      // tracking lose sync), endIdx may be set too early. Any text after endIdx that is
+      // still part of the blob would leak as raw content. For tool-call blobs we extend
+      // the skip window: find the furthest plausible closing braces after endIdx.
       if (startIdx > lastIndex) {
         const before = stripToolArtifacts(text.substring(lastIndex, startIdx)).replace(/\[\s*$/, '').trim();
         if (before) results.push({ type: 'text', content: before });
       }
-      lastIndex = endIdx;
+      let skipEnd = endIdx;
+      // If the blob looked like a tool call, extend past any trailing content that
+      // was likely part of the same JSON blob (e.g., leaked HTML/CSS after premature close)
+      const blobHead = text.substring(startIdx, Math.min(startIdx + 200, text.length));
+      if (/"(?:tool|name)"\s*:\s*"/.test(blobHead)) {
+        // Look for the next clearly non-JSON content boundary: a line starting with
+        // a letter/header/markdown that isn't part of code content, or end of text
+        const afterBlob = text.substring(endIdx);
+        const nextBoundary = afterBlob.search(/\n(?:#{1,3}\s|[A-Z][a-z]+ [a-z]|$|\n\n)/m);
+        if (nextBoundary > 0) {
+          skipEnd = endIdx + nextBoundary;
+        } else if (afterBlob.length < 5000) {
+          // Small remainder — likely all part of the leaked blob, consume it entirely
+          skipEnd = text.length;
+        }
+      }
+      lastIndex = skipEnd;
       jsonRegex.lastIndex = lastIndex;
     }
   }

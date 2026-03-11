@@ -1,0 +1,235 @@
+﻿
+================================================================================
+2026-03-09T23:29:25.507Z SESSION START â€” guIDE v1.8.5
+================================================================================
+2026-03-09T23:29:27.260Z LOG   23:29:27.259 [Settings] IPC handlers registered
+2026-03-09T23:29:27.260Z INFO  [Settings] IPC handlers registered
+2026-03-09T23:29:27.265Z LOG   [IDE] App starting, NODE_ENV: undefined
+2026-03-09T23:29:27.847Z LOG   [IDE] Deferred handlers registered in 334ms
+2026-03-09T23:29:27.870Z LOG   
+2026-03-09T23:29:27.871Z LOG     â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—
+2026-03-09T23:29:27.871Z LOG     â•‘  guIDE â€” AI-Powered Offline IDE                  â•‘
+2026-03-09T23:29:27.871Z LOG     â•‘  Copyright Â© 2025-2026 Brendan Gray               â•‘
+2026-03-09T23:29:27.871Z LOG     â•‘  GitHub: github.com/FileShot                      â•‘
+2026-03-09T23:29:27.871Z LOG     â•‘  Licensed under Source Available License           â•‘
+2026-03-09T23:29:27.871Z LOG     â•‘  Unauthorized redistribution/rebranding prohibited â•‘
+2026-03-09T23:29:27.871Z LOG     â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+2026-03-09T23:29:27.871Z LOG   
+2026-03-09T23:29:27.872Z LOG   [IDE] App ready, creating window...
+2026-03-09T23:29:28.076Z LOG   [IDE] Initializing services...
+2026-03-09T23:29:28.230Z LOG   [IDE] Found 16 model(s)
+2026-03-09T23:29:28.681Z LOG   [IDE] Page loaded, sending initial state...
+2026-03-09T23:29:28.683Z LOG   [IDE] Default model available: qwen2.5-coder-3b-instruct-q4_k_m (not auto-loading)
+2026-03-09T23:29:28.828Z LOG   [FirstRun] GPU: NVIDIA GeForce RTX 3050 Ti Laptop GPU â€” downloading CUDA backends
+2026-03-09T23:29:30.547Z LOG   23:29:30.546 [Terminal] Created terminal 1 (powershell.exe)
+2026-03-09T23:29:30.547Z INFO  [Terminal] Created terminal 1 (powershell.exe)
+2026-03-09T23:29:30.677Z LOG   23:29:30.677 [RAG] Indexed 1 files (1 chunks) in 0.0s
+2026-03-09T23:29:30.677Z INFO  [RAG] Indexed 1 files (1 chunks) in 0.0s
+2026-03-09T23:29:30.861Z LOG   23:29:30.860 [Settings] Saved
+2026-03-09T23:29:30.861Z INFO  [Settings] Saved
+2026-03-09T23:29:59.438Z ERROR Error occurred in handler for 'llm-reset-session': Error: Cannot reset session â€” no model loaded
+    at LLMEngine.resetSession (C:\Program Files\guIDE\resources\app.asar\main\llmEngine.js:1053:13)
+    at C:\Program Files\guIDE\resources\app.asar\main\ipc\llmHandlers.js:104:25
+    at WebContents.<anonymous> (node:electron/js2c/browser_init:2:87444)
+    at WebContents.emit (node:events:524:28)
+2026-03-09T23:30:04.593Z WARN  [node-llama-cpp] load: control-looking token: 128247 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden
+2026-03-09T23:30:04.604Z WARN  [node-llama-cpp] load: special_eos_id is not in special_eog_ids - the tokenizer config may be incorrect
+2026-03-09T23:30:09.328Z LOG   23:30:09.328 [Model loaded: DeepSeek-R1-Distill-Qwen-1.5B-Q8_0.gguf (deepseek/small, ctx=32768, gpu=cuda)]
+2026-03-09T23:30:09.328Z INFO  [Model loaded: DeepSeek-R1-Distill-Qwen-1.5B-Q8_0.gguf (deepseek/small, ctx=32768, gpu=cuda)] 
+2026-03-09T23:30:09.328Z LOG   23:30:09.328 [Chat wrapper: DeepSeekChatWrapper]
+2026-03-09T23:30:09.328Z INFO  [Chat wrapper: DeepSeekChatWrapper] 
+2026-03-09T23:30:29.573Z LOG   [AI Chat] Profile: deepseek | ctx=32768 (hw=32768) | sysReserve=1329
+2026-03-09T23:30:29.581Z LOG   [AI Chat] Model: deepseek (1.5B deepseek) â€” tools=14, grammar=limited
+2026-03-09T23:30:29.581Z LOG   [AI Chat] Agentic iteration 1/50
+2026-03-09T23:32:08.483Z LOG   [MCP] processResponse called, text preview: part should be sticky and full-width. I'll create a .sticky { position: sticky; top: 0; left: 0; } class on the header element so it stays at the top when scrolling.
+
+For the navigation menus, I'll us
+2026-03-09T23:32:08.488Z LOG   [MCP] No formal tool calls found, trying fallback detection...
+2026-03-09T23:32:08.489Z LOG   [MCP] No fallback tool calls either
+2026-03-09T23:32:08.489Z LOG   [AI Chat] Agentic iteration 2/50
+2026-03-09T23:33:07.298Z LOG   [MCP] processResponse called, text preview: ```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SAS Marketplace</title>
+    <style>
+   
+2026-03-09T23:33:07.299Z LOG   [MCP] Executing 1 tool calls... (50ms pace)
+2026-03-09T23:33:07.300Z LOG   [MCPToolServer] Absolute path outside project for write_file: /eBay/buy.php
+2026-03-09T23:33:07.300Z LOG   [MCP] Executed tool: write_file result: failed
+2026-03-09T23:33:07.302Z LOG   [AI Chat] Agentic iteration 3/50
+2026-03-09T23:33:34.766Z LOG   [MCP] processResponse called, text preview: The current implementation of the file-sharing website was unable to correctly handle file paths. Specifically, when a user requested an upload for a file named "buy.php", the system incorrectly treat
+2026-03-09T23:33:34.768Z LOG   [MCP] No formal tool calls found, trying fallback detection...
+2026-03-09T23:33:34.769Z LOG   [MCP] No fallback tool calls either
+2026-03-09T23:33:34.769Z LOG   [AI Chat] No tool calls, ending agentic loop
+2026-03-09T23:34:58.305Z LOG   [LLM] Cancelling active generation before model switch
+2026-03-09T23:34:58.474Z ERROR [UnhandledRejection] Error: Object is disposed
+    at DisposeGuard.createPreventDisposalHandle (file:///C:/Program%20Files/guIDE/resources/app.asar/node_modules/node-llama-cpp/dist/utils/DisposeGuard.js:37:19)
+    at file:///C:/Program%20Files/guIDE/resources/app.asar/node_modules/node-llama-cpp/dist/evaluator/LlamaContext/LlamaContext.js:394:82
+    at async withLock (file:///C:/Program%20Files/guIDE/resources/app.asar/node_modules/lifecycle-utils/dist/withLock.js:23:16)
+2026-03-09T23:34:58.474Z ERROR [IDE] Unhandled rejection: Error: Object is disposed
+    at DisposeGuard.createPreventDisposalHandle (file:///C:/Program%20Files/guIDE/resources/app.asar/node_modules/node-llama-cpp/dist/utils/DisposeGuard.js:37:19)
+    at file:///C:/Program%20Files/guIDE/resources/app.asar/node_modules/node-llama-cpp/dist/evaluator/LlamaContext/LlamaContext.js:394:82
+    at async withLock (file:///C:/Program%20Files/guIDE/resources/app.asar/node_modules/lifecycle-utils/dist/withLock.js:23:16)
+2026-03-09T23:34:59.776Z WARN  [node-llama-cpp] load: control-looking token: 128247 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden
+2026-03-09T23:35:02.908Z WARN  23:35:02.908 [GPU mode cuda context too small (512), trying next mode]
+2026-03-09T23:35:02.908Z WARN  [GPU mode cuda context too small (512), trying next mode] 
+2026-03-09T23:35:06.757Z WARN  23:35:06.757 [GPU mode auto context too small (512), trying next mode]
+2026-03-09T23:35:06.757Z WARN  [GPU mode auto context too small (512), trying next mode] 
+2026-03-09T23:35:08.296Z WARN  [node-llama-cpp] load: control-looking token: 128247 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden
+2026-03-09T23:35:10.032Z WARN  23:35:10.032 [GPU mode 40 context too small (512), trying next mode]
+2026-03-09T23:35:10.032Z WARN  [GPU mode 40 context too small (512), trying next mode] 
+2026-03-09T23:35:10.742Z WARN  [node-llama-cpp] load: control-looking token: 128247 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden
+2026-03-09T23:35:12.748Z LOG   23:35:12.748 [Model loaded: Qwen3-4B-Instruct-2507-Q4_K_M.gguf (qwen/medium, ctx=12800, gpu=20)]
+2026-03-09T23:35:12.748Z INFO  [Model loaded: Qwen3-4B-Instruct-2507-Q4_K_M.gguf (qwen/medium, ctx=12800, gpu=20)] 
+2026-03-09T23:35:12.748Z LOG   23:35:12.748 [Chat wrapper: QwenChatWrapper]
+2026-03-09T23:35:12.748Z INFO  [Chat wrapper: QwenChatWrapper] 
+2026-03-09T23:35:16.640Z LOG   [AI Chat] Profile: qwen | ctx=12800 (hw=12800) | sysReserve=2501
+2026-03-09T23:35:16.643Z LOG   [AI Chat] Model: qwen (4B qwen) â€” tools=15, grammar=limited
+2026-03-09T23:35:16.643Z LOG   [AI Chat] Agentic iteration 1/50
+2026-03-09T23:44:25.240Z ERROR [UnhandledRejection] Error: Object is disposed
+    at LlamaContextSequence._ensureNotDisposed (file:///C:/Program%20Files/guIDE/resources/app.asar/node_modules/node-llama-cpp/dist/evaluator/LlamaContext/LlamaContext.js:1645:19)
+    at file:///C:/Program%20Files/guIDE/resources/app.asar/node_modules/node-llama-cpp/dist/evaluator/LlamaContext/LlamaContext.js:897:18
+    at withLock (file:///C:/Program%20Files/guIDE/resources/app.asar/node_modules/lifecycle-utils/dist/withLock.js:23:22)
+    at async LlamaContextSequence._eraseContextTokenRanges (file:///C:/Program%20Files/guIDE/resources/app.asar/node_modules/node-llama-cpp/dist/evaluator/LlamaContext/LlamaContext.js:896:9)
+2026-03-09T23:44:25.241Z ERROR [IDE] Unhandled rejection: Error: Object is disposed
+    at LlamaContextSequence._ensureNotDisposed (file:///C:/Program%20Files/guIDE/resources/app.asar/node_modules/node-llama-cpp/dist/evaluator/LlamaContext/LlamaContext.js:1645:19)
+    at file:///C:/Program%20Files/guIDE/resources/app.asar/node_modules/node-llama-cpp/dist/evaluator/LlamaContext/LlamaContext.js:897:18
+    at withLock (file:///C:/Program%20Files/guIDE/resources/app.asar/node_modules/lifecycle-utils/dist/withLock.js:23:22)
+    at async LlamaContextSequence._eraseContextTokenRanges (file:///C:/Program%20Files/guIDE/resources/app.asar/node_modules/node-llama-cpp/dist/evaluator/LlamaContext/LlamaContext.js:896:9)
+2026-03-09T23:44:25.242Z ERROR [UnhandledRejection] Error: Object is disposed
+    at DisposeGuard.createPreventDisposalHandle (file:///C:/Program%20Files/guIDE/resources/app.asar/node_modules/node-llama-cpp/dist/utils/DisposeGuard.js:37:19)
+    at file:///C:/Program%20Files/guIDE/resources/app.asar/node_modules/node-llama-cpp/dist/evaluator/LlamaContext/LlamaContext.js:394:82
+    at async withLock (file:///C:/Program%20Files/guIDE/resources/app.asar/node_modules/lifecycle-utils/dist/withLock.js:23:16)
+2026-03-09T23:44:25.243Z ERROR [IDE] Unhandled rejection: Error: Object is disposed
+    at DisposeGuard.createPreventDisposalHandle (file:///C:/Program%20Files/guIDE/resources/app.asar/node_modules/node-llama-cpp/dist/utils/DisposeGuard.js:37:19)
+    at file:///C:/Program%20Files/guIDE/resources/app.asar/node_modules/node-llama-cpp/dist/evaluator/LlamaContext/LlamaContext.js:394:82
+    at async withLock (file:///C:/Program%20Files/guIDE/resources/app.asar/node_modules/lifecycle-utils/dist/withLock.js:23:16)
+2026-03-09T23:44:25.244Z ERROR [UnhandledRejection] Error: Object is disposed
+    at LlamaContextSequence._ensureNotDisposed (file:///C:/Program%20Files/guIDE/resources/app.asar/node_modules/node-llama-cpp/dist/evaluator/LlamaContext/LlamaContext.js:1645:19)
+    at file:///C:/Program%20Files/guIDE/resources/app.asar/node_modules/node-llama-cpp/dist/evaluator/LlamaContext/LlamaContext.js:897:18
+    at withLock (file:///C:/Program%20Files/guIDE/resources/app.asar/node_modules/lifecycle-utils/dist/withLock.js:23:22)
+    at async LlamaContextSequence._eraseContextTokenRanges (file:///C:/Program%20Files/guIDE/resources/app.asar/node_modules/node-llama-cpp/dist/evaluator/LlamaContext/LlamaContext.js:896:9)
+2026-03-09T23:44:25.244Z ERROR [IDE] Unhandled rejection: Error: Object is disposed
+    at LlamaContextSequence._ensureNotDisposed (file:///C:/Program%20Files/guIDE/resources/app.asar/node_modules/node-llama-cpp/dist/evaluator/LlamaContext/LlamaContext.js:1645:19)
+    at file:///C:/Program%20Files/guIDE/resources/app.asar/node_modules/node-llama-cpp/dist/evaluator/LlamaContext/LlamaContext.js:897:18
+    at withLock (file:///C:/Program%20Files/guIDE/resources/app.asar/node_modules/lifecycle-utils/dist/withLock.js:23:22)
+    at async LlamaContextSequence._eraseContextTokenRanges (file:///C:/Program%20Files/guIDE/resources/app.asar/node_modules/node-llama-cpp/dist/evaluator/LlamaContext/LlamaContext.js:896:9)
+2026-03-09T23:44:30.035Z LOG   23:44:30.035 [Model loaded: Llama-3.2-3B-Instruct-Q4_K_S.gguf (llama/small, ctx=5888, gpu=cuda)]
+2026-03-09T23:44:30.036Z INFO  [Model loaded: Llama-3.2-3B-Instruct-Q4_K_S.gguf (llama/small, ctx=5888, gpu=cuda)] 
+2026-03-09T23:44:30.036Z LOG   23:44:30.036 [Chat wrapper: Llama3_2LightweightChatWrapper]
+2026-03-09T23:44:30.036Z INFO  [Chat wrapper: Llama3_2LightweightChatWrapper] 
+2026-03-09T23:44:31.666Z LOG   [AI Chat] Profile: llama | ctx=5888 (hw=5888) | sysReserve=1329
+2026-03-09T23:44:31.669Z LOG   [AI Chat] Model: llama (3B llama) â€” tools=14, grammar=limited
+2026-03-09T23:44:31.669Z LOG   [AI Chat] Agentic iteration 1/50
+2026-03-09T23:44:31.669Z LOG   [AI Chat] First-turn overflow guard: ~5144 tokens, ctx=5888, headroom=744
+2026-03-09T23:46:04.243Z LOG   [LLM] Generation stopped at maxTokens (6720 chars)
+2026-03-09T23:46:04.244Z LOG   [AI Chat] Continuation aborted: context at 92%
+2026-03-09T23:46:04.721Z LOG   [MCP] processResponse called, text preview: ```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>File Sharing Website</title>
+    <style
+2026-03-09T23:46:04.723Z LOG   [MCP] No formal tool calls found, trying fallback detection...
+2026-03-09T23:46:04.724Z LOG   [MCP] No fallback tool calls either
+2026-03-09T23:46:04.724Z LOG   [AI Chat] No tool calls, ending agentic loop
+2026-03-09T23:46:41.710Z LOG   [LLM] Cancelling active generation before model switch
+2026-03-09T23:46:42.625Z ERROR [UnhandledRejection] Error: Object is disposed
+    at LlamaContextSequence._ensureNotDisposed (file:///C:/Program%20Files/guIDE/resources/app.asar/node_modules/node-llama-cpp/dist/evaluator/LlamaContext/LlamaContext.js:1645:19)
+    at LlamaContextSequence._decodeTokens (file:///C:/Program%20Files/guIDE/resources/app.asar/node_modules/node-llama-cpp/dist/evaluator/LlamaContext/LlamaContext.js:1591:18)
+    at async LlamaContextSequence._evaluate (file:///C:/Program%20Files/guIDE/resources/app.asar/node_modules/node-llama-cpp/dist/evaluator/LlamaContext/LlamaContext.js:1261:42)
+    at async LlamaContextSequence.evaluateWithoutGeneratingNewTokens (file:///C:/Program%20Files/guIDE/resources/app.asar/node_modules/node-llama-cpp/dist/evaluator/LlamaContext/LlamaContext.js:1081:26)
+    at async LlamaContextSequence._eraseContextTokenRanges (file:///C:/Program%20Files/guIDE/resources/app.asar/node_modules/node-llama-cpp/dist/evaluator/LlamaContext/LlamaContext.js:980:13)
+2026-03-09T23:46:42.625Z ERROR [IDE] Unhandled rejection: Error: Object is disposed
+    at LlamaContextSequence._ensureNotDisposed (file:///C:/Program%20Files/guIDE/resources/app.asar/node_modules/node-llama-cpp/dist/evaluator/LlamaContext/LlamaContext.js:1645:19)
+    at LlamaContextSequence._decodeTokens (file:///C:/Program%20Files/guIDE/resources/app.asar/node_modules/node-llama-cpp/dist/evaluator/LlamaContext/LlamaContext.js:1591:18)
+    at async LlamaContextSequence._evaluate (file:///C:/Program%20Files/guIDE/resources/app.asar/node_modules/node-llama-cpp/dist/evaluator/LlamaContext/LlamaContext.js:1261:42)
+    at async LlamaContextSequence.evaluateWithoutGeneratingNewTokens (file:///C:/Program%20Files/guIDE/resources/app.asar/node_modules/node-llama-cpp/dist/evaluator/LlamaContext/LlamaContext.js:1081:26)
+    at async LlamaContextSequence._eraseContextTokenRanges (file:///C:/Program%20Files/guIDE/resources/app.asar/node_modules/node-llama-cpp/dist/evaluator/LlamaContext/LlamaContext.js:980:13)
+2026-03-09T23:46:42.626Z ERROR [UnhandledRejection] Error: Object is disposed
+    at LlamaContextSequence._ensureNotDisposed (file:///C:/Program%20Files/guIDE/resources/app.asar/node_modules/node-llama-cpp/dist/evaluator/LlamaContext/LlamaContext.js:1645:19)
+    at file:///C:/Program%20Files/guIDE/resources/app.asar/node_modules/node-llama-cpp/dist/evaluator/LlamaContext/LlamaContext.js:897:18
+    at withLock (file:///C:/Program%20Files/guIDE/resources/app.asar/node_modules/lifecycle-utils/dist/withLock.js:23:22)
+    at async LlamaContextSequence._eraseContextTokenRanges (file:///C:/Program%20Files/guIDE/resources/app.asar/node_modules/node-llama-cpp/dist/evaluator/LlamaContext/LlamaContext.js:896:9)
+2026-03-09T23:46:42.626Z ERROR [IDE] Unhandled rejection: Error: Object is disposed
+    at LlamaContextSequence._ensureNotDisposed (file:///C:/Program%20Files/guIDE/resources/app.asar/node_modules/node-llama-cpp/dist/evaluator/LlamaContext/LlamaContext.js:1645:19)
+    at file:///C:/Program%20Files/guIDE/resources/app.asar/node_modules/node-llama-cpp/dist/evaluator/LlamaContext/LlamaContext.js:897:18
+    at withLock (file:///C:/Program%20Files/guIDE/resources/app.asar/node_modules/lifecycle-utils/dist/withLock.js:23:22)
+    at async LlamaContextSequence._eraseContextTokenRanges (file:///C:/Program%20Files/guIDE/resources/app.asar/node_modules/node-llama-cpp/dist/evaluator/LlamaContext/LlamaContext.js:896:9)
+2026-03-09T23:46:44.061Z WARN  [node-llama-cpp] load: control-looking token: 128247 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden
+2026-03-09T23:46:46.393Z LOG   23:46:46.393 [Model loaded: Qwen3-1.7B-Q4_K_M.gguf (qwen/small, ctx=17152, gpu=cuda)]
+2026-03-09T23:46:46.393Z INFO  [Model loaded: Qwen3-1.7B-Q4_K_M.gguf (qwen/small, ctx=17152, gpu=cuda)] 
+2026-03-09T23:46:46.393Z LOG   23:46:46.393 [Chat wrapper: QwenChatWrapper]
+2026-03-09T23:46:46.393Z INFO  [Chat wrapper: QwenChatWrapper] 
+2026-03-09T23:46:48.616Z LOG   [AI Chat] Profile: qwen | ctx=17152 (hw=17152) | sysReserve=1329
+2026-03-09T23:46:48.620Z LOG   [AI Chat] Model: qwen (1.7B qwen) â€” tools=14, grammar=limited
+2026-03-09T23:46:48.620Z LOG   [AI Chat] Agentic iteration 1/50
+2026-03-09T23:46:57.541Z LOG   [AI Chat] ROLLBACK (empty) â€” retry 1/3
+2026-03-09T23:46:57.541Z LOG   [AI Chat] Agentic iteration 1/50
+2026-03-09T23:46:58.989Z LOG   [AI Chat] ROLLBACK (empty) â€” retry 2/3
+2026-03-09T23:46:58.989Z LOG   [AI Chat] Agentic iteration 1/50
+2026-03-09T23:47:00.530Z LOG   [AI Chat] ROLLBACK (empty) â€” retry 3/3
+2026-03-09T23:47:00.530Z LOG   [AI Chat] Agentic iteration 1/50
+2026-03-09T23:47:13.984Z LOG   [MCP] processResponse called, text preview: 
+2026-03-09T23:47:13.984Z LOG   [MCP] No formal tool calls found, trying fallback detection...
+2026-03-09T23:47:13.984Z LOG   [MCP] No fallback tool calls either
+2026-03-09T23:47:13.984Z LOG   [AI Chat] No tool calls, ending agentic loop
+2026-03-09T23:47:20.978Z LOG   [AI Chat] Profile: qwen | ctx=17152 (hw=17152) | sysReserve=1329
+2026-03-09T23:47:20.979Z LOG   [AI Chat] Model: qwen (1.7B qwen) â€” tools=14, grammar=limited
+2026-03-09T23:47:20.979Z LOG   [AI Chat] Agentic iteration 1/50
+2026-03-09T23:47:40.662Z LOG   [MCP] processResponse called, text preview: ```json
+{"tool":"list_directory","params":{"dirPath":"C:\\\\Users\\\\brend\\\\my-blank-appfghjk", "recursive":true}}
+```
+2026-03-09T23:47:40.664Z LOG   [MCP] Executing 1 tool calls... (50ms pace)
+2026-03-09T23:47:40.664Z LOG   [MCPToolServer] Sanitized hallucinated path "C:\\Users\\brend\\my-blank-appfghjk" â†’ "my-blank-appfghjk"
+2026-03-09T23:47:40.664Z LOG   [MCP] Executed tool: list_directory result: failed
+2026-03-09T23:47:40.666Z LOG   [AI Chat] Agentic iteration 2/50
+2026-03-09T23:48:43.696Z LOG   [MCP] processResponse called, text preview: Okay, let's see. The user is trying to work on a project in the directory C:\Users\brend\my-blank-appfghjk, but when they tried to list the directory using list_directory, there was an error: ENOENT, 
+2026-03-09T23:48:43.697Z LOG   [MCP] Executing 1 tool calls... (50ms pace)
+2026-03-09T23:48:43.698Z LOG   [MCP] Executed tool: create_directory result: success
+2026-03-09T23:48:43.699Z LOG   [AI Chat] Agentic iteration 3/50
+2026-03-09T23:49:16.533Z LOG   [MCP] processResponse called, text preview: The `create_directory` tool successfully created the required directory structure at `C:\Users\brend\my-blank-appfghjk\my-blank-appfghjk`. This ensures the project root exists, allowing further operat
+2026-03-09T23:49:16.535Z LOG   [MCP] No formal tool calls found, trying fallback detection...
+2026-03-09T23:49:16.535Z LOG   [MCP] No fallback tool calls either
+2026-03-09T23:49:16.536Z LOG   [AI Chat] No tool calls, ending agentic loop
+2026-03-09T23:49:45.463Z LOG   [LLM] Cancelling active generation before model switch
+2026-03-09T23:49:45.862Z ERROR [UnhandledRejection] Error: Object is disposed
+    at DisposeGuard.createPreventDisposalHandle (file:///C:/Program%20Files/guIDE/resources/app.asar/node_modules/node-llama-cpp/dist/utils/DisposeGuard.js:37:19)
+    at file:///C:/Program%20Files/guIDE/resources/app.asar/node_modules/node-llama-cpp/dist/evaluator/LlamaContext/LlamaContext.js:394:82
+    at async withLock (file:///C:/Program%20Files/guIDE/resources/app.asar/node_modules/lifecycle-utils/dist/withLock.js:23:16)
+2026-03-09T23:49:45.863Z ERROR [IDE] Unhandled rejection: Error: Object is disposed
+    at DisposeGuard.createPreventDisposalHandle (file:///C:/Program%20Files/guIDE/resources/app.asar/node_modules/node-llama-cpp/dist/utils/DisposeGuard.js:37:19)
+    at file:///C:/Program%20Files/guIDE/resources/app.asar/node_modules/node-llama-cpp/dist/evaluator/LlamaContext/LlamaContext.js:394:82
+    at async withLock (file:///C:/Program%20Files/guIDE/resources/app.asar/node_modules/lifecycle-utils/dist/withLock.js:23:16)
+2026-03-09T23:49:47.089Z WARN  [node-llama-cpp] load: control-looking token: 128247 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden
+2026-03-09T23:49:48.613Z LOG   23:49:48.613 [Model loaded: Qwen3-0.6B-Q8_0.gguf (qwen/tiny, ctx=21248, gpu=cuda)]
+2026-03-09T23:49:48.613Z INFO  [Model loaded: Qwen3-0.6B-Q8_0.gguf (qwen/tiny, ctx=21248, gpu=cuda)] 
+2026-03-09T23:49:48.613Z LOG   23:49:48.613 [Chat wrapper: QwenChatWrapper]
+2026-03-09T23:49:48.613Z INFO  [Chat wrapper: QwenChatWrapper] 
+2026-03-09T23:49:50.722Z LOG   [AI Chat] Profile: qwen | ctx=21248 (hw=21248) | sysReserve=1109
+2026-03-09T23:49:50.724Z LOG   [AI Chat] Model: qwen (0.6B qwen) â€” tools=10, grammar=limited
+2026-03-09T23:49:50.725Z LOG   [AI Chat] Agentic iteration 1/50
+2026-03-09T23:50:39.647Z LOG   [MCP] processResponse called, text preview: Okay, let's tackle this problem. The user wants me to design a fully functional file-sharing website from scratch as an HTML file with all CSS and JS embedded inline or in <style> tags. They specified
+2026-03-09T23:50:39.649Z LOG   [MCP] Executing 1 tool calls... (50ms pace)
+2026-03-09T23:50:39.652Z LOG   [MCP] Executed tool: write_file result: success
+2026-03-09T23:50:39.657Z LOG   [AI Chat] Agentic iteration 2/50
+2026-03-09T23:51:03.142Z LOG   [MCP] processResponse called, text preview: The task was completed successfully by implementing all required features into a single HTML file without external dependencies. All styling and JavaScript were embedded directly within the `<html>` t
+2026-03-09T23:51:03.144Z LOG   [MCP] No formal tool calls found, trying fallback detection...
+2026-03-09T23:51:03.144Z LOG   [MCP] No fallback tool calls either
+2026-03-09T23:51:03.145Z LOG   [AI Chat] No tool calls, ending agentic loop
+2026-03-09T23:51:50.557Z LOG   [AI Chat] Profile: qwen | ctx=21248 (hw=21248) | sysReserve=1109
+2026-03-09T23:51:50.558Z LOG   [AI Chat] Model: qwen (0.6B qwen) â€” tools=10, grammar=limited
+2026-03-09T23:51:50.558Z LOG   [AI Chat] Agentic iteration 1/50
+2026-03-09T23:52:07.954Z LOG   [MCP] processResponse called, text preview: The file `index.html` represents a visually stunning, interactive file-sharing website designed for users to upload, download, manage, and share files securely. It includes:
+
+1. **Dark Theme**: A blac
+2026-03-09T23:52:07.956Z LOG   [MCP] No formal tool calls found, trying fallback detection...
+2026-03-09T23:52:07.956Z LOG   [MCP] No fallback tool calls either
+2026-03-09T23:52:07.956Z LOG   [AI Chat] No tool calls, ending agentic loop
+2026-03-09T23:53:12.700Z LOG   23:53:12.699 [Terminal] Destroyed terminal 1
+2026-03-09T23:53:12.700Z INFO  [Terminal] Destroyed terminal 1

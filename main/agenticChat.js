@@ -630,6 +630,10 @@ function register(ctx) {
         }
       }
 
+      // Memory context (project facts, code patterns) — belongs in system prompt, not user message
+      const memoryContext = memoryStore.getContextPrompt();
+      if (memoryContext) appendIfBudget('\n' + memoryContext + '\n');
+
       _staticPromptCache.set(cacheKey, prompt);
       return prompt;
     };
@@ -644,9 +648,7 @@ function register(ctx) {
         return false;
       };
 
-      // Memory
-      const memoryContext = memoryStore.getContextPrompt();
-      if (memoryContext) appendIfBudget(memoryContext + '\n');
+      // Memory context is injected into system prompt (buildStaticPrompt), not user message
 
       // Error context
       if (context?.errorMessage) {

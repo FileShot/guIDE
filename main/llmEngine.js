@@ -18,6 +18,7 @@ const CTX_CREATE_TIMEOUT_GPU = 15_000;
 const CTX_CREATE_TIMEOUT_CPU = 60_000;
 const DISPOSE_TIMEOUT = 10_000;
 const MIN_AGENTIC_CONTEXT = 4096;
+const MIN_USABLE_GPU_CONTEXT = 8192;
 const TOOL_DETECT_BUFFER_MAX = 60_000;
 const KV_REUSE_COOLDOWN_TURNS = 2;
 const MAX_PARALLEL_FUNCTION_CALLS = 4;
@@ -287,9 +288,10 @@ class LLMEngine extends EventEmitter {
           let maxCtx = this._computeMaxContext(gpuConfig.modelSizeGB);
           // CPU mode: cap context for responsive generation
           if (mode === false) maxCtx = Math.min(maxCtx, 8192);
+          const contextMin = (mode === false) ? 512 : MIN_USABLE_GPU_CONTEXT;
           loadedContext = await this._withTimeout(
             loadedModel.createContext({
-              contextSize: { min: 512, max: maxCtx },
+              contextSize: { min: contextMin, max: maxCtx },
               flashAttention: true,
               ignoreMemorySafetyChecks: true,
               failedCreationRemedy: { retries: 4, autoContextSizeShrink: 0.5 },
@@ -298,9 +300,9 @@ class LLMEngine extends EventEmitter {
             'Context creation',
           );
 
-          // Verify context is usable (at least 512 tokens after system prompt)
+          // Verify context is usable (need enough for system prompt + meaningful generation)
           const actualCtx = loadedContext.contextSize || 0;
-          if (actualCtx < 1024 && mode !== false) {
+          if (actualCtx < MIN_USABLE_GPU_CONTEXT && mode !== false) {
             const log = require('./logger');
             log.warn(`GPU mode ${mode} context too small (${actualCtx}), trying next mode`);
             loadedContext.dispose?.();
@@ -1071,16 +1073,12 @@ class LLMEngine extends EventEmitter {
       try { this.chat.dispose?.(); } catch {}
     }
 
-    // Reuse existing sequence — just clear KV cache
-    if (this.sequence && !this.sequence._disposed) {
-      try {
-        // Await the erase to prevent race with pending async operations
-        await this.sequence.eraseContextTokenRanges([{ start: 0, end: this.sequence.nTokens }]);
-      } catch {
-        // If erase fails (e.g. sequence disposed mid-flight), get a new sequence
-        try { this.sequence = this.context.getSequence(); } catch { /* context may also be gone */ }
-      }
-    } else if (this.context) {
+    // Dispose old sequence and get a fresh one (avoids eraseContextTokenRanges hang on degraded KV cache)
+    if (this.sequence) {
+      try { this.sequence.dispose?.(); } catch {}
+      this.sequence = null;
+    }
+    if (this.context) {
       this.sequence = this.context.getSequence();
     }
 

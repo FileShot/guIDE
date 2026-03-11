@@ -204,7 +204,30 @@ function pruneVerboseHistory(chatHistory, keepRecentCount = 6) {
 
   for (let i = 1; i < cutoff; i++) {
     const msg = chatHistory[i];
-    if (!msg || !msg.text || msg.text.length < 800) continue;
+    if (!msg) continue;
+
+    // Handle model responses: { type: 'model', response: [text] }
+    if (msg.type === 'model' && Array.isArray(msg.response)) {
+      let changed = false;
+      for (let ri = 0; ri < msg.response.length; ri++) {
+        const r = msg.response[ri];
+        if (typeof r !== 'string' || r.length < 800) continue;
+        let compressed = r;
+        compressed = compressed.replace(
+          /```[\s\S]{800,}?```/g,
+          (match) => `\`\`\`\n[${(match.match(/\n/g) || []).length} lines — pruned]\n\`\`\``
+        );
+        if (compressed.length < r.length * 0.7) {
+          msg.response[ri] = compressed;
+          changed = true;
+        }
+      }
+      if (changed) pruned++;
+      continue;
+    }
+
+    // Handle user/system messages: { type: 'user'|'system', text: '...' }
+    if (!msg.text || msg.text.length < 800) continue;
 
     let compressed = msg.text;
     compressed = compressed.replace(

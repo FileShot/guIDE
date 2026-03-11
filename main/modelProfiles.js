@@ -83,10 +83,11 @@ const FAMILY_PROFILES = {
       quirks: { truncatesMidTool: true, poorMultiTool: true },
     },
     small: {
-      sampling: { temperature: 0.5, topP: 0.88, topK: 25, repeatPenalty: 1.08 },
+      sampling: { temperature: 0.35, topP: 0.88, topK: 25, repeatPenalty: 1.12, lastTokensPenaltyCount: 512 },
       prompt: { style: 'compact', fewShotExamples: 1 },
       thinkTokens: { mode: 'none', budget: 0, _thinkBudgetWhenActive: 256 },
       generation: { maxToolsPerTurn: 14 },
+      quirks: { poorMultiTool: true },
     },
     medium: {
       sampling: { temperature: 0.55, topP: 0.90, topK: 30, repeatPenalty: 1.05 },

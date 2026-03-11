@@ -464,9 +464,31 @@ function register(ctx) {
 
     memoryStore.addConversation('assistant', fullCloudResponse);
 
-    // Clean up display
+    // Clean up display — strip inline JSON tool calls with proper brace matching
     let cleanResponse = fullCloudResponse;
-    cleanResponse = cleanResponse.replace(/\[?\s*\{\s*"(?:tool|name)"\s*:\s*"[^"]*"[\s\S]*?\}\s*\]?/g, '');
+    {
+      const toolPat = /\[?\s*\{\s*"(?:tool|name)"\s*:\s*"/g;
+      let tm;
+      const ranges = [];
+      while ((tm = toolPat.exec(cleanResponse)) !== null) {
+        const bs = cleanResponse.indexOf('{', tm.index);
+        let d = 1, ci = bs + 1;
+        while (ci < cleanResponse.length && d > 0) {
+          if (cleanResponse[ci] === '{') d++;
+          else if (cleanResponse[ci] === '}') d--;
+          ci++;
+        }
+        if (d === 0) {
+          let end = ci;
+          const after = cleanResponse.slice(end).match(/^\s*\]?/);
+          if (after) end += after[0].length;
+          ranges.push([tm.index, end]);
+        }
+      }
+      for (let ri = ranges.length - 1; ri >= 0; ri--) {
+        cleanResponse = cleanResponse.slice(0, ranges[ri][0]) + cleanResponse.slice(ranges[ri][1]);
+      }
+    }
     cleanResponse = cleanResponse.replace(/\n{3,}/g, '\n\n').trim();
 
     // Context usage
@@ -666,7 +688,7 @@ function register(ctx) {
         const maxChunks = tokenBudget > 2000 ? 5 : tokenBudget > 1000 ? 3 : 1;
         const ragContext = ragEngine.getContextForQuery(message, maxChunks, tokenBudget * 2);
         if (ragContext.chunks.length > 0) {
-          let ragSection = '## Relevant Code from Project\n\n';
+          appendIfBudget('## Relevant Code from Project\n\n');
           for (const chunk of ragContext.chunks) {
             if (!appendIfBudget(`### ${chunk.file}\n\`\`\`\n${chunk.content}\n\`\`\`\n\n`)) break;
           }
@@ -850,7 +872,12 @@ function register(ctx) {
 
       // ── Transactional Checkpoint ──
       const checkpoint = {
-        chatHistory: llmEngine.chatHistory ? llmEngine.chatHistory.map(h => ({ ...h })) : null,
+        chatHistory: llmEngine.chatHistory ? llmEngine.chatHistory.map(h => {
+          if (h.type === 'model' && Array.isArray(h.response)) {
+            return { ...h, response: [...h.response] };
+          }
+          return { ...h };
+        }) : null,
         lastEvaluation: llmEngine.lastEvaluation,
       };
 
@@ -1059,7 +1086,7 @@ function register(ctx) {
       try {
         const total = totalCtx;
         let used = 0;
-        try { if (llmEngine.sequence?.nTokens) used = llmEngine.sequence.nTokens; } catch (_) {}
+        try { if (llmEngine.sequence?.nextTokenIndex) used = llmEngine.sequence.nextTokenIndex; } catch (_) {}
         if (!used) {
           const promptLen = typeof currentPrompt === 'string' ? currentPrompt.length : ((currentPrompt.systemContext || '').length + (currentPrompt.userMessage || '').length);
           used = Math.ceil((promptLen + (result.text || '').length) / 4);
@@ -1129,9 +1156,33 @@ function register(ctx) {
       // Strip tool fences and raw inline JSON tool calls from display copy
       let displayChunk = newContent
         .replace(/\n?```(?:json|tool_call|tool)\b[\s\S]*?```\n?/g, '')
-        .replace(/\n?```(?:json|tool_call|tool)\b[\s\S]*$/g, '')
-        .replace(/\[?\s*\{\s*"(?:tool|name)"\s*:\s*"[^"]*"[\s\S]*?\}\s*\]?/g, '')
-        .replace(/\n{3,}/g, '\n\n');
+        .replace(/\n?```(?:json|tool_call|tool)\b[\s\S]*$/g, '');
+      // Strip inline JSON tool calls with proper brace matching (handles nested objects)
+      {
+        const toolPattern = /\[?\s*\{\s*"(?:tool|name)"\s*:\s*"/g;
+        let tm;
+        const ranges = [];
+        while ((tm = toolPattern.exec(displayChunk)) !== null) {
+          const braceStart = displayChunk.indexOf('{', tm.index);
+          let depth = 1, ci = braceStart + 1;
+          while (ci < displayChunk.length && depth > 0) {
+            if (displayChunk[ci] === '{') depth++;
+            else if (displayChunk[ci] === '}') depth--;
+            ci++;
+          }
+          if (depth === 0) {
+            let end = ci;
+            const after = displayChunk.slice(end).match(/^\s*\]?/);
+            if (after) end += after[0].length;
+            ranges.push([tm.index, end]);
+          }
+        }
+        // Remove matched ranges in reverse to preserve indices
+        for (let ri = ranges.length - 1; ri >= 0; ri--) {
+          displayChunk = displayChunk.slice(0, ranges[ri][0]) + displayChunk.slice(ranges[ri][1]);
+        }
+      }
+      displayChunk = displayChunk.replace(/\n{3,}/g, '\n\n');
       if (continuationCount > 0) {
         displayChunk = displayChunk.replace(/\[(?:Continue your response|You were generating a tool call)[\s\S]*?\]/gi, '');
       }
@@ -1199,7 +1250,7 @@ function register(ctx) {
         let contContextPct = 0;
         try {
           let contUsed = 0;
-          try { if (llmEngine.sequence?.nTokens) contUsed = llmEngine.sequence.nTokens; } catch (_) {}
+          try { if (llmEngine.sequence?.nextTokenIndex) contUsed = llmEngine.sequence.nextTokenIndex; } catch (_) {}
           if (!contUsed) {
             const pLen = typeof currentPrompt === 'string' ? currentPrompt.length : ((currentPrompt.systemContext || '').length + (currentPrompt.userMessage || '').length);
             contUsed = Math.ceil((pLen + fullResponseText.length) / 4);
@@ -1257,6 +1308,28 @@ function register(ctx) {
 
           // Track output sizes for pattern detection (Step 9)
           _contCharSizes.push(responseText.length);
+
+          // Content-overlap detection: check if new response recycles content already in fullResponseText
+          // This catches the pattern where model repeats chapter bodies with incrementing headers
+          if (_contRepeatCount < 2 && fullResponseText.length > 500 && responseText.length > 200) {
+            const priorText = fullResponseText.slice(0, fullResponseText.length - responseText.length);
+            if (priorText.length > 200) {
+              const CHUNK_SIZE = 150;
+              const SAMPLE_COUNT = 6;
+              const step = Math.max(1, Math.floor((responseText.length - CHUNK_SIZE) / SAMPLE_COUNT));
+              let foundCount = 0;
+              let totalSamples = 0;
+              for (let si = 0; si < responseText.length - CHUNK_SIZE && totalSamples < SAMPLE_COUNT; si += step) {
+                totalSamples++;
+                const chunk = responseText.slice(si, si + CHUNK_SIZE);
+                if (priorText.includes(chunk)) foundCount++;
+              }
+              if (totalSamples > 0 && foundCount / totalSamples >= 0.5) {
+                _contRepeatCount += 2; // immediately trigger abort threshold
+                console.log(`[AI Chat] Content-overlap detected: ${foundCount}/${totalSamples} chunks found in prior output`);
+              }
+            }
+          }
 
           // Hard total accumulated char limit: stop runaway continuation
           const MAX_CONTINUATION_CHARS = 50000;
@@ -1341,7 +1414,7 @@ function register(ctx) {
       // ── Progressive Context Compaction ──
       try {
         let contextUsed = 0;
-        try { if (llmEngine.sequence?.nTokens) contextUsed = llmEngine.sequence.nTokens; } catch (_) {}
+        try { if (llmEngine.sequence?.nextTokenIndex) contextUsed = llmEngine.sequence.nextTokenIndex; } catch (_) {}
         if (!contextUsed) {
           const pLen = typeof currentPrompt === 'string' ? currentPrompt.length : ((currentPrompt.systemContext || '').length + (currentPrompt.userMessage || '').length);
           contextUsed = Math.ceil((pLen + fullResponseText.length) / 4);
@@ -1427,11 +1500,12 @@ function register(ctx) {
         }
 
         // Code-dump nudge — detect large code blocks (fenced or raw) that should be files
-        const _codeBlockMatch = responseText.match(/```(?:html?|css|javascript|js|typescript|ts|python|py|json)\s*\n([\s\S]*?)```/i);
-        const hasCodeBlocks = _codeBlockMatch && _codeBlockMatch[1].length > 500;
+        const _allCodeBlocks = [...responseText.matchAll(/```(?:html?|css|javascript|js|typescript|ts|python|py|json)\s*\n([\s\S]*?)```/gi)];
+        const hasCodeBlocks = _allCodeBlocks.some(m => m[1].length > 500);
         // Also detect unclosed code fences (model hit maxTokens before closing ```)
+        // Only match if the captured tail does NOT contain a closing ``` (truly unclosed)
         const _unclosedFenceMatch = !hasCodeBlocks && responseText.match(/```(?:html?|css|javascript|js|typescript|ts|python|py|json)\s*\n([\s\S]{500,})$/i);
-        const hasUnclosedLargeBlock = !!_unclosedFenceMatch;
+        const hasUnclosedLargeBlock = !!_unclosedFenceMatch && !_unclosedFenceMatch[1].includes('```');
         // Detect raw HTML/code dumped without fences (model obeyed "no code blocks" but didn't use write_file)
         // Requires STRUCTURAL HTML document tags (<!DOCTYPE, <html, <head, <body) to avoid false
         // positives on plain-text descriptions that mention individual element names like <div>, <section>.
@@ -1446,7 +1520,7 @@ function register(ctx) {
         let contextTooSmallForNudge = false;
         if (totalCtx <= 4096) {
           let _nudgeUsed = 0;
-          try { if (llmEngine.sequence?.nTokens) _nudgeUsed = llmEngine.sequence.nTokens; } catch (_) {}
+          try { if (llmEngine.sequence?.nextTokenIndex) _nudgeUsed = llmEngine.sequence.nextTokenIndex; } catch (_) {}
           if (_nudgeUsed > 0 && _nudgeUsed / totalCtx > 0.50) contextTooSmallForNudge = true;
         }
 
@@ -1621,8 +1695,30 @@ function register(ctx) {
     cleanResponse = cleanResponse.replace(/\n?```(?:json|tool_call|tool)\b[\s\S]*?```\n?/g, '');
     cleanResponse = cleanResponse.replace(/\n?```(?:json|tool_call|tool)\b[\s\S]*/g, '');
     cleanResponse = cleanResponse.replace(/^\s*```\s*$/gm, '');
-    // Strip raw inline JSON tool calls (same regex the cloud path uses)
-    cleanResponse = cleanResponse.replace(/\[?\s*\{\s*"(?:tool|name)"\s*:\s*"[^"]*"[\s\S]*?\}\s*\]?/g, '');
+    // Strip raw inline JSON tool calls with proper brace matching (handles nested objects)
+    {
+      const toolPat = /\[?\s*\{\s*"(?:tool|name)"\s*:\s*"/g;
+      let tm;
+      const ranges = [];
+      while ((tm = toolPat.exec(cleanResponse)) !== null) {
+        const bs = cleanResponse.indexOf('{', tm.index);
+        let d = 1, ci = bs + 1;
+        while (ci < cleanResponse.length && d > 0) {
+          if (cleanResponse[ci] === '{') d++;
+          else if (cleanResponse[ci] === '}') d--;
+          ci++;
+        }
+        if (d === 0) {
+          let end = ci;
+          const after = cleanResponse.slice(end).match(/^\s*\]?/);
+          if (after) end += after[0].length;
+          ranges.push([tm.index, end]);
+        }
+      }
+      for (let ri = ranges.length - 1; ri >= 0; ri--) {
+        cleanResponse = cleanResponse.slice(0, ranges[ri][0]) + cleanResponse.slice(ranges[ri][1]);
+      }
+    }
     cleanResponse = cleanResponse.replace(/\n{3,}/g, '\n\n').trim();
 
     if (!cleanResponse) {
@@ -1717,7 +1813,7 @@ function preGenerationContextCheck(opts) {
     buildDynamicContext, maxPromptTokens, message, continuationCount, _pendingPartialBlock, mcpToolServer } = opts;
 
   let used = 0;
-  try { if (llmEngine.sequence?.nTokens) used = llmEngine.sequence.nTokens; } catch (_) {}
+  try { if (llmEngine.sequence?.nextTokenIndex) used = llmEngine.sequence.nextTokenIndex; } catch (_) {}
   if (!used) {
     const pLen = typeof currentPrompt === 'string' ? currentPrompt.length : ((currentPrompt.systemContext || '').length + (currentPrompt.userMessage || '').length);
     used = Math.ceil((pLen + fullResponseText.length) / 4);

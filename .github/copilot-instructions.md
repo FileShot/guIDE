@@ -14,13 +14,40 @@
 - Start any cloudflared tunnel process
 - Run any ecosystem config (`ecosystem.config.cjs`, etc.)
 
-**The production server is a SEPARATE PHYSICAL COMPUTER.** It runs all 8 sites. You cannot run local terminal commands on it. Manage it via https://cp.graysoft.dev (password: `diggabyte2026`, PIN: `0615`).
+**The production server is a SEPARATE PHYSICAL COMPUTER.** It runs all 8 sites. You cannot run local terminal commands on it.
 
-**As of March 7, 2026: cp.graysoft.dev now has a built-in Terminal** (click the `⏎ Terminal` button in the CP header). This opens a live PowerShell session directly on the production server (`C:\SelfHost`). Use this for any task that requires running commands on the server — installing software, running scripts, checking processes, etc. You have full control.
-
-**Violating this rule causes production downtime for real users. Every time you start a process here it conflicts with the real server. This is not a warning — it is a hard rule.**
+**Violating these rules causes production downtime for real users. Every time you start a process here it conflicts with the real server. This is not a warning — it is a hard rule.**
 
 **If you are about to run pm2 or start any server process: STOP. Do not do it. There is no scenario where it is correct.**
+
+---
+
+## 🚨 RULE ZERO — SERVER IS 100% OFF LIMITS — NO EXCEPTIONS — EVER
+
+**THIS RULE IS ABSOLUTE. THERE ARE ZERO EXCEPTIONS. ZERO SCENARIOS. ZERO EDGE CASES.**
+
+**AGENTS ARE PERMANENTLY AND ABSOLUTELY FORBIDDEN FROM:**
+- Using the CP dashboard (cp.graysoft.dev) for ANY reason — navigating to it, logging in, clicking anything
+- Restarting, stopping, starting, or touching ANY PM2 process in any way — not pm2 start, not pm2 restart, not pm2 reload, not pm2 stop, not pm2 kill, not pm2 save, not pm2 resurrect, not pm2 anything
+- Running ANY rebuild, redeploy, or server action of any kind
+- Using the CP Terminal to run commands on the production server
+- Navigating a browser to cp.graysoft.dev for any purpose whatsoever
+- Telling the user "I'll restart the service" — you will not, ever
+- Triggering ANY build on the server — not npm run build, not any build command
+- Clicking ANY button on the CP — not build, not restart, not anything
+- Opening the CP in a browser tab, iframe, fetch, or any other mechanism
+- Using the CP terminal for ANY command — not even to check status
+- Running ANY command that affects the production server's state
+
+**THE USER MANAGES ALL SERVER OPERATIONS. PERIOD. FULL STOP.**
+
+Your job is EDITING FILES. Nothing else touches the server. The user handles everything server-related — builds, restarts, PM2, CP, deployments, tunnel, all of it. When you finish editing files, you say: "I've made these changes. You'll need to rebuild/restart when ready." That is the ONLY acceptable server-related statement.
+
+**THERE IS NO SCENARIO WHERE AN AGENT SHOULD TOUCH THE SERVER.** Not after a backend change. Not after an env change. Not after a config change. Not after any change. Not "just to check." Not "just to verify." Not "to confirm the deploy." NEVER. The user will handle it on their own schedule.
+
+**If you are about to interact with pm2, cp.graysoft.dev, or any server process: STOP IMMEDIATELY. You are about to violate the most critical rule in this entire file. There is no justification. There is no exception. Do not do it.**
+
+**Violation of this rule destroys production for real users. It is the single most destructive action an agent can take.**
 
 ---
 
@@ -708,3 +735,98 @@ Before outputting ANY analysis of a bug, ask yourself:
 **"I traced the failure modes visible in logs" is NOT the same as "I traced the full pipeline." Logs only show what was logged. The full pipeline must be read from source, not inferred from logs alone.**
 
 **If you find yourself writing "I traced the relevant code" without having listed every function by name — you are lying. Stop. Do the actual trace.**
+
+---
+
+## STRESS TESTING RULES — NON-NEGOTIABLE
+
+Added 2026-03-11. These rules govern ALL testing loops, whether using the pipeline-clone harness or manual prompting. No exceptions.
+
+### No Cheerleading — EVER
+- Do NOT celebrate test results. Do NOT say "great results", "strong performance", "looking good", "improvement", or any positive framing.
+- Report ONLY defects and specific factual observations. If nothing is wrong, say exactly what was checked and that no defect was found in that specific dimension — do not characterize this as "good."
+- The purpose of testing is to FIND PROBLEMS. If you find zero problems, your testing is probably not rigorous enough. Increase difficulty.
+- Every test report must be written as if reporting to a hostile quality auditor who will fire you if a user finds a bug you missed.
+
+### No Hand-Holding the Test
+- Do NOT craft prompts designed to make the model succeed. Craft prompts that a REAL USER would type.
+- Do NOT simplify prompts to avoid known failure modes. The whole point is to hit failure modes.
+- Do NOT reduce scope to avoid triggering context rotation or continuation — THESE ARE THE THINGS TO TEST.
+- Include ambiguous phrasing, multi-part requests, follow-up questions, and context-heavy tasks.
+
+### Never Modify Code to Pass a Test
+- If a test reveals a failure, REPORT the failure. Do NOT modify the codebase to make the test pass.
+- Testing is observation, not intervention. The codebase is frozen during a test loop.
+- If a test reveals a genuine bug that needs fixing, log it in CHANGES_LOG.md as a finding and move on.
+- The ONLY code changes allowed during a test loop are to the test harness itself (e.g., fixing a broken assertion, not adding assertions to pass).
+
+### What to Test — Mandatory Dimensions
+Every stress test session MUST cover ALL of these:
+1. **Context rotation** — prompts long enough to fill context and trigger rotation. Verify the model doesn't lose track of the original task.
+2. **Seamless continuation** — responses that hit maxTokens. Verify content stitches together without duplication, gaps, or lost coherence.
+3. **Tool use during continuation** — verify tools are correctly called mid-continuation, not duplicated or dropped.
+4. **Code generation spanning continuations** — verify code blocks don't break, get duplicated, or get text injected into them.
+5. **Simple chat quality** — "hi", "what's 2+2", "explain recursion" — verify no contamination, hallucination, or bizarre behavior.
+
+### How to Judge Response Quality — Mandatory
+For EVERY test response, evaluate and report these dimensions:
+1. **Content integrity at seams** — Is there duplicate text at continuation boundaries? Missing text? Sentence fragments?
+2. **Coherence across rotations** — After context rotation, does the model remember its task? Does it restart from scratch?
+3. **Code block integrity** — Are code blocks properly opened and closed? Is there plain text inside code blocks or code outside blocks?
+4. **Factual accuracy** — Does the model answer correctly? Is the content relevant to what was asked?
+5. **Contamination check** — Does the response mention "project facts", "project_path", file indexing, or other injected metadata that the user didn't ask about?
+
+### Reporting Format — Mandatory
+Every test result MUST be reported in this format:
+```
+TEST: [prompt summary]
+CONTEXT SIZE: [tokens at time of test]
+CONTINUATION TRIGGERED: [yes/no, count]
+CONTEXT ROTATION TRIGGERED: [yes/no, count]
+RESPONSE LENGTH: [chars]
+DEFECTS FOUND:
+  - [specific defect with exact quote showing the problem, or "None found in [specific dimensions checked]"]
+CONTENT INTEGRITY: [specific assessment]
+OVERALL: [specific factual assessment, NO cheerleading]
+```
+
+### EXPLICIT: What IS ALLOWED During Testing
+1. Running the stress-test harness or manual prompts against pipeline-clone
+2. Reading and evaluating FULL response text for every test
+3. Reporting defects with exact quotes showing the problem
+4. Logging findings as defects in CHANGES_LOG.md
+5. Fixing the test harness itself (broken assertion, wrong threshold) — NOT adding assertions to pass
+6. Increasing test difficulty when no defects are found
+
+### EXPLICIT: What IS ALLOWED During Fix Iterations (ONLY these 5 levers)
+1. System prompt / preamble text — `pipeline-clone/main/constants.js`
+2. Tool descriptions — `pipeline-clone/main/mcpToolServer.js`
+3. Sampling parameters — `pipeline-clone/main/modelProfiles.js`
+4. Grammar constraints — `pipeline-clone/main/modelProfiles.js`
+5. Few-shot examples — `pipeline-clone/main/modelProfiles.js`
+- ONE change per iteration. Not two. Not three.
+- State what changed, in which file, at which line, and what behavior should differ.
+- If a change makes results worse, revert IMMEDIATELY and log the revert in CHANGES_LOG.md.
+
+### EXPLICIT: What is BANNED During Testing and Fix Loops
+- Modifying application code (llmEngine.js, agenticChat.js, tool implementations, src/) to pass tests
+- Adding `responseContains` strings the model already outputs (teaching to the test)
+- Adding `DON'T` rules to the system prompt to target one failing test scenario
+- Adding `DO` rules to force a specific behavior for one test scenario
+- Cheerleading, positive framing, or saying "improvement" about test results
+- Crafting easy prompts designed to make the model succeed
+- Reducing scope to avoid triggering context rotation or continuation
+- Blaming model size or capability for failures
+- Blaming context window for failures
+- Running tests when VRAM < 2800MB free — results are meaningless
+- Calling a run "better" without reading every response text
+- Skipping the 3-dimension scoring for ANY test (coherence, tool correctness, response quality)
+
+### Checkpoint Rules During Test Loops
+- After every 3 tests, re-read this testing rules section (ALLOWED vs BANNED)
+- After every 5 tests, re-read the full copilot-instructions.md
+- After EVERY fix iteration, verify the fix is GENERAL (would help all users) not test-specific
+- After EVERY fix iteration, re-run affected tests and compare before/after
+- If you catch yourself using positive framing, stop and rewrite the report
+- If all tests pass, INCREASE DIFFICULTY — longer prompts, more complex tasks, more turns
+- Before reporting final findings, re-read copilot-instructions.md one final time

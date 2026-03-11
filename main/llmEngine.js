@@ -644,7 +644,7 @@ class LLMEngine extends EventEmitter {
         text: sanitized,
         rawText: fullResponse,
         model: this.modelInfo?.name || 'unknown',
-        tokensUsed: this.sequence?.nTokens || 0,
+        tokensUsed: this.sequence?.nextTokenIndex || 0,
         contextUsed: this.context?.contextSize || 0,
         stopReason: finalStopReason,
       };
@@ -663,9 +663,9 @@ class LLMEngine extends EventEmitter {
     const useKvCache = this._kvReuseCooldown <= 0 && this.lastEvaluation;
 
     // EOS-sequence protection: clear sequence if not reusing KV cache
-    if (!useKvCache && this.sequence && this.sequence.nTokens > 0) {
+    if (!useKvCache && this.sequence && this.sequence.nextTokenIndex > 0) {
       try {
-        this.sequence.eraseContextTokenRanges([{ start: 0, end: this.sequence.nTokens }]);
+        this.sequence.eraseContextTokenRanges([{ start: 0, end: this.sequence.nextTokenIndex }]);
       } catch {}
     }
 
@@ -709,7 +709,7 @@ class LLMEngine extends EventEmitter {
         text: sanitized,
         rawText: fullResponse,
         model: this.modelInfo?.name || 'unknown',
-        tokensUsed: this.sequence?.nTokens || 0,
+        tokensUsed: this.sequence?.nextTokenIndex || 0,
         contextUsed: this.context?.contextSize || 0,
         stopReason: 'tool_call',
       };
@@ -722,7 +722,7 @@ class LLMEngine extends EventEmitter {
         text: partial,
         rawText: fullResponse,
         model: this.modelInfo?.name || 'unknown',
-        tokensUsed: this.sequence?.nTokens || 0,
+        tokensUsed: this.sequence?.nextTokenIndex || 0,
         contextUsed: this.context?.contextSize || 0,
         stopReason: 'timeout',
       };
@@ -735,7 +735,7 @@ class LLMEngine extends EventEmitter {
         text: partial,
         rawText: fullResponse,
         model: this.modelInfo?.name || 'unknown',
-        tokensUsed: this.sequence?.nTokens || 0,
+        tokensUsed: this.sequence?.nextTokenIndex || 0,
         contextUsed: this.context?.contextSize || 0,
         stopReason: 'cancelled',
       };
@@ -759,7 +759,7 @@ class LLMEngine extends EventEmitter {
       name: err.name,
       message: err.message,
       contextDisposed: !this.context || this.context._disposed,
-      seqTokens: this.sequence?.nTokens,
+      seqTokens: this.sequence?.nextTokenIndex,
       stack: err.stack?.split('\n').slice(0, 4).join('\n'),
     });
     throw err;
@@ -801,7 +801,7 @@ class LLMEngine extends EventEmitter {
       });
 
       const text = this._sanitizeResponse(typeof result === 'string' ? result : (result?.response || ''));
-      return { text, model: this.modelInfo?.name || 'unknown', tokensUsed: tempSeq?.nTokens || 0 };
+      return { text, model: this.modelInfo?.name || 'unknown', tokensUsed: tempSeq?.nextTokenIndex || 0 };
     } catch (err) {
       // Fallback: use main chat if temp session fails
       if (!tempChat && this.chat) {
@@ -815,7 +815,7 @@ class LLMEngine extends EventEmitter {
       throw err;
     } finally {
       if (tempSeq) {
-        try { tempSeq.eraseContextTokenRanges([{ start: 0, end: tempSeq.nTokens }]); } catch {}
+        try { tempSeq.eraseContextTokenRanges([{ start: 0, end: tempSeq.nextTokenIndex }]); } catch {}
         try { tempSeq.dispose?.(); } catch {}
       }
     }
@@ -866,8 +866,8 @@ class LLMEngine extends EventEmitter {
     try {
       // KV cache reuse
       const useKvCache = this._kvReuseCooldown <= 0 && this.lastEvaluation;
-      if (!useKvCache && this.sequence?.nTokens > 0) {
-        try { this.sequence.eraseContextTokenRanges([{ start: 0, end: this.sequence.nTokens }]); } catch {}
+      if (!useKvCache && this.sequence?.nextTokenIndex > 0) {
+        try { this.sequence.eraseContextTokenRanges([{ start: 0, end: this.sequence.nextTokenIndex }]); } catch {}
       }
 
       const thoughtBudget = this.thoughtTokenBudget;

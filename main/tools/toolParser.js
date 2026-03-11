@@ -536,7 +536,13 @@ function _detectFallbackFileOperations(responseText, userMessage, lastDroppedFil
   while ((m = codeBlockRe.exec(responseText)) !== null) {
     const lang = m[1] || '';
     const content = m[2];
-    if (content.length < 20) continue;
+    // Skip small code blocks — likely inline examples, not full files
+    if (content.length < 50) continue;
+
+    // Skip code blocks preceded by editorial/fix phrases in the model's response
+    // (these are suggestions or install commands, not file-write directives)
+    const nearBefore = responseText.slice(Math.max(0, m.index - 120), m.index);
+    if (/(?:replace\s+(?:line|with)|fix[:\s]|instead\s+of|example[:\s]|install\b|pip\s+install|npm\s+install)/i.test(nearBefore)) continue;
 
     // Look for a file path reference near or before this code block
     // Use the LAST match (closest to code block) — earlier matches may be from prior blocks

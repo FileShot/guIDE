@@ -2624,7 +2624,7 @@ class MCPToolServer {
       hint += '- **browser_evaluate**(expression) — Run JavaScript on page.\n';
       hint += '- **browser_back**() — Go back.\n';
       hint += '\n### Browser Examples\n';
-      hint += '```json\n{"tool":"web_search","params":{"query":"best laptops 2026"}}\n```\n';
+      hint += '```json\n{"tool":"web_search","params":{"query":"current weather forecast"}}\n```\n';
       hint += '```json\n{"tool":"browser_navigate","params":{"url":"https://example.com"}}\n```\n';
     } else {
       hint += '### Browser (REAL Chromium)\n';
@@ -2736,13 +2736,13 @@ class MCPToolServer {
       prompt += '\n';
     }
 
-    prompt += `### Example: User says "find me a cheap laptop"
+    prompt += `### Example: User says "search for today's tech news"
 \`\`\`json
-{"tool":"web_search","params":{"query":"cheap laptops under $200 2026"}}
+{"tool":"web_search","params":{"query":"technology news today"}}
 \`\`\`
 Then after getting results:
 \`\`\`json
-{"tool":"browser_navigate","params":{"url":"https://www.ebay.com/sch/i.html?_nkw=cheap+laptop"}}
+{"tool":"browser_navigate","params":{"url":"https://news.ycombinator.com"}}
 \`\`\`
 Then to see the page:
 \`\`\`json

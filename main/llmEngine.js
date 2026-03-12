@@ -289,6 +289,7 @@ class LLMEngine extends EventEmitter {
           // CPU mode: cap context for responsive generation
           if (mode === false) maxCtx = Math.min(maxCtx, 8192);
           const contextMin = (mode === false) ? 512 : MIN_USABLE_GPU_CONTEXT;
+          console.log(`[LLM DIAG] Context creation: mode=${mode}, maxCtx=${maxCtx}, contextMin=${contextMin}, modelSizeGB=${gpuConfig.modelSizeGB.toFixed(2)}`);
           loadedContext = await this._withTimeout(
             loadedModel.createContext({
               contextSize: { min: contextMin, max: maxCtx },
@@ -299,6 +300,7 @@ class LLMEngine extends EventEmitter {
             ctxTimeout,
             'Context creation',
           );
+          console.log(`[LLM DIAG] Context created: actualSize=${loadedContext.contextSize || 0}, mode=${mode}`);
 
           // Verify context is usable (need enough for system prompt + meaningful generation)
           const actualCtx = loadedContext.contextSize || 0;
@@ -367,7 +369,7 @@ class LLMEngine extends EventEmitter {
       this.isLoading = false;
 
       const log = require('./logger');
-      log.info(`Model loaded: ${this.modelInfo.name} (${family}/${getSizeTier(paramSize)}, ctx=${this.modelInfo.contextSize}, gpu=${usedGpuMode})`);
+      log.info(`Model loaded: ${this.modelInfo.name} (${family}/${getSizeTier(paramSize)}, ctx=${this.modelInfo.contextSize}, gpu=${usedGpuMode}, layers=${this.modelInfo.gpuLayers})`);
       if (this.chat._chatWrapper) {
         log.info(`Chat wrapper: ${this.chat._chatWrapper.constructor?.name || 'unknown'}`);
       }
@@ -492,6 +494,7 @@ class LLMEngine extends EventEmitter {
       if (stallTimer) clearTimeout(stallTimer);
       stallTimer = setTimeout(() => {
         if (_genCounter === genId && this.abortController) {
+          console.log(`[LLM] Stall watchdog fired after ${STALL_TIMEOUT_MS / 1000}s — aborting generation`);
           this.cancelGeneration('timeout');
         }
       }, STALL_TIMEOUT_MS);
@@ -663,10 +666,10 @@ class LLMEngine extends EventEmitter {
     const useKvCache = this._kvReuseCooldown <= 0 && this.lastEvaluation;
 
     // EOS-sequence protection: clear sequence if not reusing KV cache
+    // v1.8.22 fix: use dispose+getSequence instead of eraseContextTokenRanges (which can hang on degraded KV cache)
     if (!useKvCache && this.sequence && this.sequence.nextTokenIndex > 0) {
-      try {
-        this.sequence.eraseContextTokenRanges([{ start: 0, end: this.sequence.nextTokenIndex }]);
-      } catch {}
+      try { this.sequence.dispose?.(); } catch {}
+      this.sequence = this.context.getSequence();
     }
 
     const thoughtBudget = this.thoughtTokenBudget;
@@ -852,6 +855,7 @@ class LLMEngine extends EventEmitter {
       if (stallTimer) clearTimeout(stallTimer);
       stallTimer = setTimeout(() => {
         if (_genCounter === genId && this.abortController) {
+          console.log(`[LLM] Stall watchdog fired after ${STALL_TIMEOUT_MS / 1000}s — aborting generation (functions mode)`);
           this.cancelGeneration('timeout');
         }
       }, STALL_TIMEOUT_MS);
@@ -866,8 +870,10 @@ class LLMEngine extends EventEmitter {
     try {
       // KV cache reuse
       const useKvCache = this._kvReuseCooldown <= 0 && this.lastEvaluation;
+      // v1.8.22 fix: use dispose+getSequence instead of eraseContextTokenRanges (which can hang on degraded KV cache)
       if (!useKvCache && this.sequence?.nextTokenIndex > 0) {
-        try { this.sequence.eraseContextTokenRanges([{ start: 0, end: this.sequence.nextTokenIndex }]); } catch {}
+        try { this.sequence.dispose?.(); } catch {}
+        this.sequence = this.context.getSequence();
       }
 
       const thoughtBudget = this.thoughtTokenBudget;

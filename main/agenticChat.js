@@ -1334,10 +1334,14 @@ function register(ctx) {
           }
 
           // Hard total accumulated char limit: stop runaway continuation
-          const MAX_CONTINUATION_CHARS = 50000;
+          // Increased from 50K to allow large file generation — context rotation will handle memory
+          const MAX_CONTINUATION_CHARS = 500000; // 500K chars (~125K lines of code)
           let _contAbortReason = '';
+          let _contShouldRotate = false;
           if (fullResponseText.length > MAX_CONTINUATION_CHARS) {
-            _contAbortReason = `total output exceeds ${MAX_CONTINUATION_CHARS} chars`;
+            // Instead of hard abort, trigger context rotation to continue with fresh buffer
+            _contShouldRotate = true;
+            _contAbortReason = `total output exceeds ${MAX_CONTINUATION_CHARS} chars — rotating context`;
           } else if (_contLowProgressCount >= 3) {
             _contAbortReason = 'no forward progress';
           } else if (_contRepeatCount >= 2) {
@@ -1359,7 +1363,30 @@ function register(ctx) {
             _contLowProgressCount = 0;
             _contRepeatCount = 0;
             _contCharSizes = [];
-            // Fall through
+            
+            // If rotation was requested (char limit hit but task continues), trigger context rotation
+            if (_contShouldRotate && contextRotations < MAX_CONTEXT_ROTATIONS) {
+              console.log(`[AI Chat] Large-output rotation triggered (${contextRotations + 1}/${MAX_CONTEXT_ROTATIONS})`);
+              contextRotations++;
+              try {
+                // Store what we have so far and rotate
+                const partialOutput = fullResponseText.slice(-Math.min(fullResponseText.length, 2000));
+                await llmEngine.resetSession(true);
+                await ensureLlmChat(llmEngine, getNodeLlamaCppPath);
+                if (mainWindow && !mainWindow.isDestroyed()) {
+                  mainWindow.webContents.send('llm-thinking-token', '\n[Context rotated for large output]\n');
+                }
+                currentPrompt = {
+                  systemContext: buildStaticPrompt(),
+                  userMessage: buildDynamicContext() + `\n\nYou were generating a large output and context was rotated. Continue from where you left off:\n---\n${partialOutput}\n---\n`,
+                };
+                sessionJustRotated = true;
+                continue;
+              } catch (rotErr) {
+                console.error('[AI Chat] Large-output rotation failed:', rotErr.message);
+              }
+            }
+            // Fall through to normal processing
           } else {
             const truncReason = _hasUnclosedToolFence ? 'unclosed fence' : 'maxTokens';
             console.log(`[AI Chat] Seamless continuation ${continuationCount}/50 — ${truncReason} (${responseText.length} chars this pass, ${fullResponseText.length} total)`);

@@ -10,7 +10,9 @@ const TIER_BOUNDARIES = {
 };
 
 function getSizeTier(paramSize) {
-  if (!paramSize || paramSize <= 0) return 'medium';
+  // Unknown/undetected models should get generous context (large tier) rather than restrictive
+  // The hardware context computation will still limit based on actual RAM availability
+  if (!paramSize || paramSize <= 0) return 'large';
   for (const [tier, { min, max }] of Object.entries(TIER_BOUNDARIES)) {
     if (paramSize >= min && paramSize < max) return tier;
   }
@@ -29,7 +31,8 @@ const BASE_DEFAULTS = {
     lastTokensPenaltyCount: 128,
   },
   context: {
-    effectiveContextSize: 32768,
+    // Default to generous context — hardware limits (_computeMaxContext) will cap based on actual RAM
+    effectiveContextSize: 65536,
     sysPromptBudgetPct: 0.15,
     responseReservePct: 0.25,
     maxResponseTokens: 4096,

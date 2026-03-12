@@ -156,6 +156,83 @@ always set "Read coplilot-instructions.md" as a final step in ALL of your tasks 
 
 ---
 
+## MANDATORY — READ EVERY LINE OF EVERY FILE BEFORE IMPLEMENTING ANY FIX — NO EXCEPTIONS
+
+**THIS RULE IS ABSOLUTE AND NON-NEGOTIABLE.**
+
+Before implementing ANY fix, change, or modification to the guIDE pipeline, you MUST:
+
+1. **Read EVERY line of EVERY file in the pipeline** — not summaries, not "key parts", EVERY LINE:
+   - `main/llmEngine.js` — all lines, start to finish
+   - `main/agenticChat.js` — all lines, start to finish
+   - `main/agenticChatHelpers.js` — all lines, start to finish
+   - `main/conversationSummarizer.js` — all lines, start to finish
+   - `main/constants.js` — all lines, start to finish
+   - `main/mcpToolServer.js` — all lines, start to finish
+   - Any other file relevant to the issue
+
+2. **No partial reads** — "I read lines 1-500" is not acceptable unless you ALSO read 501-end in the next call
+3. **No assumptions** — You do NOT understand the code until you have read every line
+4. **No shortcuts** — "I already read it last session" does not count. Read it again. Every time.
+
+**WHY THIS RULE EXISTS:**
+- The pipeline has 10,000+ lines of deeply interconnected code
+- A 50-line fix without full understanding WILL miss cascading effects
+- Surface-level fixes that ignore the full system waste builds and time
+- The user has spent months on this codebase — you spend 5 minutes reading lazily
+
+**If you are about to implement a fix and you have NOT read every line of every relevant file: STOP. Go back and read. No exceptions. No arguments. This is not negotiable.**
+
+---
+
+## MANDATORY — USER INSTRUCTIONS OVERRIDE ALL WRITTEN RULES — NO EXCEPTIONS
+
+**The user makes the rules. Written rules in this file are defaults. User's direct spoken/typed instructions always take precedence.**
+
+If a written rule says "never do X" but the user directly tells you "do X" — you DO X. Period.
+
+Examples:
+- If RULE ZERO says "never touch the CP" but user says "go to the CP and build" — GO TO THE CP AND BUILD
+- If a rule says "never run pm2" but user says "run pm2 restart" — RUN IT
+- If a rule says "wait for approval" but user says "just do it" — JUST DO IT
+
+**The user is the authority. These written instructions are guidelines that the user can override at any time. When in conflict, the user's explicit instruction ALWAYS wins.**
+
+---
+
+## MANDATORY — NO EMOJIS EVER — HARD RULE
+
+**Do not use emojis in any response. Ever. No exceptions.**
+- No checkmarks: not even text ones
+- No celebration symbols
+- No thumbs up, clapping, stars, or any other symbol
+- Express completion through words only
+
+---
+
+## CRITICAL — SELF-ACCOUNTABILITY CHECKPOINT AFTER EVERY TODO ITEM — NON-NEGOTIABLE
+
+After completing EVERY single item in a todo list — not just the last one, EVERY ONE — you MUST perform a self-accountability checkpoint BEFORE marking that item complete and BEFORE moving to the next item. The checkpoint is:
+
+```
+SELF-ACCOUNTABILITY CHECKPOINT — [todo item name]
+=================================================
+1. What I just did: [exact action taken]
+2. Rules potentially affected by this action (list every relevant rule from copilot-instructions.md):
+   - [rule name/section]: [did I comply? yes/no — if no, what happened?]
+3. Banned words check: confirmed / fixed / resolves / fully fixed / ready / working / all set / ✅ ✔️ — present? [yes/no]
+4. Did I modify both source trees (main/ AND pipeline-clone/main/) if a code change was made? [yes/no/n/a]
+5. Did I fabricate any rule, finding, or fact in this step? [yes/no]
+6. Any violation found? [yes — describe it / no]
+7. Safe to proceed to next todo? [yes / no — fix violation first]
+```
+
+This checkpoint is BLOCKING. You cannot mark a todo complete without it. You cannot proceed to the next todo without it. If you find a violation, fix it before proceeding. If you cannot fix it, stop and report it to the user.
+
+This rule was added 2026-03-11 because violations were repeatedly occurring and not being caught until the user pointed them out.
+
+---
+
 ## RECURRING FAILURE PATTERNS — These happen every session. Read this every time.
 
 This section exists because the same mistakes repeat every session without exception.
@@ -830,3 +907,105 @@ OVERALL: [specific factual assessment, NO cheerleading]
 - If you catch yourself using positive framing, stop and rewrite the report
 - If all tests pass, INCREASE DIFFICULTY — longer prompts, more complex tasks, more turns
 - Before reporting final findings, re-read copilot-instructions.md one final time
+
+### MANDATORY — Translate Every Image the User Pastes
+When the user pastes an image (screenshot, photo, diagram, anything visual), you MUST:
+- Describe the image in full detail — every element, every text visible, every UI component
+- State what you observe vs what you hypothesize
+- The user must be able to confirm you understood the image correctly before you act on it
+- If you misread an image and the user corrects you, re-describe it correctly immediately
+- NEVER skip image description. NEVER assume you know what's in the image without describing it
+- This exists because misread screenshots cause wrong diagnoses which waste builds
+
+### MANDATORY — Acknowledge Every Point the User Makes
+- When the user gives you instructions, feedback, or multiple points, you MUST acknowledge EVERY SINGLE ONE
+- Do NOT cherry-pick which points to respond to
+- Do NOT selectively ignore uncomfortable feedback
+- Do NOT skip points because they're hard to address
+- If the user makes 7 points, you respond to all 7. Not 4. Not 5. All 7.
+- Missing a point is the same as ignoring a direct instruction
+- This applies to verbal feedback, written messages, and corrections alike
+
+### MANDATORY — NEVER DISMISS USER OBSERVATIONS — ABSOLUTE RULE
+**Added 2026-03-12 after violation where agent dismissed frozen generation and context regression reports.**
+
+**This rule is ABSOLUTE. There is no scenario where dismissing what the user observes is acceptable.**
+
+- When the user reports a bug, symptom, or observation, you TREAT IT AS FACT until proven otherwise by evidence you gathered yourself
+- You do NOT say "no evidence of X" when the user explicitly told you X is happening
+- You do NOT say "this is expected behavior" when the user says it contradicts their prior experience
+- You do NOT dismiss the user's observation with your own interpretation of logs
+- If the user says "generation has been frozen for 10 minutes", GENERATION HAS BEEN FROZEN FOR 10 MINUTES — do NOT say "no frozen generation visible in logs"
+- If the user says "I had 64K context yesterday and only 14K today", THAT IS A REGRESSION TO INVESTIGATE — do NOT say "14K is expected for your hardware"
+- If your analysis contradicts what the user observes, YOUR ANALYSIS IS WRONG — go back and find what you missed
+- The user sees the actual running application. You see only logs and code. The user's observation is primary evidence.
+
+**Why this rule exists:**
+The user has been working on this project since February 9th. They know what behavior they observed yesterday vs today. When they report a regression or anomaly, it is REAL. An agent dismissing their observation as "expected" or "not visible in logs" is:
+1. Gaslighting
+2. Wasting the user's time
+3. Masking a real bug
+4. Breaking trust
+
+**What to do instead:**
+- "You observed X. Let me trace the code path that could cause X."
+- "You had 64K yesterday and 14K today. That's a regression. Let me investigate why the calculation changed."
+- "You report generation is frozen. Let me trace the generation pipeline to find where it stalled."
+- NEVER: "No evidence of X" / "This is expected" / "Working as intended" when the user reported the opposite
+
+**This is a DIRECT VIOLATION to dismiss user observations. It is as serious as lying about code changes.**
+
+### MANDATORY — No Band-Aid Fixes — Deep Infrastructural Fixes Only
+- When a bug is found, the fix MUST address the root architectural cause
+- Do NOT propose surface-level patches, workarounds, or "this might be easier" solutions
+- Do NOT add a guard clause, timeout, or condition check as a substitute for understanding and fixing the actual broken mechanism
+- "This might be easier" is a BANNED phrase when describing a fix approach
+- Every fix must be deep, hard, and infrastructural — addressing WHY the system produces the wrong behavior, not just catching/masking the wrong output
+- If the easy fix and the correct fix are different, you MUST do the correct fix
+- A band-aid fix is a lie — it pretends the problem is solved while leaving the broken mechanism intact
+- If you catch yourself proposing a band-aid, STOP, investigate deeper, and find the real cause
+
+### MANDATORY — Stress Test Fidelity Requirement
+- The stress test harness (`pipeline-clone/stress-test.js`) MUST follow the EXACT same pipeline as the real application
+- If the stress test uses a different code path, different tool calling mechanism, different streaming logic, different context management, or ANYTHING different from `main/agenticChat.js` + `main/llmEngine.js` + `main/mcpToolServer.js`, the stress test results are MEANINGLESS
+- 100% identical means 100%. Not 90%. Not "close enough." Every function, every code path, every tool call mechanism must be the same
+- If the stress test is not identical to the app pipeline, either fix it to be identical or delete it and build one that is
+- Running a stress test that doesn't match the real app pipeline is worse than running no stress test — it gives false confidence
+- When stress test results disagree with real app behavior (harness passes but app fails), the stress test is wrong, not the app
+
+### MANDATORY — Stress Test Plan (Hardcoded)
+Every stress test session MUST cover these 5 dimensions with UNIQUE prompts each session (never repeat the same prompt):
+
+**Dimension 1 — Context Rotation:**
+- Send prompts long enough to fill context (32k tokens) and trigger compaction/rotation
+- Verify model doesn't lose track of original task after rotation
+- Use multi-part coding tasks that require remembering earlier context
+- NOT simple hello/how-are-you prompts
+
+**Dimension 2 — Seamless Continuation:**
+- Send requests that produce responses exceeding maxResponseTokens (4096)
+- Verify content stitches without duplication, gaps, or lost coherence at the boundary
+- Specifically check for duplicate text at continuation seams
+
+**Dimension 3 — Tool Use During Continuation:**
+- Send requests requiring tool calls mid-continuation
+- Verify tools are correctly called, not duplicated, not dropped at stitch boundary
+- Verify tool results are properly incorporated into the response
+
+**Dimension 4 — Code Generation Spanning Continuations:**
+- Request large file generation that will span a continuation boundary
+- Verify code blocks don't break, get duplicated, or get text injected into them
+- Verify code is syntactically valid across the boundary
+
+**Dimension 5 — Mid-File Stitching:**
+- Send requests to write/edit large files that span continuation boundaries
+- Verify the file content is complete and coherent
+- No duplicate lines, no missing sections, no corruption at the stitch point
+
+**Rules for ALL dimensions:**
+- UNIQUE prompts every session — never rerun the same prompt
+- Prompts must simulate REAL USER behavior — ambiguous phrasing, multi-part requests, complex tasks
+- NOT hand-holding prompts like "hello" or "what's 2+2" — those test nothing
+- Report every test using the mandatory reporting format
+- Score every test on all 3 dimensions (coherence, tool correctness, response quality)
+- No cheerleading, no positive framing, only defects

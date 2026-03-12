@@ -153,14 +153,20 @@ export function useChatStreaming(): ChatStreamingState {
       } else {
         thinkingSegmentsRef.current[thinkingSegmentsRef.current.length - 1] += token;
       }
-      // Strip code-fence artifacts that bleed from tool-calling iterations into thinking output.
+      // Strip artifacts that bleed from tool-calling iterations and planning directives into thinking output.
       // Models sometimes write `json or ```json inside <think> as a self-note before outputting a tool call.
+      // Also strip planning directive headers that the pipeline injects — these are not user-facing reasoning.
       const lastIdx = thinkingSegmentsRef.current.length - 1;
       thinkingSegmentsRef.current[lastIdx] = thinkingSegmentsRef.current[lastIdx]
         // Strip complete tool-call code blocks (```json ... ``` etc.) that bleed from context summaries
         .replace(/```(?:json|tool_call|tool)[^\n]*\n[\s\S]*?```/g, '')
         // Strip any remaining lone opening fence markers left after partial streaming
-        .replace(/^`{1,3}(?:json|tool_call|tool)\s*/gim, '');
+        .replace(/^`{1,3}(?:json|tool_call|tool)\s*/gim, '')
+        // Strip pipeline planning directive headers that models echo in reasoning
+        .replace(/^##\s*(?:NEXT STEP|CURRENT STEP|PLAN COMPLETE)[^\n]*\n?/gim, '')
+        .replace(/^\*\*(?:NOW|DO NOW):\*\*[^\n]*\n?/gim, '')
+        // Strip common model phrasings of step directives
+        .replace(/\b(?:next|current)\s+reasoning\s+step\b[^\n]*/gi, '');
       scheduleThinkingUpdate();
     });
 

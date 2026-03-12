@@ -666,10 +666,15 @@ class LLMEngine extends EventEmitter {
     const useKvCache = this._kvReuseCooldown <= 0 && this.lastEvaluation;
 
     // EOS-sequence protection: clear sequence if not reusing KV cache
-    // v1.8.22 fix: use dispose+getSequence instead of eraseContextTokenRanges (which can hang on degraded KV cache)
+    // v1.8.23 fix: dispose chat FIRST, then sequence, then recreate both
+    // (v1.8.22 bug: disposed sequence but LlamaChat still held old reference → "Object is disposed")
     if (!useKvCache && this.sequence && this.sequence.nextTokenIndex > 0) {
+      try { this.chat?.dispose?.(); } catch {}
       try { this.sequence.dispose?.(); } catch {}
       this.sequence = this.context.getSequence();
+      const llamaCppPath = this._getNodeLlamaCppPath();
+      const { LlamaChat } = await import(pathToFileURL(llamaCppPath).href);
+      this.chat = new LlamaChat({ contextSequence: this.sequence });
     }
 
     const thoughtBudget = this.thoughtTokenBudget;
@@ -870,10 +875,15 @@ class LLMEngine extends EventEmitter {
     try {
       // KV cache reuse
       const useKvCache = this._kvReuseCooldown <= 0 && this.lastEvaluation;
-      // v1.8.22 fix: use dispose+getSequence instead of eraseContextTokenRanges (which can hang on degraded KV cache)
+      // v1.8.23 fix: dispose chat FIRST, then sequence, then recreate both
+      // (v1.8.22 bug: disposed sequence but LlamaChat still held old reference → "Object is disposed")
       if (!useKvCache && this.sequence?.nextTokenIndex > 0) {
+        try { this.chat?.dispose?.(); } catch {}
         try { this.sequence.dispose?.(); } catch {}
         this.sequence = this.context.getSequence();
+        const llamaCppPath = this._getNodeLlamaCppPath();
+        const { LlamaChat } = await import(pathToFileURL(llamaCppPath).href);
+        this.chat = new LlamaChat({ contextSequence: this.sequence });
       }
 
       const thoughtBudget = this.thoughtTokenBudget;

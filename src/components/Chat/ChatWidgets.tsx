@@ -64,9 +64,8 @@ export const ThinkingBlock: React.FC<{ text: string; isLive?: boolean; segmentCo
       }
       wasLiveRef.current = true;
     }
-    // Collapse when thinking completes (was live, now not)
+    // When thinking completes, record elapsed time but do NOT auto-collapse (user can manually collapse)
     if (!isLive && wasLiveRef.current) {
-      setExpanded(false);
       if (startTimeRef.current !== null) {
         setElapsedSeconds(Math.round((Date.now() - startTimeRef.current) / 1000));
       }
@@ -87,9 +86,9 @@ export const ThinkingBlock: React.FC<{ text: string; isLive?: boolean; segmentCo
       : `Thought for ${lines.length} line${lines.length !== 1 ? 's' : ''}`;
 
   return (
-    <div className="mb-0.5 overflow-hidden">
+    <div className="mb-0 overflow-hidden">
       <button
-        className="w-full flex items-center gap-1 py-0.5 text-[11px] text-[#d0d0d0] transition-colors leading-snug min-h-0"
+        className="w-full flex items-center gap-0.5 py-0 text-[10px] text-[#d0d0d0] transition-colors leading-tight min-h-0"
         onClick={() => setExpanded(!expanded)}
       >
         <span className={`text-[8px] transition-transform duration-150 flex-shrink-0 ${expanded ? 'rotate-90' : ''}`}>▶</span>
@@ -103,7 +102,7 @@ export const ThinkingBlock: React.FC<{ text: string; isLive?: boolean; segmentCo
         }
       </button>
       {expanded && (
-        <div ref={contentRef} className="px-2 pb-1.5 text-[10px] text-[#b0b0b0] whitespace-pre-wrap leading-relaxed border-t border-[#3c3c3c] max-h-[200px] overflow-y-auto">
+        <div ref={contentRef} className="px-2 pb-1.5 text-[10px] text-[#b0b0b0] whitespace-pre-wrap leading-relaxed border-t border-[#3c3c3c] max-h-[180px] overflow-y-auto">
           {text}
         </div>
       )}

@@ -286,7 +286,7 @@ class MCPToolServer {
       },
       {
         name: 'fetch_webpage',
-        description: 'Fetch and extract content from a specific URL.',
+        description: 'Fetch and extract text content from a webpage URL. Use ONLY to READ information from a web page (articles, documentation, data). Do NOT use to download CSS, fonts, images, or other resources for files you are creating — reference them via CDN links instead.',
         parameters: {
           url: { type: 'string', description: 'URL to fetch', required: true },
         },

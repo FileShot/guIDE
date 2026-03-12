@@ -1186,6 +1186,8 @@ function register(ctx) {
       if (continuationCount > 0) {
         displayChunk = displayChunk.replace(/\[(?:Continue your response|You were generating a tool call)[\s\S]*?\]/gi, '');
       }
+      // Save length before adding this iteration's text (for Bug 2 fix: remove reasoning that gets routed to thinking)
+      const priorDisplayLen = displayResponseText.length;
       displayResponseText += displayChunk;
 
       // Correct UI stream buffer: the overlapping tokens were already streamed
@@ -1485,7 +1487,10 @@ function register(ctx) {
         }
         if (planningText) {
           mainWindow.webContents.send('llm-thinking-token', planningText);
-          mainWindow.webContents.send('llm-replace-last', planningText);
+          // Bug 2 fix: Wipe reasoning from stream buffer (it's now in thinking panel only)
+          mainWindow.webContents.send('llm-replace-last', '');
+          // Also remove from displayResponseText so it doesn't appear in committed message
+          displayResponseText = displayResponseText.substring(0, priorDisplayLen);
         }
       }
 
@@ -1560,8 +1565,11 @@ function register(ctx) {
 
       if (isStale()) break;
 
-      // Accumulate tool results
-      allToolResults.push(...toolResults.results);
+      // Filter out deferred results from UI pipeline — they haven't executed yet
+      const uiToolResults = toolResults.results.filter(tr => !tr._deferred);
+
+      // Accumulate only non-deferred tool results for UI
+      allToolResults.push(...uiToolResults);
       capArray(allToolResults, 50);
 
       // Compress old tool results
@@ -1590,8 +1598,8 @@ function register(ctx) {
         executionState.update(tr.tool, tr.params, tr.result, iteration);
       }
 
-      // UI events
-      sendToolExecutionEvents(mainWindow, toolResults.results, playwrightBrowser, { checkSuccess: true });
+      // UI events — send only non-deferred results to prevent duplicate bubbles
+      sendToolExecutionEvents(mainWindow, uiToolResults, playwrightBrowser, { checkSuccess: true });
 
       // Build tool feedback
       const toolFeedback = buildToolFeedback(toolResults.results, {
@@ -1606,7 +1614,7 @@ function register(ctx) {
         snapFeedback = `\n### Page snapshot after ${snapResult.triggerTool}\n${snapResult.snapshotText}\n\n**${snapResult.elementCount} elements.** Use [ref=N] with browser_click/type.\n`;
       }
 
-      if (mainWindow) mainWindow.webContents.send('mcp-tool-results', toolResults.results);
+      if (mainWindow) mainWindow.webContents.send('mcp-tool-results', uiToolResults);
       fullResponseText += toolFeedback + snapFeedback;
       if (fullResponseText.length > MAX_RESPONSE_SIZE) {
         fullResponseText = fullResponseText.substring(fullResponseText.length - MAX_RESPONSE_SIZE);
@@ -1943,7 +1951,7 @@ async function executeNativeToolCalls(opts) {
 
       // Write deferral
       if (shouldDefer && DATA_WRITE_TOOLS.has(call.tool)) {
-        results.push({ tool: call.tool, params: call.params, result: { success: false, error: 'DEFERRED: Re-issue write next turn using actual data from tool results.' } });
+        results.push({ tool: call.tool, params: call.params, _deferred: true, result: { success: false, error: 'DEFERRED: Re-issue write next turn using actual data from tool results.' } });
         continue;
       }
 

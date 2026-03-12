@@ -437,7 +437,26 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
         });
       }
       if (finished.length > 0) {
-        setCompletedStreamingTools(prev => [...prev, ...finished]);
+        // Bug 1 fix: Dedup write tools by tool+filePath, keeping latest entry
+        setCompletedStreamingTools(prev => {
+          const combined = [...prev, ...finished];
+          const writeTools = ['write_file', 'create_file', 'edit_file', 'append_to_file'];
+          const seen = new Map<string, number>();
+          // Find latest index for each write tool+filePath combo
+          for (let i = combined.length - 1; i >= 0; i--) {
+            const td = combined[i];
+            if (writeTools.includes(td.tool)) {
+              const key = `${td.tool}:${td.params?.filePath || td.params?.fileName || ''}`;
+              if (!seen.has(key)) seen.set(key, i);
+            }
+          }
+          // Keep non-write tools + only the latest of each write tool+filePath
+          return combined.filter((td, idx) => {
+            if (!writeTools.includes(td.tool)) return true;
+            const key = `${td.tool}:${td.params?.filePath || td.params?.fileName || ''}`;
+            return seen.get(key) === idx;
+          });
+        });
       }
       executingToolsRef.current = [];
       setExecutingTools([]);
@@ -2769,16 +2788,22 @@ ${e.message}`,
                             const doneExt = doneFilePath.includes('.') ? doneFilePath.split('.').pop()?.toLowerCase() || '' : '';
                             const doneLang = LANG_MAP_LIVE[doneExt] || doneExt || 'code';
                             const doneContent = toolData.params?.content as string | undefined;
+                            // Bug 1 fix: Use actual result status instead of hardcoded 'ok'
+                            const isStreamOk = (toolData as any).result?.success !== false;
                             return (
                               <div key={`done-flat-${i}`} className="mt-2">
                                 <div className="flex items-center gap-1.5 mb-1 px-0.5">
-                                  <Check size={11} className="text-[#89d185] flex-shrink-0" />
-                                  <span className="text-[11px] text-[#d4d4d4] font-medium">{getToolLabel(toolData, 'ok')}</span>
+                                  {isStreamOk ? (
+                                    <Check size={11} className="text-[#89d185] flex-shrink-0" />
+                                  ) : (
+                                    <X size={11} className="text-[#f14c4c] flex-shrink-0" />
+                                  )}
+                                  <span className="text-[11px] text-[#d4d4d4] font-medium">{getToolLabel(toolData, isStreamOk ? 'ok' : 'fail')}</span>
                                 </div>
                                 {doneContent ? (
                                   <CodeBlock code={doneContent} language={doneLang} onApply={() => onApplyCode(currentFile, doneContent)} isToolCall={true} />
                                 ) : (
-                                  <div className="text-[11px] text-[#89d185] px-0.5">Written</div>
+                                  <div className={`text-[11px] px-0.5 ${isStreamOk ? 'text-[#89d185]' : 'text-[#f14c4c]'}`}>{isStreamOk ? 'Written' : 'Failed'}</div>
                                 )}
                               </div>
                             );
@@ -2811,7 +2836,7 @@ ${e.message}`,
                                     ? (typeof rdResult === 'object' ? JSON.stringify(rdResult, null, 2).substring(0, 600) : String(rdResult).substring(0, 600))
                                     : 'Completed';
                                   return (
-                                    <CollapsibleToolBlock key={`done-${i}`} label={getToolLabel(toolData, 'ok')} icon="✓">
+                                    <CollapsibleToolBlock key={`done-${i}`} label={getToolLabel(toolData, rdIsOk ? 'ok' : 'fail')} icon={rdIsOk ? '✓' : '✗'}>
                                       <div>
                                         {toolData.params && Object.keys(toolData.params).length > 0 && (
                                           <>

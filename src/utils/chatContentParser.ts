@@ -184,8 +184,12 @@ export function stripToolArtifacts(text: string): string {
   // Only strip when it looks like bulk CSS rules (3+ consecutive CSS-like lines) not a brief mention.
   cleaned = cleaned.replace(/(?:^|\n)((?:\s*[.#@][a-zA-Z][\w-]*(?:\s*[,>\s+~]?\s*[.#@a-zA-Z][\w-]*)*\s*\{[^}]*\}\s*\n?){3,})/g, '');
   // Strip bulk HTML tag sequences leaked from write_file content (3+ consecutive lines of raw HTML)
-  cleaned = cleaned.replace(/(?:^|\n)((?:\s*<\/?[a-zA-Z][a-zA-Z0-9-]*(?:\s[^>]*)?\/?>\s*\n?){3,})/g, '');
-  // Collapse excessive newlines
+  cleaned = cleaned.replace(/(?:^|\n)((?:\s*<\/?[a-zA-Z][a-zA-Z0-9-]*(?:\s[^>]*)?\/?>\s*\n?){3,})/g, '');  // Detect and fence naked code blocks that leaked without fences (common continuation artifact)
+  // Pattern: 3+ consecutive lines that look like code (indented or with common syntax markers)
+  cleaned = cleaned.replace(
+    /(?:^|\n\n)((?:(?:  |\t)+[^\n]+\n){3,})/g,
+    (_, codeBlock) => `\n\n\`\`\`\n${codeBlock.trim()}\n\`\`\`\n\n`
+  );  // Collapse excessive newlines
   cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
   return cleaned.trim();
 }

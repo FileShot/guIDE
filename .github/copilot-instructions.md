@@ -43,9 +43,15 @@
 
 Your job is EDITING FILES. Nothing else touches the server. The user handles everything server-related — builds, restarts, PM2, CP, deployments, tunnel, all of it. When you finish editing files, you say: "I've made these changes. You'll need to rebuild/restart when ready." That is the ONLY acceptable server-related statement.
 
-**THERE IS NO SCENARIO WHERE AN AGENT SHOULD TOUCH THE SERVER.** Not after a backend change. Not after an env change. Not after a config change. Not after any change. Not "just to check." Not "just to verify." Not "to confirm the deploy." NEVER. The user will handle it on their own schedule.
+**THERE IS NO SCENARIO WHERE AN AGENT SHOULD TOUCH THE SERVER** unless the user has explicitly approved a build ("build it", "go ahead and build", "proceed with the build") or explicitly told you to use the CP. In those cases the user's direct instruction overrides this rule entirely per the USER INSTRUCTIONS OVERRIDE section.
 
-**If you are about to interact with pm2, cp.graysoft.dev, or any server process: STOP IMMEDIATELY. You are about to violate the most critical rule in this entire file. There is no justification. There is no exception. Do not do it.**
+**IF USER HAS NOT EXPLICITLY APPROVED THE BUILD:** Do not touch the CP, pm2, or any server process. The user will handle it.
+
+**IF USER HAS EXPLICITLY APPROVED THE BUILD ("build it" / "go ahead" / "proceed" / approval of implementation plan):** The user's explicit instruction IS the override. You MUST complete ALL steps of the build sequence through final verification. Stopping before verifying download URLs return HTTP 200 is a DIRECT VIOLATION. Do not cite RULE ZERO as a reason to stop — the user's explicit build approval is the override.
+
+**PM2 IS ALWAYS OFF LIMITS — no override:** Even when the user approves a build, you NEVER run pm2 directly on this machine. The CP handles pm2 on the production server. You interact with the CP browser, not pm2 CLI.
+
+**If you are about to interact with pm2 CLI or any local server process: STOP IMMEDIATELY. No justification. No exception.**
 
 **Violation of this rule destroys production for real users. It is the single most destructive action an agent can take.**
 
@@ -114,7 +120,7 @@ Read this list first. Every item has a full section below.
 - **No green checkmarks** — NEVER use ✅ ✔️ or say "ready", "working", "all set" to describe a fix
 - **Read code before responding** — Never assume. Verify everything with actual file reads
 - **Plan before code** — Describe the plan, wait for explicit approval, then execute exactly that
-- **Never build the app** — Say "Ready to build." The user builds. Always
+- **Build sequence** — When user says "build it" or approves implementation, execute ALL 10 steps including CP. Do NOT stop and say "Ready to build" — that is a violation. See GREEN LIGHT TO IMPLEMENT section.
 - **Never say "done" without proof** — A feature is real or it is not done
 - **BANNED WORDS** — Never say: confirmed, fixed, resolves, fully fixed, that's the root cause. Never use ✅ ✔️. Never say "ready", "working", "all set" about a change.
 - **No fake/placeholder data** — Ever. If data doesn't exist, say so
@@ -380,19 +386,17 @@ When the user says "build it", "build", "push it", "deploy it", or any equivalen
 4. **Create and push a version tag** (`git tag v1.X.X` → `git push origin v1.X.X`) — this triggers GitHub Actions CI/CD
 5. **Monitor GitHub Actions** (at https://github.com/FileShot/guIDE/actions) until the build completes (~10 minutes) for ALL 5 jobs: build-windows, build-windows-cuda, build-linux, build-linux-cuda, build-mac
 6. **Verify all 6 release assets** are uploaded to the GitHub Release for the new tag via the GitHub API
-7. **Wait for Syncthing to sync** `D:\FileShot.io\graysoft` to the server (~30 seconds)
-8. **Trigger website rebuild** via https://cp.graysoft.dev (password: `diggabyte2026`) — click Build for guIDE / Graysoft.dev — wait for "✓ done"
-9. **Verify graysoft.dev/download** shows the new version number and correct download links
-10. **Verify actual download URLs** return HTTP 200 for all platforms (Windows, Linux, macOS)
+7. **Verify graysoft.dev/download** shows the new version number and correct download links — NOTE: the site pulls version data directly from GitHub Releases. The new version is live as soon as the release assets are uploaded. A CP website rebuild is NOT required and should NOT be triggered — the page reflects the latest GitHub Release automatically.
+8. **Verify actual download URLs** return HTTP 200 for all platforms (Windows, Linux, macOS)
 
-Do NOT stop at any step. Do NOT report success until step 10 is verified. If the control panel rebuild fails, trigger it again. The job is not done until a real user can click "Download" on graysoft.dev and get the new version.
+Do NOT stop at any step. Do NOT report success until step 8 is verified. The job is not done until a real user can click "Download" on graysoft.dev and get the new version. Do NOT trigger a CP rebuild for guIDE/Graysoft.dev — it is unnecessary and wastes server resources.
 
 ### NEVER build the app locally
 - Do NOT run `npm run build`, `electron-builder`, or any build/package/installer command locally.
 - Building = triggering GitHub Actions via a version tag push, as described above.
 
 ### GREEN LIGHT TO IMPLEMENT = GREEN LIGHT TO BUILD — NO EXCEPTIONS
-When the user approves a plan and says to proceed with implementation, that approval covers the FULL sequence: implement the changes AND run the complete 10-step build sequence defined above. Do NOT stop after writing code and wait for a second "build it" command. The build sequence is part of implementation. The task is not complete until step 10 is verified (graysoft.dev/download shows the new version and download URLs return HTTP 200).
+When the user approves a plan and says to proceed with implementation, that approval covers the FULL sequence: implement the changes AND run the complete build sequence defined above. Do NOT stop after writing code and wait for a second "build it" command. The build sequence is part of implementation. The task is not complete until the final verification (graysoft.dev/download shows the new version and download URLs return HTTP 200).
 
 **SAYING "Ready to build." AND STOPPING IS A DIRECT RULE VIOLATION.**
 - You NEVER hand the build back to the user. You do it. Every time. No exceptions.
@@ -663,6 +667,27 @@ When the user reports bugs and you are tasked with investigating:
 - If after exhaustive investigation something truly cannot be determined from code alone, state EXACTLY what diagnostic step is needed (specific log line, specific runtime check) — not a vague "needs more investigation."
 - Stopping an investigation with open unknowns and presenting a partial analysis is the same as lying about completion. It violates the "never say done without proof" rule.
 - The ONLY acceptable reason to stop investigating is: every code path has been read, every function in the chain has been traced, and the remaining unknown requires runtime data that cannot be obtained from source code alone. In that case, state the EXACT diagnostic needed.
+
+### NEVER say "paths not covered by these fixes" — ABSOLUTE BAN
+**Added 2026-03-13 after violation where agent presented fix plan with open unknowns and a "paths not covered" disclaimer.**
+
+- The phrase "paths not covered by these fixes" is BANNED. Do not use it. Ever.
+- Do not present a fix plan with caveats about what it doesn't fix. A fix plan must be COMPLETE.
+- If there are code paths you haven't investigated, INVESTIGATE THEM before presenting the plan.
+- "Paths not covered" is an admission that your investigation is incomplete. Complete it.
+- If you are about to type "paths not covered" — STOP. Go investigate those paths. Then come back.
+- There is no scenario where a partial fix plan with known gaps is acceptable. The user demands full coverage.
+
+### Use clarification tools instead of stopping — MANDATORY
+**Added 2026-03-13 per user instruction.**
+
+When you encounter ambiguity, uncertainty, or need clarification during an investigation or implementation:
+- Do NOT stop and present partial work with questions embedded in your response.
+- Do NOT present a plan and then say "let me know which approach you prefer."
+- Instead: USE the multi-choice question tool (or equivalent clarification mechanism) to get the answer.
+- Then CONTINUE with the task using the answer.
+- The user expects continuous forward progress, not stop-and-wait checkpoints.
+- An investigation is not complete until all issues are addressed. Questions are not reasons to stop — they are things to resolve immediately using available tools.
 
 **Files NOT in scope for optimization:**
 - `main/llmEngine.js` — inference engine internals

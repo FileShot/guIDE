@@ -165,8 +165,10 @@ export function useChatStreaming(): ChatStreamingState {
         // Strip pipeline planning directive headers that models echo in reasoning
         .replace(/^##\s*(?:NEXT STEP|CURRENT STEP|PLAN COMPLETE)[^\n]*\n?/gim, '')
         .replace(/^\*\*(?:NOW|DO NOW):\*\*[^\n]*\n?/gim, '')
-        // Strip common model phrasings of step directives
-        .replace(/\b(?:next|current)\s+reasoning\s+step\b[^\n]*/gi, '');
+        // Strip reasoning step header artifacts (dashes + "next reasoning step" + dashes)
+        // Only strips the header formatting, NOT the actual reasoning content
+        .replace(/^-{3,}\s*\n?/gm, '')
+        .replace(/^[\s-]*(?:next|current)\s+reasoning\s+step[\s-]*$/gim, '');
       scheduleThinkingUpdate();
     });
 

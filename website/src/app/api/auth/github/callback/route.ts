@@ -72,11 +72,26 @@ export async function GET(req: NextRequest) {
     // Sign JWT
     const token = signToken({ userId: user.id, email: user.email });
 
-    // ALWAYS include the JWT in the redirect URL query string.
-    // The Electron desktop app reads guide_token from the URL directly because
-    // Electron partition sessions cannot reliably store/read HttpOnly cookies.
-    // The /account page strips guide_token from the URL on load for security.
-    const finalDestination = `${process.env.NEXT_PUBLIC_APP_URL}/account?guide_token=${encodeURIComponent(token)}`;
+    // Resolve return URL (stored during OAuth initiation via ?return= param).
+    // Validates against trusted hostnames to prevent open redirect attacks.
+    // Always include guide_token: Electron desktop app reads it from the URL;
+    // pocket.graysoft.dev ignores it; /account strips it on load for security.
+    const returnCookie = req.cookies.get('oauth_return_github')?.value;
+    let finalBase = `${process.env.NEXT_PUBLIC_APP_URL}/account`;
+    if (returnCookie) {
+      try {
+        const decoded = decodeURIComponent(returnCookie);
+        const parsed = new URL(decoded);
+        const trustedHosts = ['graysoft.dev', 'pocket.graysoft.dev', 'www.graysoft.dev'];
+        if (trustedHosts.includes(parsed.hostname)) {
+          finalBase = decoded.split('?')[0]; // strip any existing query string
+        }
+      } catch {
+        // invalid URL — fall back to default /account
+      }
+    }
+    const sep = finalBase.includes('?') ? '&' : '?';
+    const finalDestination = `${finalBase}${sep}guide_token=${encodeURIComponent(token)}`;
 
     const response = NextResponse.redirect(finalDestination);
     response.headers.set('Set-Cookie', createAuthCookieHeader(token));

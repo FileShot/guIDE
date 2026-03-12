@@ -122,7 +122,7 @@ export const FileTree: React.FC<FileTreeProps> = ({ rootPath, onFileSelect, clas
     else handleExpand(node);
   }, [expandedNodes, handleExpand, handleCollapse]);
 
-  // Selection with Ctrl+click multi-select
+  // Selection with Ctrl+click multi-select — single-click only selects, double-click opens
   const handleSelect = useCallback((node: FileNode, event?: React.MouseEvent) => {
     if (event?.ctrlKey || event?.metaKey) {
       setSelectedNodes(prev => {
@@ -133,6 +133,11 @@ export const FileTree: React.FC<FileTreeProps> = ({ rootPath, onFileSelect, clas
     } else {
       setSelectedNodes(new Set([node.path]));
     }
+    // Files only open on double-click (handled separately), not single-click
+  }, []);
+
+  // Double-click opens file and adds to context
+  const handleOpenFile = useCallback((node: FileNode) => {
     if (node.type === 'file') onFileSelect(node);
   }, [onFileSelect]);
 
@@ -628,6 +633,7 @@ export const FileTree: React.FC<FileTreeProps> = ({ rootPath, onFileSelect, clas
                 onRenameCommit={commitRename}
                 onRenameCancel={() => setRenamingPath(null)}
                 onSelect={handleSelect}
+                onOpenFile={handleOpenFile}
                 onToggle={handleToggle}
                 onContextMenu={handleContextMenu}
                 onDragStart={handleDragStart}
@@ -675,6 +681,7 @@ export const FileTree: React.FC<FileTreeProps> = ({ rootPath, onFileSelect, clas
                 onCreateCancel={() => setCreating(null)}
                 onToggle={handleToggle}
                 onSelect={handleSelect}
+                onOpenFile={handleOpenFile}
                 onExpand={handleExpand}
                 onCollapse={handleCollapse}
                 onContextMenu={handleContextMenu}
@@ -723,6 +730,7 @@ const GridItem: React.FC<{
   onRenameCommit: () => void;
   onRenameCancel: () => void;
   onSelect: (node: FileNode, e?: React.MouseEvent) => void;
+  onOpenFile?: (node: FileNode) => void;
   onToggle: (node: FileNode) => void;
   onContextMenu: (e: React.MouseEvent, node: FileNode) => void;
   onDragStart: (e: React.DragEvent, node: FileNode) => void;
@@ -730,7 +738,7 @@ const GridItem: React.FC<{
   onDragLeave: (e: React.DragEvent) => void;
   onDrop: (e: React.DragEvent, node: FileNode) => void;
   onDragEnd: () => void;
-}> = ({ node, isSelected, iconSize, isRenaming, renameValue, isDragOver, onRenameChange, onRenameCommit, onRenameCancel, onSelect, onToggle, onContextMenu, onDragStart, onDragOver, onDragLeave, onDrop, onDragEnd }) => (
+}> = ({ node, isSelected, iconSize, isRenaming, renameValue, isDragOver, onRenameChange, onRenameCommit, onRenameCancel, onSelect, onOpenFile, onToggle, onContextMenu, onDragStart, onDragOver, onDragLeave, onDrop, onDragEnd }) => (
   <div
     className={cn(
       'flex flex-col items-center p-1.5 rounded cursor-pointer transition-colors select-none',
@@ -739,7 +747,7 @@ const GridItem: React.FC<{
     style={{ width: iconSize + 24 }}
     draggable
     onClick={(e) => { e.stopPropagation(); if (node.type === 'directory') onToggle(node); onSelect(node, e); }}
-    onDoubleClick={() => { if (node.type === 'file') onSelect(node); }}
+    onDoubleClick={() => { if (node.type === 'file') onOpenFile?.(node); }}
     onContextMenu={(e) => onContextMenu(e, node)}
     onDragStart={(e) => onDragStart(e, node)}
     onDragOver={(e) => { if (node.type === 'directory') onDragOver(e, node.path); }}

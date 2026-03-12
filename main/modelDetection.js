@@ -29,6 +29,7 @@ function detectFamily(modelPath) {
     ['bitnet', 'bitnet'],
     ['exaone', 'exaone'],
     ['olmo', 'olmo'],
+    ['gpt', 'gpt'],
   ];
 
   for (const [pattern, family] of families) {

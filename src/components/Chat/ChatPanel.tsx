@@ -194,18 +194,32 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     }]);
   }, []);
 
-  // Save code block as a new file via Save dialog
+  // Save code block — directly to project folder if available, else via Save dialog
   const handleSaveAsFile = useCallback(async (code: string, language: string) => {
     const api = window.electronAPI;
     if (!api) return;
     const LANG_EXT: Record<string, string> = { typescript: 'ts', javascript: 'js', python: 'py', rust: 'rs', html: 'html', css: 'css', json: 'json', markdown: 'md', bash: 'sh', batch: 'bat', yaml: 'yml', xml: 'xml', sql: 'sql', csharp: 'cs', cpp: 'cpp', java: 'java', go: 'go', tsx: 'tsx', jsx: 'jsx' };
     const ext = LANG_EXT[language] || language || 'txt';
+    // If project is open, prompt for filename and save directly to project root
+    if (rootPath && api.writeFile) {
+      const filename = prompt(`Save as (in project):`, `untitled.${ext}`);
+      if (filename) {
+        const sep = rootPath.includes('\\') ? '\\' : '/';
+        const filePath = rootPath.endsWith(sep) ? rootPath + filename : rootPath + sep + filename;
+        await api.writeFile(filePath, code);
+        addSystemMessage(`File saved: ${filePath}`);
+        onOpenFile(filePath);
+        return;
+      }
+      return;
+    }
+    // Fallback to save dialog
     const result = await api.showSaveDialog({ defaultPath: `file.${ext}`, filters: [{ name: 'All Files', extensions: ['*'] }] });
     if (!result.canceled && result.filePath) {
       await api.writeFile(result.filePath, code);
       onOpenFile(result.filePath);
     }
-  }, [onOpenFile]);
+  }, [onOpenFile, rootPath, addSystemMessage]);
 
   // Close all dropdowns/panels when clicking outside their trigger area
   useEffect(() => {
@@ -2651,7 +2665,7 @@ ${e.message}`,
                   <div className="text-[13px] text-[#cccccc]">
                     {thinkingSegments.filter(s => s.trim()).length > 0 && (() => {
                       const segs = thinkingSegments.filter(s => s.trim());
-                      const combined = segs.join('\n\n─── next reasoning step ───\n\n');
+                      const combined = segs.join('\n\n');
                       return <ThinkingBlock text={combined} isLive={true} segmentCount={segs.length} />;
                     })()}
                     {streamingText ? (
@@ -2915,7 +2929,7 @@ ${e.message}`,
                     const segments = msg.thinkingText.includes('\n\n---THINKING_SEGMENT---\n\n')
                       ? msg.thinkingText.split('\n\n---THINKING_SEGMENT---\n\n').filter((s: string) => s.trim())
                       : [msg.thinkingText];
-                    const combined = segments.join('\n\n─── next reasoning step ───\n\n');
+                    const combined = segments.join('\n\n');
                     return <ThinkingBlock text={combined} segmentCount={segments.length} />;
                   })()}
                   {msg.role === 'assistant' ? (

@@ -24,6 +24,7 @@ interface FileNodeComponentProps {
   onCreateCancel: () => void;
   onToggle: (node: FileNode) => void;
   onSelect: (node: FileNode, event?: React.MouseEvent) => void;
+  onOpenFile?: (node: FileNode) => void;
   onExpand: (node: FileNode) => void;
   onCollapse: (node: FileNode) => void;
   onContextMenu: (e: React.MouseEvent, node: FileNode) => void;
@@ -40,7 +41,7 @@ export const FileNodeComponent: React.FC<FileNodeComponentProps> = ({
   node, level, isExpanded, isSelected, selectedNodes, expandedNodes,
   isRenaming, renameValue, onRenameChange, onRenameCommit, onRenameCancel,
   creating, createValue, onCreateChange, onCreateCommit, onCreateCancel,
-  onToggle, onSelect, onExpand, onCollapse, onContextMenu,
+  onToggle, onSelect, onOpenFile, onExpand, onCollapse, onContextMenu,
   onDragStart, onDragOver, onDragLeave, onDrop, onDragEnd, dragOverTarget,
   rootPath,
 }) => {
@@ -68,9 +69,10 @@ export const FileNodeComponent: React.FC<FileNodeComponentProps> = ({
     if (node.type === 'directory') {
       if (isExpanded) onCollapse(node); else onExpand(node);
     } else {
-      onSelect(node);
+      // Double-click on file opens it and adds to context
+      onOpenFile?.(node);
     }
-  }, [node, isExpanded, onCollapse, onExpand, onSelect]);
+  }, [node, isExpanded, onCollapse, onExpand, onOpenFile]);
 
   const handleRightClick = useCallback((event: React.MouseEvent) => {
     onContextMenu(event, node);

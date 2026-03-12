@@ -1597,7 +1597,12 @@ class MCPToolServer {
     }
     const timeoutMs = Math.min(Math.max(timeout || 60000, 5000), 300000);
     return new Promise((resolve) => {
-      exec(command, { cwd: workDir, timeout: timeoutMs, maxBuffer: 1024 * 1024 * 5 }, (error, stdout, stderr) => {
+      // Use PowerShell on Windows to support PowerShell cmdlets (Get-ChildItem, etc.)
+      const isWindows = process.platform === 'win32';
+      const finalCommand = isWindows
+        ? `powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "${command.replace(/"/g, '\"')}"`
+        : command;
+      exec(finalCommand, { cwd: workDir, timeout: timeoutMs, maxBuffer: 1024 * 1024 * 5, shell: isWindows ? undefined : '/bin/bash' }, (error, stdout, stderr) => {
         const output = (stdout?.toString() || '') + (stderr?.toString() || '');
         resolve({
           success: !error,

@@ -126,6 +126,31 @@ function autoCreateLargeTaskTodos(message, mcpToolServer) {
     return mcpToolServer._writeTodos({ items });
   }
 
+  // Pattern: Complex multi-step tasks (broader heuristics)
+  const complexPatterns = [
+    /implement\s+(?:a\s+)?(?:full|complete|entire)/i,
+    /build\s+(?:a\s+)?(?:full|complete|entire)/i,
+    /create\s+(?:a\s+)?(?:full|complete|entire)/i,
+    /write\s+(?:a\s+)?(?:full|complete|entire)/i,
+    /(?:multiple|several|many)\s+(?:components?|modules?|features?|pages?)/i,
+    /from\s+scratch/i,
+    /step\s*by\s*step/i,
+    /end\s*to\s*end/i,
+    /(?:implement|add)\s+all\s+(?:the\s+)?(?:following|these)/i,
+  ];
+  for (const pattern of complexPatterns) {
+    if (pattern.test(message)) {
+      const items = [
+        { text: 'Analyze requirements and plan approach', status: 'pending' },
+        { text: 'Implement core structure', status: 'pending' },
+        { text: 'Add primary functionality', status: 'pending' },
+        { text: 'Add secondary features', status: 'pending' },
+        { text: 'Test and verify implementation', status: 'pending' },
+      ];
+      return mcpToolServer._writeTodos({ items });
+    }
+  }
+
   return null;
 }
 
@@ -953,9 +978,18 @@ function register(ctx) {
       } else if (useNativeFunctions) {
         try {
           const toolDefs = mcpToolServer.getToolDefinitions();
-          const filterNames = getProgressiveTools('general', iteration, (recentToolCalls || []).map(tc => tc.tool), modelTier.maxToolsPerPrompt);
+          // Context-aware tool filtering: reduce tool count when actual context is smaller than expected
+          let effectiveMaxTools = modelTier.maxToolsPerPrompt;
+          if (totalCtx < 16384 && effectiveMaxTools > 25) {
+            effectiveMaxTools = 25; // Reduce tools for smaller contexts
+          } else if (totalCtx < 8192 && effectiveMaxTools > 15) {
+            effectiveMaxTools = 15;
+          } else if (totalCtx < 4096 && effectiveMaxTools > 8) {
+            effectiveMaxTools = 8;
+          }
+          const filterNames = getProgressiveTools('general', iteration, (recentToolCalls || []).map(tc => tc.tool), effectiveMaxTools);
           nativeFunctions = LLMEngine.convertToolsToFunctions(toolDefs, filterNames);
-          console.log(`[AI Chat] Native function calling with ${Object.keys(nativeFunctions).length} functions`);
+          console.log(`[AI Chat] Native function calling with ${Object.keys(nativeFunctions).length} functions (ctx=${totalCtx}, maxTools=${effectiveMaxTools})`);
         } catch (e) {
           console.warn(`[AI Chat] Failed to build native functions: ${e.message}`);
           nativeFunctions = null;
@@ -990,13 +1024,25 @@ function register(ctx) {
         const localTokenBatcher = createIpcTokenBatcher(mainWindow, 'llm-token', () => !isStale(), { flushIntervalMs: 25, maxBufferChars: 2048 });
         const localThinkingBatcher = createIpcTokenBatcher(mainWindow, 'llm-thinking-token', () => !isStale(), { flushIntervalMs: 35, maxBufferChars: 2048 });
 
+        // Throttled context usage updates during streaming (every 500ms)
+        let _streamingResponseLen = 0;
+        const promptLen = typeof currentPrompt === 'string' ? currentPrompt.length : ((currentPrompt.systemContext || '').length + (currentPrompt.userMessage || '').length);
+        const _contextUsageInterval = mainWindow ? setInterval(() => {
+          try {
+            let used = 0;
+            try { if (llmEngine.sequence?.nextTokenIndex) used = llmEngine.sequence.nextTokenIndex; } catch (_) {}
+            if (!used) used = Math.ceil((promptLen + _streamingResponseLen) / 4);
+            mainWindow.webContents.send('context-usage', { used, total: totalCtx });
+          } catch (_) {}
+        }, 500) : null;
+
         try {
           if (nativeFunctions && Object.keys(nativeFunctions).length > 0) {
             // ── NATIVE FUNCTION CALLING PATH ──
             const nativeResult = await llmEngine.generateWithFunctions(
               currentPrompt, nativeFunctions,
               { ...(context?.params || {}), maxTokens: effectiveMaxTokens },
-              (token) => { if (isStale()) { llmEngine.cancelGeneration('user'); return; } localTokenBatcher.push(token); },
+              (token) => { if (isStale()) { llmEngine.cancelGeneration('user'); return; } _streamingResponseLen += token.length; localTokenBatcher.push(token); },
               (thinkToken) => { if (isStale()) { llmEngine.cancelGeneration('user'); return; } localThinkingBatcher.push(thinkToken); },
               (funcCall) => {
                 if (mainWindow && !mainWindow.isDestroyed()) {
@@ -1019,6 +1065,7 @@ function register(ctx) {
               isContinuation: continuationCount > 0,
             }, (token) => {
               if (isStale()) { llmEngine.cancelGeneration('user'); return; }
+              _streamingResponseLen += token.length;
               localTokenBatcher.push(token);
 
               // Live tool-call bubble
@@ -1053,6 +1100,7 @@ function register(ctx) {
             });
           }
         } finally {
+          if (_contextUsageInterval) clearInterval(_contextUsageInterval);
           localTokenBatcher.dispose();
           localThinkingBatcher.dispose();
         }

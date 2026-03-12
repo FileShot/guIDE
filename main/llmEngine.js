@@ -1025,6 +1025,7 @@ class LLMEngine extends EventEmitter {
   // ─── Conversation Summary ───
   getConversationSummary() {
     const parts = [];
+    const followUps = [];
     const toolNames = new Set();
     const keyResults = [];
     let lastModelResponse = '';
@@ -1035,7 +1036,7 @@ class LLMEngine extends EventEmitter {
         // Skip injected prompts (tool results, system injections)
         if (!entry.text.startsWith('[Tool result') && !entry.text.startsWith('[System')) {
           if (i === 1) parts.push(`Original request: ${entry.text.slice(0, 200)}`);
-          else parts.push(`Follow-up: ${entry.text.slice(0, 100)}`);
+          else followUps.push(entry.text.slice(0, 100));
         }
       }
       if (entry.type === 'model' && entry.response) {
@@ -1055,12 +1056,26 @@ class LLMEngine extends EventEmitter {
       }
     }
 
+    // Limit follow-ups to last 5 to prevent summary explosion
+    if (followUps.length > 0) {
+      const recentFollowUps = followUps.slice(-5);
+      if (followUps.length > 5) {
+        parts.push(`Follow-ups (${followUps.length} total, showing last 5): ${recentFollowUps.join(' | ')}`);
+      } else {
+        parts.push(`Follow-ups: ${recentFollowUps.join(' | ')}`);
+      }
+    }
     if (toolNames.size > 0) parts.push(`Tools used: ${[...toolNames].join(', ')}`);
     if (keyResults.length > 0) parts.push(`Key results: ${keyResults.slice(0, 5).join('; ')}`);
     if (lastModelResponse) parts.push(`Last response: ${lastModelResponse}`);
     parts.push(`Total exchanges: ${Math.floor(this.chatHistory.length / 2)}`);
 
-    return parts.join('\n');
+    // Cap total summary length to prevent context overflow
+    let summary = parts.join('\n');
+    if (summary.length > 1500) {
+      summary = summary.slice(0, 1500) + '... (truncated)';
+    }
+    return summary;
   }
 
   // ─── Session Management ───

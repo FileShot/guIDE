@@ -1,6 +1,7 @@
 'use client';
 
-import { Check } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Check, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import FadeIn from './FadeIn';
 
@@ -30,6 +31,35 @@ const unlimitedFeatures = [
 ];
 
 export default function Pricing() {
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/auth/me')
+      .then((r) => r.json())
+      .then((d) => { if (d.success) setIsLoggedIn(true); })
+      .catch(() => {});
+  }, []);
+
+  const handleCheckout = async (plan: 'pro' | 'unlimited') => {
+    setCheckoutLoading(true);
+    try {
+      const res = await fetch('/api/stripe/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plan }),
+      });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      }
+    } catch {
+      // silent
+    } finally {
+      setCheckoutLoading(false);
+    }
+  };
+
   return (
     <section id="pricing" className="py-28 px-6 border-t border-white/5">
       <div className="max-w-6xl mx-auto">
@@ -94,12 +124,24 @@ export default function Pricing() {
                   </li>
                 ))}
               </ul>
-              <Link
-                href="/register"
-                className="block w-full py-3 bg-accent hover:bg-accent-light text-white rounded-lg font-medium text-center transition-all duration-300 hover:shadow-[0_0_30px_rgba(0,122,204,0.25)]"
-              >
-                Get Pro
-              </Link>
+              {isLoggedIn ? (
+                <button
+                  onClick={() => handleCheckout('pro')}
+                  disabled={checkoutLoading}
+                  className="block w-full py-3 bg-accent hover:bg-accent-light text-white rounded-lg font-medium text-center transition-all duration-300 hover:shadow-[0_0_30px_rgba(0,122,204,0.25)] disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {checkoutLoading ? (
+                    <><Loader2 size={14} className="animate-spin inline mr-1.5" />Redirecting&hellip;</>
+                  ) : 'Get Pro'}
+                </button>
+              ) : (
+                <Link
+                  href="/register"
+                  className="block w-full py-3 bg-accent hover:bg-accent-light text-white rounded-lg font-medium text-center transition-all duration-300 hover:shadow-[0_0_30px_rgba(0,122,204,0.25)]"
+                >
+                  Get Pro
+                </Link>
+              )}
             </div>
 
             {/* Unlimited */}
@@ -121,12 +163,24 @@ export default function Pricing() {
                   </li>
                 ))}
               </ul>
-              <Link
-                href="/register"
-                className="block w-full py-3 bg-gradient-to-r from-accent to-amber-400 hover:opacity-90 text-black font-semibold rounded-lg text-center transition-all duration-300"
-              >
-                Get Unlimited
-              </Link>
+              {isLoggedIn ? (
+                <button
+                  onClick={() => handleCheckout('unlimited')}
+                  disabled={checkoutLoading}
+                  className="block w-full py-3 bg-gradient-to-r from-accent to-amber-400 hover:opacity-90 text-black font-semibold rounded-lg text-center transition-all duration-300 disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {checkoutLoading ? (
+                    <><Loader2 size={14} className="animate-spin inline mr-1.5" />Redirecting&hellip;</>
+                  ) : 'Get Unlimited'}
+                </button>
+              ) : (
+                <Link
+                  href="/register"
+                  className="block w-full py-3 bg-gradient-to-r from-accent to-amber-400 hover:opacity-90 text-black font-semibold rounded-lg text-center transition-all duration-300"
+                >
+                  Get Unlimited
+                </Link>
+              )}
             </div>
           </div>
         </FadeIn>

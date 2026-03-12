@@ -63,6 +63,71 @@ const DATA_GATHER_TOOLS = new Set([
 ]);
 const DATA_WRITE_TOOLS = new Set(['write_file', 'edit_file']);
 
+/**
+ * Detect if a user message describes a large/incremental task and auto-create todos.
+ * This helps models stay on track during context rotations.
+ */
+function autoCreateLargeTaskTodos(message, mcpToolServer) {
+  if (!message || !mcpToolServer) return null;
+  const lower = message.toLowerCase();
+
+  // Pattern: Large line count requests (500+ lines)
+  const lineMatch = lower.match(/(\d{3,})\s*[-]?\s*lines?/);
+  if (lineMatch && parseInt(lineMatch[1], 10) >= 500) {
+    const targetLines = parseInt(lineMatch[1], 10);
+    const chunks = Math.ceil(targetLines / 500);
+    const items = [];
+    items.push({ text: `Create initial file structure`, status: 'pending' });
+    for (let i = 1; i <= Math.min(chunks, 8); i++) {
+      const start = (i - 1) * 500 + 1;
+      const end = Math.min(i * 500, targetLines);
+      items.push({ text: `Write lines ${start}-${end}`, status: 'pending' });
+    }
+    if (chunks > 8) {
+      items.push({ text: `Continue writing remaining ${targetLines - 4000} lines`, status: 'pending' });
+    }
+    items.push({ text: `Review and finalize output`, status: 'pending' });
+    return mcpToolServer._writeTodos({ items });
+  }
+
+  // Pattern: Multiple functions/items (20+)
+  const funcMatch = lower.match(/(\d{2,})\s*(?:utility\s*)?functions?/);
+  if (funcMatch && parseInt(funcMatch[1], 10) >= 20) {
+    const targetFuncs = parseInt(funcMatch[1], 10);
+    const chunks = Math.ceil(targetFuncs / 10);
+    const items = [];
+    items.push({ text: `Create file and initial structure`, status: 'pending' });
+    for (let i = 1; i <= Math.min(chunks, 6); i++) {
+      const start = (i - 1) * 10 + 1;
+      const end = Math.min(i * 10, targetFuncs);
+      items.push({ text: `Implement functions ${start}-${end}`, status: 'pending' });
+    }
+    if (chunks > 6) {
+      items.push({ text: `Continue implementing remaining ${targetFuncs - 60} functions`, status: 'pending' });
+    }
+    items.push({ text: `Verify all functions are exported`, status: 'pending' });
+    return mcpToolServer._writeTodos({ items });
+  }
+
+  // Pattern: Multiple files (5+)
+  const fileMatch = lower.match(/(\d+)\s*(?:different\s*)?files?/);
+  if (fileMatch && parseInt(fileMatch[1], 10) >= 5) {
+    const targetFiles = parseInt(fileMatch[1], 10);
+    const items = [];
+    items.push({ text: `Plan file structure`, status: 'pending' });
+    for (let i = 1; i <= Math.min(targetFiles, 10); i++) {
+      items.push({ text: `Create file ${i} of ${targetFiles}`, status: 'pending' });
+    }
+    if (targetFiles > 10) {
+      items.push({ text: `Continue creating remaining ${targetFiles - 10} files`, status: 'pending' });
+    }
+    items.push({ text: `Verify all files created`, status: 'pending' });
+    return mcpToolServer._writeTodos({ items });
+  }
+
+  return null;
+}
+
 function register(ctx) {
   const {
     llmEngine, cloudLLM, mcpToolServer, playwrightBrowser, browserManager,
@@ -293,6 +358,19 @@ function register(ctx) {
     const executionState = new ExecutionState();
     const summarizer = new ctx.ConversationSummarizer();
     summarizer.setGoal(message);
+
+    // Auto-create todos for large/incremental tasks (helps model track progress across rotations)
+    const autoTodoResult = autoCreateLargeTaskTodos(message, mcpToolServer);
+    if (autoTodoResult?.success) {
+      console.log(`[Cloud] Auto-created ${autoTodoResult.created?.length || 0} todos for incremental task`);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('mcp-tool-results', [{
+          tool: 'write_todos',
+          params: { items: autoTodoResult.created },
+          result: autoTodoResult,
+        }]);
+      }
+    }
 
     while (iteration < MAX_CLOUD_ITERATIONS) {
       if (isStale()) {
@@ -755,6 +833,19 @@ function register(ctx) {
     const summarizer = new ConversationSummarizer();
     summarizer.setGoal(message);
 
+    // Auto-create todos for large/incremental tasks (helps model track progress across rotations)
+    const autoTodoResult = autoCreateLargeTaskTodos(message, mcpToolServer);
+    if (autoTodoResult?.success) {
+      console.log(`[AI Chat] Auto-created ${autoTodoResult.created?.length || 0} todos for incremental task`);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('mcp-tool-results', [{
+          tool: 'write_todos',
+          params: { items: autoTodoResult.created },
+          result: autoTodoResult,
+        }]);
+      }
+    }
+
     // Transactional rollback
     let rollbackRetries = 0;
     const maxRollbackRetries = modelTier.retryBudget;
@@ -1039,9 +1130,23 @@ function register(ctx) {
             }
 
             const partial = fullResponseText.trim().length > 0 ? fullResponseText.substring(Math.max(0, fullResponseText.length - 1500)) : '';
+            
+            // Build strong continuation prompt with incremental progress tracking
+            const incrementalHint = summarizer.incrementalTask
+              ? `\n**INCREMENTAL TASK: ${summarizer.incrementalTask.current}/${summarizer.incrementalTask.target} ${summarizer.incrementalTask.type} completed.**`
+              : '';
+            const fileProgressHint = Object.keys(summarizer.fileProgress).length > 0
+              ? `\n**FILES IN PROGRESS:** ${Object.entries(summarizer.fileProgress).map(([f, p]) => `${f} (${p.writtenLines} lines)`).join(', ')}`
+              : '';
+
             const hint = partial
-              ? `\n\nYou were generating and context was rotated. Here is the end of what you wrote:\n---\n${partial}\n---\nContinue from where you left off.`
-              : `\nContext was rotated. The user request is: ${message.substring(0, 300)}`;
+              ? `\n\n## CONTINUE FROM HERE\n---\n${partial}\n---` +
+                incrementalHint + fileProgressHint +
+                `\n\n**CRITICAL: DO NOT REFUSE. DO NOT SAY "I cannot continue."**` +
+                `\nUse append_to_file to add more content. Call a tool NOW to make progress.`
+              : `\nContext was rotated. The user request is: ${message.substring(0, 300)}` +
+                incrementalHint + fileProgressHint +
+                `\n\n**Continue the task using tools. Do not refuse.**`;
 
             currentPrompt = {
               systemContext: buildStaticPrompt(),
@@ -1337,15 +1442,14 @@ function register(ctx) {
           // Increased from 50K to allow large file generation — context rotation will handle memory
           const MAX_CONTINUATION_CHARS = 500000; // 500K chars (~125K lines of code)
           let _contAbortReason = '';
-          let _contShouldRotate = false;
+          // ALWAYS attempt rotation on any abort reason if rotations available
+          let _contShouldRotate = contextRotations < MAX_CONTEXT_ROTATIONS;
           if (fullResponseText.length > MAX_CONTINUATION_CHARS) {
-            // Instead of hard abort, trigger context rotation to continue with fresh buffer
-            _contShouldRotate = true;
             _contAbortReason = `total output exceeds ${MAX_CONTINUATION_CHARS} chars — rotating context`;
           } else if (_contLowProgressCount >= 3) {
-            _contAbortReason = 'no forward progress';
+            _contAbortReason = 'no forward progress — rotating context to recover';
           } else if (_contRepeatCount >= 2) {
-            _contAbortReason = 'repeated/near-identical content';
+            _contAbortReason = 'repeated/near-identical content — rotating context';
           }
 
           // Forward-progress scoring: after 5 passes, if avg chars per pass varies <10% from first pass, abort
@@ -1364,21 +1468,41 @@ function register(ctx) {
             _contRepeatCount = 0;
             _contCharSizes = [];
             
-            // If rotation was requested (char limit hit but task continues), trigger context rotation
+            // ALWAYS attempt rotation to recover and continue the task
             if (_contShouldRotate && contextRotations < MAX_CONTEXT_ROTATIONS) {
               console.log(`[AI Chat] Large-output rotation triggered (${contextRotations + 1}/${MAX_CONTEXT_ROTATIONS})`);
               contextRotations++;
               try {
-                // Store what we have so far and rotate
+                // Generate full summary with file progress tracking
+                summarizer.markRotation();
+                const convSummary = summarizer.generateSummary({
+                  maxTokens: Math.min(Math.floor(totalCtx * 0.25), 3000),
+                  activeTodos: mcpToolServer?._todos || [],
+                });
+
+                // Store partial output for context
                 const partialOutput = fullResponseText.slice(-Math.min(fullResponseText.length, 2000));
                 await llmEngine.resetSession(true);
                 await ensureLlmChat(llmEngine, getNodeLlamaCppPath);
                 if (mainWindow && !mainWindow.isDestroyed()) {
                   mainWindow.webContents.send('llm-thinking-token', '\n[Context rotated for large output]\n');
                 }
+
+                // Build strong continuation prompt with summary, progress, and directive
+                const incrementalHint = summarizer.incrementalTask
+                  ? `\n**INCREMENTAL TASK: ${summarizer.incrementalTask.current}/${summarizer.incrementalTask.target} ${summarizer.incrementalTask.type} completed.**`
+                  : '';
+                const fileProgressHint = Object.keys(summarizer.fileProgress).length > 0
+                  ? `\n**FILES IN PROGRESS:** ${Object.entries(summarizer.fileProgress).map(([f, p]) => `${f} (${p.writtenLines} lines)`).join(', ')}`
+                  : '';
+
                 currentPrompt = {
                   systemContext: buildStaticPrompt(),
-                  userMessage: buildDynamicContext() + `\n\nYou were generating a large output and context was rotated. Continue from where you left off:\n---\n${partialOutput}\n---\n`,
+                  userMessage: buildDynamicContext() + '\n\n' + convSummary +
+                    `\n\n## CONTINUE FROM HERE\n---\n${partialOutput}\n---` +
+                    incrementalHint + fileProgressHint +
+                    `\n\n**CRITICAL: DO NOT REFUSE. DO NOT SAY "I cannot continue."**` +
+                    `\nUse append_to_file to add more content. Call a tool NOW to make progress.`,
                 };
                 sessionJustRotated = true;
                 continue;
@@ -1887,12 +2011,24 @@ function preGenerationContextCheck(opts) {
   } catch (_) {}
   const summary = summarizer.generateQuickSummary(mcpToolServer?._todos);
 
+  // Build incremental progress hints
+  const incrementalHint = summarizer.incrementalTask
+    ? `\n**INCREMENTAL TASK: ${summarizer.incrementalTask.current}/${summarizer.incrementalTask.target} ${summarizer.incrementalTask.type} completed.**`
+    : '';
+  const fileProgressHint = Object.keys(summarizer.fileProgress || {}).length > 0
+    ? `\n**FILES IN PROGRESS:** ${Object.entries(summarizer.fileProgress).map(([f, p]) => `${f} (${p.writtenLines} lines)`).join(', ')}`
+    : '';
+  const noRefuseDirective = incrementalHint || fileProgressHint
+    ? `\n\n**CRITICAL: DO NOT REFUSE. Use append_to_file to continue. Call a tool NOW.**`
+    : '';
+
   if (isContinuationRotation) {
     return {
       shouldContinue: true,
       prompt: {
         systemContext: buildStaticPrompt(),
-        userMessage: buildDynamicContext(Math.floor(maxPromptTokens * 0.10)) + '\n' + message,
+        userMessage: buildDynamicContext(Math.floor(maxPromptTokens * 0.10)) + '\n' + message +
+          incrementalHint + fileProgressHint + noRefuseDirective,
       },
       rotated: true,
       summary,
@@ -1904,7 +2040,9 @@ function preGenerationContextCheck(opts) {
     shouldContinue: true,
     prompt: {
       systemContext: buildStaticPrompt(),
-      userMessage: buildDynamicContext() + '\n' + summary + `\nContext rotated. Current request: ${message.substring(0, 300)}`,
+      userMessage: buildDynamicContext() + '\n' + summary +
+        `\nContext rotated. Current request: ${message.substring(0, 300)}` +
+        incrementalHint + fileProgressHint + noRefuseDirective,
     },
     rotated: true,
     summary,

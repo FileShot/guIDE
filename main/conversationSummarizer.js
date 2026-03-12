@@ -22,12 +22,54 @@ class ConversationSummarizer {
     this.totalToolCalls = 0;
     this._warmTierResults = []; // Recent tool results carried across rotation
     this._previousSummaries = []; // Compacted summaries from prior rotations
+    this.fileProgress = {};       // {filePath: {writtenLines, writtenChars, lastWriteIteration}}
+    this.incrementalTask = null;  // {type, target, current} — tracks progress on large tasks
   }
 
   // ─── Goal ───
   setGoal(message) {
     if (!message) return;
     this.originalGoal = message.slice(0, 2000);
+
+    // Detect incremental task patterns in the goal
+    this._detectIncrementalTask(message);
+  }
+
+  // ─── Incremental Task Detection ───
+  _detectIncrementalTask(message) {
+    if (!message) return;
+    const lower = message.toLowerCase();
+
+    // Pattern: "N lines" or "N-line"
+    const lineMatch = lower.match(/(\d{3,})\s*[-]?\s*lines?/);
+    if (lineMatch) {
+      this.incrementalTask = { type: 'lines', target: parseInt(lineMatch[1], 10), current: 0 };
+      return;
+    }
+
+    // Pattern: "N functions"
+    const funcMatch = lower.match(/(\d{2,})\s*(?:utility\s*)?functions?/);
+    if (funcMatch) {
+      this.incrementalTask = { type: 'functions', target: parseInt(funcMatch[1], 10), current: 0 };
+      return;
+    }
+
+    // Pattern: "N items/elements/components"
+    const itemMatch = lower.match(/(\d{2,})\s*(?:items?|elements?|components?|methods?|classes?)/);
+    if (itemMatch) {
+      this.incrementalTask = { type: 'items', target: parseInt(itemMatch[1], 10), current: 0 };
+      return;
+    }
+  }
+
+  setIncrementalTask(type, target, current = 0) {
+    this.incrementalTask = { type, target, current };
+  }
+
+  updateIncrementalProgress(amount) {
+    if (this.incrementalTask) {
+      this.incrementalTask.current += amount;
+    }
   }
 
   // ─── Tool Call Recording ───
@@ -97,6 +139,42 @@ class ConversationSummarizer {
     }
     this.currentState.lastAction = toolName;
     this.currentState.lastActionTime = Date.now();
+
+    // Track file write progress for incremental tasks
+    if ((toolName === 'write_file' || toolName === 'append_to_file') && result?.success !== false) {
+      const filePath = params?.filePath || params?.path;
+      const content = params?.content || '';
+      const lines = content.split('\n').length;
+      const chars = content.length;
+      if (filePath) {
+        if (!this.fileProgress[filePath]) {
+          this.fileProgress[filePath] = { writtenLines: 0, writtenChars: 0, writes: 0 };
+        }
+        if (toolName === 'write_file') {
+          // write_file replaces — reset count
+          this.fileProgress[filePath] = { writtenLines: lines, writtenChars: chars, writes: 1 };
+        } else {
+          // append_to_file adds
+          this.fileProgress[filePath].writtenLines += lines;
+          this.fileProgress[filePath].writtenChars += chars;
+          this.fileProgress[filePath].writes++;
+        }
+
+        // Update incremental task progress if tracking lines
+        if (this.incrementalTask && this.incrementalTask.type === 'lines') {
+          // Sum all written lines across all files
+          this.incrementalTask.current = Object.values(this.fileProgress).reduce((sum, fp) => sum + fp.writtenLines, 0);
+        }
+
+        // Estimate function count from content for function-based tasks
+        if (this.incrementalTask && this.incrementalTask.type === 'functions') {
+          const funcMatches = content.match(/function\s+\w+|(?:const|let|var)\s+\w+\s*=\s*(?:async\s*)?\(/g);
+          if (funcMatches) {
+            this.incrementalTask.current += funcMatches.length;
+          }
+        }
+      }
+    }
   }
 
   _extractFindings(toolName, result) {
@@ -275,6 +353,22 @@ class ConversationSummarizer {
       sections.push(`## RECENT RESULTS (pre-rotation)\n${this._warmTierResults.join('\n')}`);
     }
 
+    // 5d. File progress for incremental tasks
+    const fileProgressKeys = Object.keys(this.fileProgress);
+    if (fileProgressKeys.length > 0) {
+      const progressLines = fileProgressKeys.map(fp => {
+        const p = this.fileProgress[fp];
+        return `- ${fp}: ${p.writtenLines} lines (${p.writtenChars} chars) written in ${p.writes} operation(s)`;
+      });
+      sections.push(`## FILE PROGRESS\n${progressLines.join('\n')}\n**Use append_to_file to continue adding content to existing files.**`);
+    }
+
+    // 5e. Incremental task tracking
+    if (this.incrementalTask) {
+      const pct = this.incrementalTask.target > 0 ? Math.round((this.incrementalTask.current / this.incrementalTask.target) * 100) : 0;
+      sections.push(`## INCREMENTAL TASK PROGRESS\n- Type: ${this.incrementalTask.type}\n- Target: ${this.incrementalTask.target}\n- Current: ${this.incrementalTask.current} (${pct}%)\n**Continue making progress. Do not refuse or give up.**`);
+    }
+
     // 6. Remaining plan steps
     const remaining = this.taskPlan.filter(s => !s.completed);
     if (remaining.length > 0) {
@@ -291,8 +385,16 @@ class ConversationSummarizer {
       if (todoLines) sections.push(`## ACTIVE TASKS\n${todoLines}`);
     }
 
-    // 7. Instruction
-    sections.push('## INSTRUCTION\nContinue the task from where you left off. Do not repeat completed work.');
+    // 7. Instruction — strengthened to prevent refusal
+    let instruction = '## INSTRUCTION\nContinue the task from where you left off. Do not repeat completed work.';
+    if (this.incrementalTask || fileProgressKeys.length > 0) {
+      instruction += '\n\n**CRITICAL: DO NOT REFUSE. DO NOT SAY "I cannot continue."**\n';
+      instruction += 'Make incremental progress using tools:\n';
+      instruction += '- Use `append_to_file` to add more content to existing files\n';
+      instruction += '- Use `write_todos` to track multi-step progress\n';
+      instruction += '- Call a tool NOW to continue the task\n';
+    }
+    sections.push(instruction);
 
     // Assemble and cap
     let summary = sections.join('\n\n');

@@ -318,7 +318,8 @@ export const CodeBlock: React.FC<{ code: string; language: string; onApply: () =
   const [copied, setCopied] = useState(false);
   const lineCount = code.split('\n').length;
   const isLong = lineCount > COLLAPSE_LINE_THRESHOLD;
-  const [expanded, setExpanded] = useState(!isLong || !!isToolCall); // Tool call results start expanded
+  // Default to collapsed for long blocks; keep streaming blocks expanded so users can watch generation
+  const [expanded, setExpanded] = useState(!!isStreaming || !isLong);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(code);

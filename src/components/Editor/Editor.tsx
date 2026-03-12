@@ -106,6 +106,31 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(({
     onTabsChange?.(tabs.length > 0);
   }, [tabs.length, onTabsChange]);
 
+  // Clear diff bar if the target tab was closed or file was deleted
+  useEffect(() => {
+    if (showDiffBar && diffTabId) {
+      const diffTab = tabs.find(t => t.id === diffTabId);
+      // Tab closed or pendingChange cleared → dismiss diff bar
+      if (!diffTab || !diffTab.pendingChange) {
+        setShowDiffBar(false);
+        setDiffTabId(null);
+      }
+    }
+  }, [tabs, showDiffBar, diffTabId]);
+
+  // Listen for file-deleted events from main process — clear pending changes for deleted files
+  useEffect(() => {
+    const api = window.electronAPI;
+    if (!api?.onFileDeleted) return;
+    const unsubscribe = api.onFileDeleted((deletedPath: string) => {
+      // Clear pendingChange and close diff bar for the deleted file
+      setTabs(prev => prev.map(t =>
+        t.filePath === deletedPath ? { ...t, pendingChange: undefined } : t
+      ));
+    });
+    return unsubscribe;
+  }, []);
+
   // Close tab — defined before useImperativeHandle so it can be referenced
   const closeTab = useCallback((tabId: string, e?: React.MouseEvent) => {
     e?.stopPropagation();

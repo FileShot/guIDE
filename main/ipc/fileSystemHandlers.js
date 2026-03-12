@@ -87,7 +87,13 @@ function register(ctx) {
 
   ipcMain.handle('delete-file', async (_, filePath) => {
     if (!ctx.isPathAllowed(filePath)) return { success: false, error: 'Access denied: path outside allowed directories' };
-    try { await fs.unlink(filePath); if (ctx.scheduleIncrementalReindex) ctx.scheduleIncrementalReindex(); return { success: true }; }
+    try { 
+      await fs.unlink(filePath); 
+      if (ctx.scheduleIncrementalReindex) ctx.scheduleIncrementalReindex();
+      // Notify renderer so Editor can clear any pending diff for this file
+      ctx.mainWindow?.webContents?.send('file-deleted', filePath);
+      return { success: true }; 
+    }
     catch (error) { return { success: false, error: error.message }; }
   });
 

@@ -1,6 +1,6 @@
 ﻿import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Virtuoso, VirtuosoHandle } from 'react-virtuoso';
-import { splitInlineToolCalls, parseToolCall, extractToolResults, stripTrailingPartialToolCall } from '@/utils/chatContentParser';
+import { splitInlineToolCalls, parseToolCall, extractToolResults, stripTrailingPartialToolCall, stripFunctionCallTools } from '@/utils/chatContentParser';
 import {
   X, Cpu, Globe, Code, Bug, FileCode, Terminal, Plus,
   ChevronDown, Trash2, Key, Loader2,
@@ -1915,6 +1915,11 @@ ${e.message}`,
   // and leave the trailing incomplete block as plain text
   // Also merges tool calls with their results like renderContentParts
   const renderStreamingContent = (text: string) => {
+    // Strip function-call style tool invocations early — these appear naked during streaming
+    // because backend only detects them after generation completes (fallback detection).
+    // E.g. write_file("path", "content") or edit_file("path", "oldText", "newText")
+    text = stripFunctionCallTools(text);
+    
     // Pre-extract tool results for merging (same as renderContentParts)
     const toolResultMap = extractToolResults(text);
 
@@ -2075,17 +2080,29 @@ ${e.message}`,
           const hasClosingFence = hasOpenFence && remaining.indexOf('```', openFenceIdx + 3) !== -1;
           if (hasOpenFence && !hasClosingFence) {
             // Incomplete fence — render text before the fence, then render partial code as a live CodeBlock
-            const beforeFence = remaining.substring(0, openFenceIdx).trim();
-            if (beforeFence) {
-              parts.push(<InlineMarkdownText key={`s-${idx}`} content={beforeFence} />);
-              idx++;
-            }
+            let beforeFence = remaining.substring(0, openFenceIdx).trim();
             // Parse fence opener: ``` followed by optional language tag, then newline, then code
             const fenceContent = remaining.substring(openFenceIdx + 3);
             const firstNewlineInFence = fenceContent.indexOf('\n');
             const fenceLang = firstNewlineInFence > 0 ? fenceContent.substring(0, firstNewlineInFence).trim() : '';
             // Only render once the first newline has arrived — before that we only have the language tag, not code
-            const partialCode = firstNewlineInFence >= 0 ? fenceContent.substring(firstNewlineInFence + 1) : '';
+            let partialCode = firstNewlineInFence >= 0 ? fenceContent.substring(firstNewlineInFence + 1) : '';
+            
+            // Heuristic: if beforeFence looks like leaked code (model closed fence early or
+            // streaming boundary issue), prepend it to the code block instead of rendering as text.
+            // Check for code-like patterns: leading spaces, braces, colons, semicolons, equals signs
+            // in positions suggesting code syntax rather than prose.
+            const looksLikeCode = /^\s{2,}|\{|\}|;$|^\s*(?:import|from|def|class|function|const|let|var|return|if|for|while|elif|else:|except|try|with|async|await)\b/.test(beforeFence);
+            if (looksLikeCode && beforeFence) {
+              // Prepend leaked code to the partial code block
+              partialCode = beforeFence + '\n' + partialCode;
+              beforeFence = '';
+            }
+            
+            if (beforeFence) {
+              parts.push(<InlineMarkdownText key={`s-${idx}`} content={beforeFence} />);
+              idx++;
+            }
             if (partialCode.trim()) {
               parts.push(<CodeBlock key={`streaming-${idx}`} code={partialCode} language={fenceLang || 'code'} onApply={() => {}} isStreaming={true} />);
               idx++;

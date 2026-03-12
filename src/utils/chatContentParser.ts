@@ -55,6 +55,100 @@ function isValidToolName(name: string): boolean {
 }
 
 /**
+ * Strip function-call style tool invocations from streaming text.
+ * Models sometimes output: write_file("path", "content") or write_file("path", """content""")
+ * These are detected by the backend after generation completes, but appear naked in the UI
+ * during streaming. This function strips them so they don't clutter the chat.
+ */
+export function stripFunctionCallTools(text: string): string {
+  // Match: toolname("arg1", "arg2...") or toolname('arg1', 'arg2...')
+  // Handles multi-line content with """/''' and regular "/'.
+  // This is a greedy strip — once we see tool_name( we consume until the matching ) or end of text
+  const TOOL_NAMES = ['write_file', 'read_file', 'edit_file', 'delete_file', 'run_command', 'list_directory', 'find_files'];
+  let result = text;
+  for (const tool of TOOL_NAMES) {
+    // Pattern: tool_name( followed by quoted args — consume everything until balanced )
+    const startPattern = new RegExp(`\\b${tool}\\s*\\(\\s*['"\`]`, 'gi');
+    let match;
+    while ((match = startPattern.exec(result)) !== null) {
+      // Find the matching closing paren by counting parens (accounting for strings)
+      let depth = 1;
+      let j = match.index + match[0].length;
+      let inString = true; // We started inside the first string quote
+      let stringChar = match[0].slice(-1); // The quote char that opened the string
+      let escaped = false;
+      let tripleQuote = false;
+      
+      // Check for triple-quote
+      if (j < result.length && result[j] === stringChar && j + 1 < result.length && result[j + 1] === stringChar) {
+        tripleQuote = true;
+        j += 2; // Skip the other two quotes
+      }
+      
+      while (j < result.length && depth > 0) {
+        const ch = result[j];
+        if (escaped) {
+          escaped = false;
+          j++;
+          continue;
+        }
+        if (ch === '\\' && inString) {
+          escaped = true;
+          j++;
+          continue;
+        }
+        if (inString) {
+          if (tripleQuote) {
+            // Look for closing triple-quote
+            if (ch === stringChar && j + 2 < result.length && result[j + 1] === stringChar && result[j + 2] === stringChar) {
+              inString = false;
+              tripleQuote = false;
+              j += 3;
+              continue;
+            }
+          } else {
+            if (ch === stringChar) {
+              inString = false;
+            }
+          }
+          j++;
+          continue;
+        }
+        // Not in string
+        if (ch === "'" || ch === '"' || ch === '`') {
+          inString = true;
+          stringChar = ch;
+          // Check for triple-quote
+          if (j + 2 < result.length && result[j + 1] === ch && result[j + 2] === ch) {
+            tripleQuote = true;
+            j += 3;
+            continue;
+          }
+        } else if (ch === '(') {
+          depth++;
+        } else if (ch === ')') {
+          depth--;
+        }
+        j++;
+      }
+      
+      if (depth === 0) {
+        // Found complete function call — strip it
+        const before = result.slice(0, match.index).trimEnd();
+        const after = result.slice(j).trimStart();
+        result = before + (before && after ? '\n' : '') + after;
+        startPattern.lastIndex = 0; // Reset to search from beginning
+      } else {
+        // Incomplete function call (still streaming) — strip from start to end
+        result = result.slice(0, match.index).trimEnd();
+        break;
+      }
+    }
+  }
+  return result;
+}
+
+/**
  * Strip tool execution result sections, orphan headers, and internal reasoning from text.
  */
 export function stripToolArtifacts(text: string): string {
@@ -62,6 +156,13 @@ export function stripToolArtifacts(text: string): string {
   // Remove <think>/<thinking> blocks that weren't caught earlier
   cleaned = cleaned.replace(/<think(?:ing)?>\s*[\s\S]*?<\/think(?:ing)?>/gi, '');
   cleaned = cleaned.replace(/<\/?think(?:ing)?>/gi, '');
+  // Strip function-call style tool invocations (write_file("path", "content") etc.)
+  cleaned = stripFunctionCallTools(cleaned);
+  // Strip naked JSON tool calls that couldn't be parsed by splitInlineToolCalls
+  // (e.g., malformed JSON with literal newlines inside strings). These are already
+  // handled by the backend after generation completes; we just hide them during streaming.
+  // The pattern matches {"tool":"..." or {"name":"..." followed by any content until } or end.
+  cleaned = cleaned.replace(/\{\s*"(?:tool|name)"\s*:\s*"[^"]*"[\s\S]*?(?:\}(?:\s*\})?|$)/g, '');
   // (model output filters removed — model text is shown verbatim)
   // Strip bare code-fence language labels leaked by the model without backtick fences
   // e.g. the model outputs `json\n{"tool":...}` instead of ```json\n{...}\n```. These labels
@@ -175,36 +276,28 @@ export function splitInlineToolCalls(text: string): ContentSegment[] {
         jsonRegex.lastIndex = lastIndex;
       }
     } catch {
-      // Malformed JSON (e.g. unescaped HTML inside content param) — skip the entire
-      // blob so it doesn't leak into "remaining text" and appear as raw JSON in chat.
-      // When HTML/CSS content confuses the brace counter (unescaped quotes make inString
-      // tracking lose sync), endIdx may be set too early. Any text after endIdx that is
-      // still part of the blob would leak as raw content. For tool-call blobs we extend
-      // the skip window: find the furthest plausible closing braces after endIdx.
+      // Malformed JSON (e.g. literal newlines inside strings, unescaped quotes) — skip
+      // the entire blob so it doesn't leak as naked text. The backend will parse and
+      // execute tool calls properly after generation completes; we just need to hide
+      // the raw JSON during streaming.
       if (startIdx > lastIndex) {
         const before = stripToolArtifacts(text.substring(lastIndex, startIdx)).replace(/\[\s*$/, '').trim();
         if (before) results.push({ type: 'text', content: before });
       }
-      let skipEnd = endIdx;
-      // If the blob looked like a tool call, extend past any trailing content that
-      // was likely part of the same JSON blob (e.g., leaked HTML/CSS after premature close)
-      const blobHead = text.substring(startIdx, Math.min(startIdx + 200, text.length));
-      if (/"(?:tool|name)"\s*:\s*"/.test(blobHead)) {
-        // Look for the next clearly non-JSON content boundary: a line starting with
-        // a letter/header/markdown that isn't part of code content, or end of text
-        const afterBlob = text.substring(endIdx);
-        // Find the next double-newline paragraph break — content before it is likely
-        // leaked code from the blob, content after it is likely the model's prose response.
-        const paraBreak = afterBlob.indexOf('\n\n');
-        if (paraBreak > 0) {
-          // Only extend to the paragraph break — preserve everything after it
-          skipEnd = endIdx + paraBreak;
-        }
-        // If no paragraph break found, DON'T consume to end — the brace counter's endIdx
-        // is the best we have. Some content may leak, but that's better than swallowing
-        // the model's actual follow-up prose.
+      // Mark this as a tool segment even though we couldn't parse it — this prevents
+      // the JSON from rendering as text. The tool bubble from llm-tool-generating IPC
+      // already shows the user what tool is being called.
+      const toolNameMatch = match[0].match(/"(?:tool|name)"\s*:\s*"([^"]*)"/);
+      const toolName = toolNameMatch ? toolNameMatch[1] : 'unknown';
+      if (isValidToolName(toolName)) {
+        // Consume to end of text — the malformed JSON likely continues to the end
+        // (model is still streaming the content param). Backend handles actual execution.
+        results.push({ type: 'tool', content: text.substring(startIdx), toolCall: { tool: toolName, params: {} } });
+        lastIndex = text.length;
+        break;
       }
-      lastIndex = skipEnd;
+      // Unknown tool name — skip past the detected JSON blob boundaries
+      lastIndex = endIdx;
       jsonRegex.lastIndex = lastIndex;
     }
   }

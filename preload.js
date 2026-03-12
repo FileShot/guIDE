@@ -47,6 +47,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   liveServerStop: () => ipcRenderer.invoke('live-server-stop'),
   liveServerStatus: () => ipcRenderer.invoke('live-server-status'),
   restRequest: (opts) => ipcRenderer.invoke('rest-request', opts),
+  onFileDeleted: (callback) => _on('file-deleted', callback),
 
   // ── Dialogs ──
   showSaveDialog: (options) => ipcRenderer.invoke('show-save-dialog', options),

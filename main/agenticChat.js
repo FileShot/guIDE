@@ -48,8 +48,9 @@ function getNodeLlamaCppPath() {
 }
 
 // ─── Constants ──────────────────────────────────────────────
-const STUCK_THRESHOLD = 3;
+const STUCK_THRESHOLD = 5;
 const CYCLE_MIN_REPEATS = 3;
+const BATCH_TOOLS = new Set(['create_directory', 'write_file', 'delete_file', 'find_and_replace', 'append_to_file']);
 const MAX_RESPONSE_SIZE = 2 * 1024 * 1024; // 2MB cap
 const WALL_CLOCK_DEADLINE_MS = 30 * 60 * 1000; // 30 minutes
 const BROWSER_STATE_CHANGERS = new Set([
@@ -1570,7 +1571,8 @@ function register(ctx) {
         try { if (llmEngine.sequence?.nextTokenIndex) contextUsed = llmEngine.sequence.nextTokenIndex; } catch (_) {}
         if (!contextUsed) {
           const pLen = typeof currentPrompt === 'string' ? currentPrompt.length : ((currentPrompt.systemContext || '').length + (currentPrompt.userMessage || '').length);
-          contextUsed = Math.ceil((pLen + fullResponseText.length) / 4);
+          // Use /3.5 instead of /4 for more conservative token estimation
+          contextUsed = Math.ceil((pLen + fullResponseText.length) / 3.5);
         }
         const compaction = progressiveContextCompaction({
           contextUsedTokens: contextUsed, totalContextTokens: totalCtx,
@@ -1787,9 +1789,9 @@ function register(ctx) {
         const done = activeTodos.filter(t => t.status === 'done').length;
         const total = activeTodos.length;
         if (inProgress) {
-          stepDirective = `\n## CURRENT STEP (${done}/${total})\n**NOW:** ${inProgress.text}\n\n`;
+          stepDirective = `\n## CURRENT STEP (${done}/${total} complete)\n**NOW EXECUTING:** ${inProgress.text}\nWhen done: call update_todo with id=${inProgress.id} status="done".\n\n`;
         } else if (nextPending) {
-          stepDirective = `\n## NEXT STEP (${done}/${total})\n**DO NOW:** ${nextPending.text}\n\n`;
+          stepDirective = `\n## NEXT STEP (${done}/${total} complete)\n**DO THIS NOW:** ${nextPending.text}\nFirst call update_todo id=${nextPending.id} status="in-progress", then execute it.\n\n`;
         } else if (done === total) {
           stepDirective = `\n## PLAN COMPLETE (${done}/${total})\nAll steps finished. Provide a summary.\n\n`;
         }
@@ -2143,17 +2145,19 @@ async function executeNativeToolCalls(opts) {
 function detectStuckCycle(recentToolCalls, newResults, mainWindow, _readConfig) {
   for (const tr of newResults) {
     const p = tr.params || {};
-    const paramsHash = `${p.filePath || p.dirPath || p.url || p.ref || p.query || p.command || p.selector || ''}:${(p.text || p.content || '').substring(0, 80)}`.substring(0, 200);
+    // Use full JSON stringification for better differentiation of similar calls
+    const paramsHash = JSON.stringify(p).substring(0, 400);
     recentToolCalls.push({ tool: tr.tool, paramsHash });
   }
   if (recentToolCalls.length > 20) recentToolCalls.splice(0, recentToolCalls.length - 20);
 
-  // Stuck detection
-  if (recentToolCalls.length >= STUCK_THRESHOLD) {
-    const last = recentToolCalls[recentToolCalls.length - 1];
-    const tail = recentToolCalls.slice(-STUCK_THRESHOLD);
+  // Stuck detection with tool-specific thresholds for batch operations
+  const last = recentToolCalls[recentToolCalls.length - 1];
+  const effectiveThreshold = BATCH_TOOLS.has(last?.tool) ? 8 : STUCK_THRESHOLD;
+  if (recentToolCalls.length >= effectiveThreshold) {
+    const tail = recentToolCalls.slice(-effectiveThreshold);
     if (tail.every(tc => tc.tool === last.tool && tc.paramsHash === last.paramsHash)) {
-      console.log(`[AI Chat] Stuck: ${last.tool} ${STUCK_THRESHOLD}+ times`);
+      console.log(`[AI Chat] Stuck: ${last.tool} ${effectiveThreshold}+ times`);
       if (mainWindow) mainWindow.webContents.send('llm-token', `\n\n*Detected loop (${last.tool}). Stopped.*`);
       return true;
     }

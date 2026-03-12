@@ -332,6 +332,40 @@ function parseToolCalls(text) {
 
   if (calls.length > 0) return _postProcess(calls, text);
 
+  // Method 1.8: OpenAI array format — [{"name":"...", "arguments":{...}}]
+  const arrayRe = /\[\s*\{/g;
+  while ((m = arrayRe.exec(text)) !== null) {
+    // Try to extract the array
+    let depth = 0;
+    let inString = false;
+    let escape = false;
+    let start = m.index;
+    let end = start;
+    for (let i = start; i < text.length; i++) {
+      const ch = text[i];
+      if (escape) { escape = false; continue; }
+      if (ch === '\\') { escape = true; continue; }
+      if (ch === '"' && !inString) { inString = true; continue; }
+      if (ch === '"' && inString) { inString = false; continue; }
+      if (inString) continue;
+      if (ch === '[') depth++;
+      else if (ch === ']') { depth--; if (depth === 0) { end = i + 1; break; } }
+    }
+    if (end > start) {
+      const arrayStr = text.slice(start, end);
+      try {
+        const arr = JSON.parse(arrayStr);
+        if (Array.isArray(arr)) {
+          for (const item of arr) {
+            const call = normalizeToolCall(item);
+            if (call) addCall(call);
+          }
+        }
+      } catch (_) {}
+    }
+  }
+  if (calls.length > 0) return _postProcess(calls, text);
+
   // Method 2: Raw JSON objects with "tool" or "name" key
   const rawJsonRe = /\{\s*["']?(?:tool|name)["']?\s*:\s*["'][^"']+["']/g;
   while ((m = rawJsonRe.exec(text)) !== null) {

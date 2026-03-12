@@ -375,7 +375,8 @@ function progressiveContextCompaction(options) {
     if (chatHistory) pruned += pruneVerboseHistory(chatHistory, 2);
   }
 
-  const shouldRotate = pct > 0.80;
+  // Proactive rotation at 78% to prevent context overflow (was 80%)
+  const shouldRotate = pct > 0.78;
 
   if (pruned > 0) {
     console.log(`[Context Compaction] Phase ${pct > 0.75 ? 3 : pct > 0.60 ? 2 : 1}: compacted ${pruned} items at ${Math.round(pct * 100)}% usage`);

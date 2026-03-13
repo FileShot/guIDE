@@ -10,7 +10,7 @@ const { detectFamily, detectParamSize } = require('./modelDetection');
 const { sanitizeResponse } = require('./sanitize');
 
 // ─── Constants ───
-const STALL_TIMEOUT_MS = 90_000;
+const STALL_TIMEOUT_MS = 45_000;
 const MAX_HISTORY_ENTRIES = 40;
 const GPU_INIT_TIMEOUT = 120_000;
 const MODEL_LOAD_TIMEOUT = 180_000;
@@ -215,18 +215,31 @@ class LLMEngine extends EventEmitter {
       const llamaCppPath = this._getNodeLlamaCppPath();
       const { getLlama, LlamaChat, InputLookupTokenPredictor } = await import(pathToFileURL(llamaCppPath).href);
 
-      // Cancel any in-flight generation
+      // Cancel any in-flight generation FIRST, then wait
       if (this.abortController) {
         this.cancelGeneration('model-switch');
       }
-      // Wait for generation to settle before disposing (prevents "Object is disposed" race)
+      // Wait for active generation to fully complete before disposing
       if (this._activeGenerationPromise) {
-        try { await this._activeGenerationPromise; } catch {}
+        try { 
+          await Promise.race([
+            this._activeGenerationPromise,
+            new Promise(r => setTimeout(r, 3000)), // Max 3s wait for stuck generation
+          ]); 
+        } catch {}
       }
-      // Extra settle time for node-llama-cpp internal async ops (_eraseContextTokenRanges etc.)
-      // that may still be in-flight after the generation promise resolves
-      await new Promise(r => setTimeout(r, 500));
-      await this._dispose();
+      // Extended settle time for node-llama-cpp internal async ops
+      // (_eraseContextTokenRanges, streaming callbacks, etc.)
+      // Increased from 500ms to 1000ms to prevent "Object is disposed" race
+      await new Promise(r => setTimeout(r, 1000));
+      
+      // Wrap dispose in additional try-catch for race protection
+      try {
+        await this._dispose();
+      } catch (disposeErr) {
+        const log = require('./logger');
+        log.warn(`Dispose error (may be expected during model switch): ${disposeErr.message}`);
+      }
 
       if (loadSignal.aborted) throw new Error('Load cancelled');
 
@@ -281,6 +294,16 @@ class LLMEngine extends EventEmitter {
           // Track auto mode GPU layer usage (do not reject — auto mode optimizes layer split)
           if (mode === 'auto' && loadedModel.gpuLayers != null) {
             bestAutoGpuLayers = loadedModel.gpuLayers;
+          }
+
+          // Reject 'cuda' mode if it loaded 0 layers despite available VRAM
+          // This forces fallback to explicit layer counts which work better on constrained VRAM
+          if (mode === 'cuda' && loadedModel.gpuLayers === 0 && gpuConfig.vramGB > 0.5) {
+            const log = require('./logger');
+            log.warn(`CUDA mode loaded 0 layers despite ${gpuConfig.vramGB.toFixed(1)}GB VRAM — trying next mode`);
+            loadedModel.dispose?.();
+            loadedModel = null;
+            continue;
           }
 
           // Now try to create context on this model
@@ -1109,8 +1132,28 @@ class LLMEngine extends EventEmitter {
       try { this.sequence.dispose?.(); } catch {}
       this.sequence = null;
     }
+    
+    // Try to get a new sequence, with fallback to recreate context if "No sequences left"
     if (this.context) {
-      this.sequence = this.context.getSequence();
+      try {
+        this.sequence = this.context.getSequence();
+      } catch (seqErr) {
+        const log = require('./logger');
+        log.warn(`getSequence failed: ${seqErr.message} — recreating context`);
+        
+        // Context is exhausted, recreate it
+        try { this.context.dispose?.(); } catch {}
+        this.context = await this.model.createContext({
+          contextSize: { min: 512, max: this._computeMaxContext(0) },
+          flashAttention: true,
+          ignoreMemorySafetyChecks: true,
+          failedCreationRemedy: { retries: 4, autoContextSizeShrink: 0.5 },
+        });
+        
+        if (this.context) {
+          this.sequence = this.context.getSequence();
+        }
+      }
     }
 
     if (!this.sequence || this.sequence._disposed) {
@@ -1207,7 +1250,25 @@ class LLMEngine extends EventEmitter {
       };
       return this.gpuInfo;
     } catch {
-      return this.gpuInfo; // Return cached value or null
+      // Return default values instead of null to prevent undefined UI display
+      if (!this.gpuInfo) {
+        return {
+          name: 'Unknown',
+          memoryTotal: 0,
+          memoryUsed: 0,
+          memoryFree: 0,
+          memoryTotalGB: 0,
+          memoryUsedGB: 0,
+          memoryFreeGB: 0,
+          usagePercent: 0,
+          utilization: 0,
+          temperature: 0,
+          isActive: false,
+          gpuLayers: this.modelInfo?.gpuLayers || 0,
+          backend: this.modelInfo?.gpuMode || 'unknown',
+        };
+      }
+      return this.gpuInfo; // Return cached valid value
     }
   }
 

@@ -933,7 +933,9 @@ function register(ctx) {
       }
 
       // ── Pre-generation context check ──
-      if (iteration > 1) {
+      // Run for ALL iterations, not just > 1, to catch critically high context on first turn
+      // This prevents stalls when context is near full from conversation history
+      {
         const preGenResult = preGenerationContextCheck({
           llmEngine, totalCtx, currentPrompt, fullResponseText,
           allToolResults, contextRotations, MAX_CONTEXT_ROTATIONS: MAX_CONTEXT_ROTATIONS,
@@ -1128,17 +1130,32 @@ function register(ctx) {
         if (isContextOverflow && contextRotations < MAX_CONTEXT_ROTATIONS) {
           if (_pendingPartialBlock) { _pendingPartialBlock = null; }
 
-          // Continuation-overflow: clear partial content and retry
+          // Continuation-overflow: preserve partial content and provide context
+          // Generic solution: works for file writing, conversations, reading, browsing, etc.
           if (continuationCount > 0 && summarizer.completedSteps.length === 0) {
-            fullResponseText = '';
+            // Preserve partial output for context instead of wiping it
+            const partialOutput = fullResponseText.slice(-Math.min(fullResponseText.length, 2000));
+            fullResponseText = '';  // Clear for rotation, but we have partialOutput for context
             continuationCount = 0;
             overflowResponseBudgetReduced = true;
             contextRotations++;
             try { await llmEngine.resetSession(true); } catch (_) {}
             sessionJustRotated = true;
+            
+            // Generate a generic summary of what was happening (uses recorded plans/actions)
+            const actionsSummary = summarizer.generateQuickSummary(mcpToolServer?._todos);
+            
+            // Build generic continuation prompt that works for ANY task type
+            const partialHint = partialOutput.trim() 
+              ? `\n\n## CONTINUE FROM HERE\n---\n${partialOutput.substring(Math.max(0, partialOutput.length - 1500))}\n---`
+              : '';
+            
             currentPrompt = {
               systemContext: buildStaticPrompt(),
-              userMessage: buildDynamicContext(Math.floor(maxPromptTokens * 0.10)) + '\n' + message,
+              userMessage: buildDynamicContext(Math.floor(maxPromptTokens * 0.10)) + 
+                (actionsSummary ? '\n\n' + actionsSummary : '') +
+                partialHint +
+                '\n\n**Context rotated. Continue the task from where you left off.**\n' + message,
             };
             continue;
           }

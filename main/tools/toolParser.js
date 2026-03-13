@@ -330,6 +330,67 @@ function parseToolCalls(text) {
     }
   }
 
+  // Method 1.6: Truncated tool call recovery — handles incomplete JSON from maxTokens cutoff
+  // This catches cases where Method 1.5 fails because JSON is truncated mid-content
+  if (calls.length === 0) {
+    // Check for unclosed fence with tool name but incomplete JSON
+    const fenceStart = text.search(/```(?:tool_call|tool|json)/);
+    if (fenceStart !== -1) {
+      const afterFence = text.slice(fenceStart);
+      const hasClosingFence = /```(?:tool_call|tool|json)[^\n]*\n[\s\S]*?```/.test(afterFence);
+      
+      if (!hasClosingFence) {
+        // Found unclosed fence — try to extract truncated tool call
+        const toolNameMatch = afterFence.match(/\{\s*["']?(?:tool|name)["']?\s*:\s*["']([^"']+)["']/i);
+        if (toolNameMatch) {
+          const rawToolName = toolNameMatch[1].toLowerCase().replace(/-/g, '_');
+          const toolName = TOOL_NAME_ALIASES[rawToolName] || rawToolName;
+          
+          if (VALID_TOOLS.has(toolName)) {
+            const call = { tool: toolName, params: {}, _truncated: true };
+            
+            // Extract filePath if present
+            const pathMatch = afterFence.match(/"(?:filePath|file_path|path)"\s*:\s*"([^"]+)"/i);
+            if (pathMatch) call.params.filePath = pathMatch[1];
+            
+            // For write_file/append_to_file, extract partial content
+            if (toolName === 'write_file' || toolName === 'append_to_file') {
+              const contentMatch = afterFence.match(/"content"\s*:\s*"([\s\S]*)/);
+              if (contentMatch) {
+                let content = contentMatch[1];
+                // Find the actual content by removing trailing truncated chars
+                // Look for last complete line before truncation
+                const lines = content.split('\\n');
+                if (lines.length > 1) {
+                  // Remove last potentially truncated line
+                  lines.pop();
+                  content = lines.join('\\n');
+                }
+                // Unescape JSON encoding
+                content = content
+                  .replace(/\\n/g, '\n')
+                  .replace(/\\t/g, '\t')
+                  .replace(/\\r/g, '\r')
+                  .replace(/\\"/g, '"')
+                  .replace(/\\\\/g, '\\');
+                call.params.content = content;
+              }
+            }
+            
+            // For read_file, extract lineRange if present
+            if (toolName === 'read_file') {
+              const rangeMatch = afterFence.match(/"(?:lineRange|lines)"\s*:\s*\[(\d+)\s*,\s*(\d+)\]/i);
+              if (rangeMatch) call.params.lineRange = [parseInt(rangeMatch[1]), parseInt(rangeMatch[2])];
+            }
+            
+            console.log(`[ToolParser] Recovered truncated ${toolName} call`);
+            addCall(call);
+          }
+        }
+      }
+    }
+  }
+
   if (calls.length > 0) return _postProcess(calls, text);
 
   // Method 1.8: OpenAI array format — [{"name":"...", "arguments":{...}}]

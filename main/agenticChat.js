@@ -1011,10 +1011,11 @@ function register(ctx) {
       let _tb = '';
       let _tIdx = 9000;
       let _tStart = -1;
+      let _tEnd = -1;
       let _tName = null;
       if (_pendingPartialBlock) {
         const seedMatch = _pendingPartialBlock.match(/\{\s*"tool"\s*:\s*"([^"]+)"/);
-        if (seedMatch) { _tStart = 0; _tName = seedMatch[1]; }
+        if (seedMatch) { _tStart = 0; _tEnd = -1; _tName = seedMatch[1]; }
       }
 
       let result;
@@ -1072,10 +1073,22 @@ function register(ctx) {
               _tb += token;
               if (_tStart === -1) {
                 const m = _tb.match(/\{\s*"tool"\s*:\s*"([^"]+)"/);
-                if (m) { _tStart = m.index; _tName = m[1]; }
+                if (m) { _tStart = m.index; _tName = m[1]; _tEnd = -1; }
+              }
+              // Detect when tool JSON ends (balanced braces) to avoid including post-JSON text
+              if (_tStart !== -1 && _tEnd === -1) {
+                const raw = _tb.slice(_tStart);
+                let depth = 0, idx = 0;
+                for (; idx < raw.length; idx++) {
+                  if (raw[idx] === '{') depth++;
+                  else if (raw[idx] === '}') depth--;
+                  if (depth === 0 && idx > 0) { _tEnd = _tStart + idx + 1; break; }
+                }
               }
               if (_tStart !== -1 && _tName && mainWindow && !mainWindow.isDestroyed()) {
-                const raw = _tb.slice(_tStart);
+                // Only include up to the end of the JSON (or all if not yet closed)
+                const endPos = _tEnd !== -1 ? _tEnd : _tb.length;
+                const raw = _tb.slice(_tStart, endPos);
                 // Smart truncation: ensure "content" key is always visible for preview
                 let paramsText;
                 if (raw.length <= 8000) {
@@ -1381,6 +1394,9 @@ function register(ctx) {
       let _hasUnclosedToolFence = _fenceIdx !== -1 &&
         !_afterFence.match(/```(?:json|tool_call|tool)\b[\s\S]*?\n```/) &&
         !_afterFence.match(/```(?:json|tool_call|tool)\b[\s\S]*?[^`]```\s*$/);
+      // Also detect any unclosed code fence (html, js, css, etc.) for higher continuation budget
+      const _anyCodeFenceIdx = _stitchedForMcp.search(/```(?:html?|css|javascript|js|typescript|ts|python|py|json|jsx|tsx|java|c|cpp|csharp|ruby|go|rust|php|sql|xml|yaml|sh|bash|markdown|md)\b/);
+      const _hasUnclosedCodeFence = _anyCodeFenceIdx !== -1 && !_stitchedForMcp.slice(_anyCodeFenceIdx).match(/```[^\n]*\n[\s\S]*?\n```/);
 
       // If the unclosed fence contains a complete JSON tool call, don't treat as truncated
       if (_hasUnclosedToolFence) {
@@ -1414,9 +1430,10 @@ function register(ctx) {
           contContextPct = contUsed / totalCtx;
         } catch (_) {}
 
-        const budgetLimit = _hasUnclosedToolFence ? 0.92 : 0.70;
+        // Higher budget limit for unclosed code fences to allow large code blocks to complete
+        const budgetLimit = _hasUnclosedToolFence ? 0.92 : (_hasUnclosedCodeFence ? 0.90 : 0.88);
         if (contContextPct > budgetLimit) {
-          console.log(`[AI Chat] Continuation aborted: context at ${Math.round(contContextPct * 100)}%`);
+          console.log(`[AI Chat] Continuation aborted: context at ${Math.round(contContextPct * 100)}% (limit=${Math.round(budgetLimit * 100)}%)`);
           continuationCount = 0;
           // Try salvage
           if (_hasUnclosedToolFence && _stitchedForMcp) {

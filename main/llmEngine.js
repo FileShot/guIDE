@@ -319,9 +319,8 @@ class LLMEngine extends EventEmitter {
           // Now try to create context on this model
           const ctxTimeout = mode === false ? CTX_CREATE_TIMEOUT_CPU : CTX_CREATE_TIMEOUT_GPU;
           let maxCtx = this._computeMaxContext(gpuConfig.modelSizeGB);
-          // CPU mode: cap context for responsive generation
-          if (mode === false) maxCtx = Math.min(maxCtx, 8192);
-          const contextMin = (mode === false) ? 512 : MIN_USABLE_GPU_CONTEXT;
+          // CPU mode uses same RAM-based context sizing as GPU — no artificial cap
+          const contextMin = MIN_USABLE_GPU_CONTEXT;
           console.log(`[LLM DIAG] Context creation: mode=${mode}, maxCtx=${maxCtx}, contextMin=${contextMin}, modelSizeGB=${gpuConfig.modelSizeGB.toFixed(2)}`);
           loadedContext = await this._withTimeout(
             loadedModel.createContext({
@@ -499,7 +498,9 @@ class LLMEngine extends EventEmitter {
     const kvPerToken = modelSizeGB < 2 ? 0.5 : modelSizeGB < 8 ? 1.0 : 2.0; // KB per token estimate
     const availableForKV = Math.max(0, freeRam - 2 * 1024 ** 3); // reserve 2GB RAM
     const maxFromRam = Math.floor(availableForKV / (kvPerToken * 1024));
-    return Math.min(CONTEXT_ABSOLUTE_CEILING, Math.max(2048, maxFromRam));
+    const result = Math.min(CONTEXT_ABSOLUTE_CEILING, Math.max(2048, maxFromRam));
+    console.log(`[LLM] _computeMaxContext: modelSize=${modelSizeGB.toFixed(2)}GB, freeRam=${(freeRam / 1024 ** 3).toFixed(1)}GB, kvPerToken=${kvPerToken}KB, availableForKV=${(availableForKV / 1024 ** 3).toFixed(1)}GB, maxFromRam=${maxFromRam}, result=${result}`);
+    return result;
   }
 
   // ─── Generation ───

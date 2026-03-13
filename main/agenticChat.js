@@ -1203,9 +1203,11 @@ function register(ctx) {
             await llmEngine.resetSession(true);
             await ensureLlmChat(llmEngine, getNodeLlamaCppPath);
 
-            if (convSummary && mainWindow) {
-              const cleaned = convSummary.replace(/```(?:json|tool_call|tool)[^\n]*\n[\s\S]*?```/g, '');
-              mainWindow.webContents.send('llm-thinking-token', cleaned + '\n[Context rotated]\n');
+            // Only send minimal notification to thinking panel — NOT the full summary
+            // The summary (with ## COMPLETED WORK, ## INSTRUCTION, etc.) goes into the model's prompt,
+            // NOT into the reasoning dropdown. The reasoning dropdown should only show model thinking.
+            if (mainWindow) {
+              mainWindow.webContents.send('llm-thinking-token', '\n[Context rotated — continuing task]\n');
             }
 
             const partial = fullResponseText.trim().length > 0 ? fullResponseText.substring(Math.max(0, fullResponseText.length - 1500)) : '';
@@ -1214,17 +1216,22 @@ function register(ctx) {
             const incrementalHint = summarizer.incrementalTask
               ? `\n**INCREMENTAL TASK: ${summarizer.incrementalTask.current}/${summarizer.incrementalTask.target} ${summarizer.incrementalTask.type} completed.**`
               : '';
-            const fileProgressHint = Object.keys(summarizer.fileProgress).length > 0
+            const fileProgressKeys = Object.keys(summarizer.fileProgress);
+            const primaryFile = fileProgressKeys.length > 0 ? fileProgressKeys[fileProgressKeys.length - 1] : null;
+            const fileProgressHint = fileProgressKeys.length > 0
               ? `\n**FILES IN PROGRESS:** ${Object.entries(summarizer.fileProgress).map(([f, p]) => `${f} (${p.writtenLines} lines)`).join(', ')}`
+              : '';
+            const explicitFileHint = primaryFile
+              ? `\n**CONTINUE WRITING TO: ${primaryFile}** — Use append_to_file with this exact file path.`
               : '';
 
             const hint = partial
               ? `\n\n## CONTINUE FROM HERE\n---\n${partial}\n---` +
-                incrementalHint + fileProgressHint +
+                incrementalHint + fileProgressHint + explicitFileHint +
                 `\n\n**CRITICAL: DO NOT REFUSE. DO NOT SAY "I cannot continue."**` +
-                `\nUse append_to_file to add more content. Call a tool NOW to make progress.`
+                `\nUse append_to_file to add more content to the same file. Call a tool NOW to make progress.`
               : `\nContext was rotated. The user request is: ${message.substring(0, 300)}` +
-                incrementalHint + fileProgressHint +
+                incrementalHint + fileProgressHint + explicitFileHint +
                 `\n\n**Continue the task using tools. Do not refuse.**`;
 
             currentPrompt = {
@@ -1544,8 +1551,14 @@ function register(ctx) {
           if (_contRepeatCount < 2 && fullResponseText.length > 500 && responseText.length > 200) {
             const priorText = fullResponseText.slice(0, fullResponseText.length - responseText.length);
             if (priorText.length > 200) {
-              const CHUNK_SIZE = 150;
-              const SAMPLE_COUNT = 6;
+              // Context-aware overlap detection: file content has natural boilerplate
+              // (HTML tags, CSS declarations, repeated style= attributes) that triggers
+              // false positives with small chunks. Use larger chunks + higher threshold
+              // for file content, moderate settings for non-file content.
+              const isFileContent = /\\n|\\"|write_file|filePath|"content"\s*:/.test(responseText.substring(0, 500));
+              const CHUNK_SIZE = isFileContent ? 300 : 200;
+              const THRESHOLD = isFileContent ? 0.75 : 0.60;
+              const SAMPLE_COUNT = 8;
               const step = Math.max(1, Math.floor((responseText.length - CHUNK_SIZE) / SAMPLE_COUNT));
               let foundCount = 0;
               let totalSamples = 0;
@@ -1554,13 +1567,12 @@ function register(ctx) {
                 const chunk = responseText.slice(si, si + CHUNK_SIZE);
                 if (priorText.includes(chunk)) foundCount++;
               }
-              if (totalSamples > 0 && foundCount / totalSamples >= 0.5) {
+              if (totalSamples > 0 && foundCount / totalSamples >= THRESHOLD) {
                 _contRepeatCount += 2; // immediately trigger abort threshold
-                console.log(`[AI Chat] Content-overlap detected: ${foundCount}/${totalSamples} chunks found in prior output`);
+                console.log(`[AI Chat] Content-overlap detected: ${foundCount}/${totalSamples} chunks (threshold ${THRESHOLD}, chunkSize ${CHUNK_SIZE}) in prior output`);
               }
             }
           }
-
           // Hard total accumulated char limit: stop runaway continuation
           // Increased from 50K to allow large file generation — context rotation will handle memory
           const MAX_CONTINUATION_CHARS = 500000; // 500K chars (~125K lines of code)
@@ -1615,17 +1627,24 @@ function register(ctx) {
                 const incrementalHint = summarizer.incrementalTask
                   ? `\n**INCREMENTAL TASK: ${summarizer.incrementalTask.current}/${summarizer.incrementalTask.target} ${summarizer.incrementalTask.type} completed.**`
                   : '';
-                const fileProgressHint = Object.keys(summarizer.fileProgress).length > 0
+                // Extract the primary file being worked on for explicit append instruction
+                const fileProgressKeys = Object.keys(summarizer.fileProgress);
+                const primaryFile = fileProgressKeys.length > 0 ? fileProgressKeys[fileProgressKeys.length - 1] : null;
+                const fileProgressHint = fileProgressKeys.length > 0
                   ? `\n**FILES IN PROGRESS:** ${Object.entries(summarizer.fileProgress).map(([f, p]) => `${f} (${p.writtenLines} lines)`).join(', ')}`
+                  : '';
+                // Explicit filename continuation to prevent model from creating new files
+                const explicitFileHint = primaryFile
+                  ? `\n**CONTINUE WRITING TO: ${primaryFile}** — Use append_to_file with this exact file path.`
                   : '';
 
                 currentPrompt = {
                   systemContext: buildStaticPrompt(),
                   userMessage: buildDynamicContext() + '\n\n' + convSummary +
                     `\n\n## CONTINUE FROM HERE\n---\n${partialOutput}\n---` +
-                    incrementalHint + fileProgressHint +
+                    incrementalHint + fileProgressHint + explicitFileHint +
                     `\n\n**CRITICAL: DO NOT REFUSE. DO NOT SAY "I cannot continue."**` +
-                    `\nUse append_to_file to add more content. Call a tool NOW to make progress.`,
+                    `\nUse append_to_file to add more content to the same file. Call a tool NOW to make progress.`,
                 };
                 sessionJustRotated = true;
                 continue;
@@ -1721,7 +1740,7 @@ function register(ctx) {
         });
       } else {
         const textOpts = {
-          toolPaceMs: 50, skipWriteDeferral: modelTier.tier === 'tiny',
+          toolPaceMs: 0, skipWriteDeferral: modelTier.tier === 'tiny',
           userMessage: message, lastDroppedFilePaths: _pendingDroppedFilePaths, writeFileHistory,
           continuationCount,
         };

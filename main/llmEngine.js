@@ -232,6 +232,12 @@ class LLMEngine extends EventEmitter {
       // (_eraseContextTokenRanges, streaming callbacks, etc.)
       // Increased from 500ms to 1000ms to prevent "Object is disposed" race
       await new Promise(r => setTimeout(r, 1000));
+
+      // Preserve conversation history across model switch (exclude system message)
+      // User experience: switching models mid-conversation should not lose context
+      const _preservedHistory = Array.isArray(this.chatHistory) && this.chatHistory.length > 1
+        ? this.chatHistory.filter(m => m.type !== 'system')
+        : [];
       
       // Wrap dispose in additional try-catch for race protection
       try {
@@ -291,16 +297,17 @@ class LLMEngine extends EventEmitter {
             'Model loading',
           );
 
-          // Track auto mode GPU layer usage (do not reject — auto mode optimizes layer split)
+          // Track auto mode GPU layer usage
           if (mode === 'auto' && loadedModel.gpuLayers != null) {
             bestAutoGpuLayers = loadedModel.gpuLayers;
           }
 
-          // Reject 'cuda' mode if it loaded 0 layers despite available VRAM
-          // This forces fallback to explicit layer counts which work better on constrained VRAM
-          if (mode === 'cuda' && loadedModel.gpuLayers === 0 && gpuConfig.vramGB > 0.5) {
+          // Reject 'cuda' OR 'auto' mode if it loaded 0 layers despite available VRAM
+          // AND there are explicit layer modes to try. This forces fallback to explicit
+          // layer counts which work better on constrained VRAM GPUs.
+          if ((mode === 'cuda' || mode === 'auto') && loadedModel.gpuLayers === 0 && gpuConfig.vramGB > 0.5 && gpuConfig.roughMaxLayers > 0) {
             const log = require('./logger');
-            log.warn(`CUDA mode loaded 0 layers despite ${gpuConfig.vramGB.toFixed(1)}GB VRAM — trying next mode`);
+            log.warn(`${mode.toUpperCase()} mode loaded 0 layers despite ${gpuConfig.vramGB.toFixed(1)}GB VRAM & ${gpuConfig.roughMaxLayers} estimated layers — trying explicit layer count`);
             loadedModel.dispose?.();
             loadedModel = null;
             continue;
@@ -372,6 +379,25 @@ class LLMEngine extends EventEmitter {
       const sysPreamble = this._getActiveSystemPrompt();
       this.chatHistory = [{ type: 'system', text: sysPreamble }];
       this.lastEvaluation = null;
+
+      // Restore preserved conversation history (if any) with fresh system message
+      // This allows users to switch models mid-conversation without losing context
+      if (_preservedHistory.length > 0) {
+        // Cap preserved history to fit new model's context (keep most recent 60%)
+        const maxHistory = Math.floor((this.context?.contextSize || 8192) * 0.15);
+        const historyChars = _preservedHistory.reduce((sum, m) => sum + (typeof m.text === 'string' ? m.text.length : 0), 0);
+        if (historyChars < maxHistory * 4) {
+          this.chatHistory.push(..._preservedHistory);
+          const log = require('./logger');
+          log.info(`Model switch: preserved ${_preservedHistory.length} conversation turns (${historyChars} chars)`);
+        } else {
+          // History too large for new context — keep only recent portion
+          const keep = Math.ceil(_preservedHistory.length * 0.4);
+          this.chatHistory.push(..._preservedHistory.slice(-keep));
+          const log = require('./logger');
+          log.info(`Model switch: preserved ${keep}/${_preservedHistory.length} recent turns due to context limits`);
+        }
+      }
 
       // Model info
       const paramSize = this._getModelParamSize();

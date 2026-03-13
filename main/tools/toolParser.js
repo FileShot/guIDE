@@ -586,6 +586,7 @@ function _inferFilePath(text, content, lang) {
   if (content) {
     if (content.includes('<!DOCTYPE') || content.includes('<html')) return 'index.html';
     if (content.includes('import React') || content.includes('from "react"')) return 'component.jsx';
+    if (/^[.#@][a-zA-Z][\w-]*\s*\{/m.test(content) || /@media\s|@keyframes\s|@import\s|:root\s*\{/.test(content)) return 'style.css';
     if (content.includes('def ') || content.includes('import ')) return 'script.py';
     if (content.trimStart().startsWith('{')) return 'data.json';
   }

@@ -553,9 +553,9 @@ class MCPToolServer {
       },
       {
         name: 'delete_file',
-        description: 'Delete a file from the project.',
+        description: 'Delete a file OR directory from the project. Directories are removed recursively.',
         parameters: {
-          filePath: { type: 'string', description: 'Path of the file to delete', required: true },
+          filePath: { type: 'string', description: 'Path of the file or directory to delete', required: true },
         },
       },
       {
@@ -1492,8 +1492,15 @@ class MCPToolServer {
   async _deleteFile(filePath) {
     const fullPath = path.isAbsolute(filePath) ? filePath : path.join(this.projectPath || '', filePath);
     try {
-      await fs.unlink(fullPath);
-      return { success: true, path: fullPath, message: `File deleted: ${fullPath}` };
+      const stats = await fs.stat(fullPath);
+      if (stats.isDirectory()) {
+        // Recursively delete directory
+        await fs.rm(fullPath, { recursive: true, force: true });
+        return { success: true, path: fullPath, message: `Directory deleted: ${fullPath}` };
+      } else {
+        await fs.unlink(fullPath);
+        return { success: true, path: fullPath, message: `File deleted: ${fullPath}` };
+      }
     } catch (error) {
       return { success: false, error: error.message };
     }
@@ -1586,13 +1593,44 @@ class MCPToolServer {
     }
 
     let workDir = this.projectPath || process.cwd();
-    if (cwd && path.isAbsolute(cwd)) {
-      const cwdNorm = cwd.replace(/\\/g, '/').toLowerCase();
-      const projNorm = (this.projectPath || '').replace(/\\/g, '/').toLowerCase();
-      if (projNorm && cwdNorm.startsWith(projNorm)) {
-        workDir = cwd;
+    if (cwd) {
+      // Validate cwd parameter
+      const cwdStr = String(cwd).trim();
+      
+      // Block obvious invalid values (wildcards, single chars, empty after trim)
+      if (!cwdStr || cwdStr === '*' || cwdStr === '?' || /^[*?]+$/.test(cwdStr)) {
+        console.log(`[MCPToolServer] Blocked invalid cwd "${cwd}"`);
+        return { success: false, error: `Invalid cwd parameter: "${cwd}". Use a valid directory path or omit cwd to use project root.` };
+      }
+      
+      if (path.isAbsolute(cwdStr)) {
+        const cwdNorm = cwdStr.replace(/\\/g, '/').toLowerCase();
+        const projNorm = (this.projectPath || '').replace(/\\/g, '/').toLowerCase();
+        if (projNorm && cwdNorm.startsWith(projNorm)) {
+          workDir = cwdStr;
+        } else {
+          console.log(`[MCPToolServer] Ignoring hallucinated cwd "${cwd}", using project path`);
+        }
       } else {
-        console.log(`[MCPToolServer] Ignoring hallucinated cwd "${cwd}", using project path`);
+        // Relative path — resolve relative to project
+        const resolved = path.resolve(this.projectPath || process.cwd(), cwdStr);
+        const resolvedNorm = resolved.replace(/\\/g, '/').toLowerCase();
+        const projNorm = (this.projectPath || '').replace(/\\/g, '/').toLowerCase();
+        if (projNorm && resolvedNorm.startsWith(projNorm)) {
+          // Check if directory exists
+          try {
+            const stats = fsSync.statSync(resolved);
+            if (stats.isDirectory()) {
+              workDir = resolved;
+            } else {
+              console.log(`[MCPToolServer] cwd "${cwd}" is not a directory, using project path`);
+            }
+          } catch (e) {
+            console.log(`[MCPToolServer] cwd "${cwd}" does not exist, using project path`);
+          }
+        } else {
+          console.log(`[MCPToolServer] Ignoring cwd "${cwd}" — resolves outside project`);
+        }
       }
     }
     const timeoutMs = Math.min(Math.max(timeout || 60000, 5000), 300000);

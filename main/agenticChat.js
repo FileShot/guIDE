@@ -1394,9 +1394,6 @@ function register(ctx) {
       let _hasUnclosedToolFence = _fenceIdx !== -1 &&
         !_afterFence.match(/```(?:json|tool_call|tool)\b[\s\S]*?\n```/) &&
         !_afterFence.match(/```(?:json|tool_call|tool)\b[\s\S]*?[^`]```\s*$/);
-      // Also detect any unclosed code fence (html, js, css, etc.) for higher continuation budget
-      const _anyCodeFenceIdx = _stitchedForMcp.search(/```(?:html?|css|javascript|js|typescript|ts|python|py|json|jsx|tsx|java|c|cpp|csharp|ruby|go|rust|php|sql|xml|yaml|sh|bash|markdown|md)\b/);
-      const _hasUnclosedCodeFence = _anyCodeFenceIdx !== -1 && !_stitchedForMcp.slice(_anyCodeFenceIdx).match(/```[^\n]*\n[\s\S]*?\n```/);
 
       // If the unclosed fence contains a complete JSON tool call, don't treat as truncated
       if (_hasUnclosedToolFence) {
@@ -1430,16 +1427,59 @@ function register(ctx) {
           contContextPct = contUsed / totalCtx;
         } catch (_) {}
 
-        // Higher budget limit for unclosed code fences to allow large code blocks to complete
-        const budgetLimit = _hasUnclosedToolFence ? 0.92 : (_hasUnclosedCodeFence ? 0.90 : 0.88);
+        const budgetLimit = _hasUnclosedToolFence ? 0.92 : 0.70;
         if (contContextPct > budgetLimit) {
-          console.log(`[AI Chat] Continuation aborted: context at ${Math.round(contContextPct * 100)}% (limit=${Math.round(budgetLimit * 100)}%)`);
+          // Context budget exceeded — trigger rotation instead of aborting
+          // This allows large content generation (HTML, code files) to complete
+          console.log(`[AI Chat] Continuation budget rotation: context at ${Math.round(contContextPct * 100)}% (limit=${Math.round(budgetLimit * 100)}%)`);
           continuationCount = 0;
-          // Try salvage
+          
+          // Attempt context rotation to continue the task
+          if (contextRotations < MAX_CONTEXT_ROTATIONS) {
+            console.log(`[AI Chat] Budget-triggered rotation (${contextRotations + 1}/${MAX_CONTEXT_ROTATIONS})`);
+            contextRotations++;
+            try {
+              summarizer.markRotation();
+              const convSummary = summarizer.generateSummary({
+                maxTokens: Math.min(Math.floor(totalCtx * 0.25), 3000),
+                activeTodos: mcpToolServer?._todos || [],
+              });
+              
+              // Store partial output for context
+              const partialOutput = fullResponseText.slice(-Math.min(fullResponseText.length, 2000));
+              await llmEngine.resetSession(true);
+              await ensureLlmChat(llmEngine, getNodeLlamaCppPath);
+              if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send('llm-thinking-token', '\n[Context rotated to continue generation]\n');
+              }
+              
+              // Build continuation prompt with summary and partial output
+              const incrementalHint = summarizer.incrementalTask
+                ? `\n**INCREMENTAL TASK: ${summarizer.incrementalTask.current}/${summarizer.incrementalTask.target} ${summarizer.incrementalTask.type} completed.**`
+                : '';
+              const fileProgressHint = Object.keys(summarizer.fileProgress).length > 0
+                ? `\n**FILES IN PROGRESS:** ${Object.entries(summarizer.fileProgress).map(([f, p]) => `${f} (${p.writtenLines} lines)`).join(', ')}`
+                : '';
+              
+              currentPrompt = {
+                systemContext: buildStaticPrompt(),
+                userMessage: buildDynamicContext() + '\n\n' + convSummary +
+                  `\n\n## CONTINUE FROM HERE\n---\n${partialOutput}\n---` +
+                  incrementalHint + fileProgressHint +
+                  `\n\n**CRITICAL: DO NOT REFUSE. DO NOT SAY "I cannot continue."**` +
+                  `\nUse append_to_file to add more content. Call a tool NOW to make progress.`,
+              };
+              sessionJustRotated = true;
+              continue;
+            } catch (rotErr) {
+              console.error('[AI Chat] Budget-triggered rotation failed:', rotErr.message);
+            }
+          }
+          
+          // Rotation failed or exhausted — try salvage as fallback
           if (_hasUnclosedToolFence && _stitchedForMcp) {
             const salvageResult = salvagePartialToolCall(_stitchedForMcp, _fenceIdx);
             if (salvageResult) {
-              // Replace responseText with reconstructed tool call
               fullResponseText = fullResponseText.slice(0, fullResponseText.length - (result.text || '').length) + salvageResult;
             }
           }

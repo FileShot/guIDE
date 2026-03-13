@@ -839,6 +839,20 @@ function register(ctx) {
     // ──────────────────────────────────────────────────────
     // Agentic Loop State
     // ──────────────────────────────────────────────────────
+
+    const summarizer = new ConversationSummarizer();
+    summarizer.setGoal(message);
+
+    const rollingSummary = new RollingSummary();
+    rollingSummary.setGoal(message);
+
+    // ── Long-Term Memory (Phase 4) — cross-session memory injection & extraction ──
+    // MUST be initialized before buildStaticPrompt() which references it
+    const longTermMemory = new LongTermMemory();
+    try { longTermMemory.initialize(context?.projectPath); } catch (e) {
+      console.warn('[AI Chat] Long-term memory init failed:', e.message);
+    }
+
     let basePrompt = buildStaticPrompt();
     let allToolResults = [];
     let gatheredWebData = [];
@@ -865,18 +879,6 @@ function register(ctx) {
     let lastIterationResponse = '';
     let nonContextRetries = 0;
     const executionState = new ExecutionState();
-
-    const summarizer = new ConversationSummarizer();
-    summarizer.setGoal(message);
-
-    const rollingSummary = new RollingSummary();
-    rollingSummary.setGoal(message);
-
-    // ── Long-Term Memory (Phase 4) — cross-session memory injection & extraction ──
-    const longTermMemory = new LongTermMemory();
-    try { longTermMemory.initialize(context?.projectPath); } catch (e) {
-      console.warn('[AI Chat] Long-term memory init failed:', e.message);
-    }
 
     // ── Session Store (Phase 3) — persistent session state for crash recovery ──
     const sessionBasePath = path.join(ctx.userDataPath || require('electron').app.getPath('userData'), 'sessions');

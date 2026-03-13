@@ -1667,8 +1667,11 @@ function register(ctx) {
         }
       }
 
-      // Route planning text to thinking panel
-      if (toolResults.hasToolCalls && toolResults.results.length > 0 && mainWindow) {
+      // Route planning text to thinking panel — ONLY for thinking models
+      // Non-thinking models' intro text ("Let me create that...") is their response, not reasoning
+      const _modelPath = llmEngine?.currentModelPath || '';
+      const _isThinkingModel = /qwq|r1-distill|deepseek.*r1|-think/i.test(_modelPath);
+      if (_isThinkingModel && toolResults.hasToolCalls && toolResults.results.length > 0 && mainWindow) {
         let planningText;
         if (toolResults.formalCallCount > 0) {
           // Formal tool calls — strip from tool indicators onward
@@ -1713,12 +1716,15 @@ function register(ctx) {
         const _unclosedFenceMatch = !hasCodeBlocks && responseText.match(/```(?:html?|css|javascript|js|typescript|ts|python|py|json)\s*\n([\s\S]{500,})$/i);
         const hasUnclosedLargeBlock = !!_unclosedFenceMatch && !_unclosedFenceMatch[1].includes('```');
         // Detect raw HTML/code dumped without fences (model obeyed "no code blocks" but didn't use write_file)
-        // Requires STRUCTURAL HTML document tags (<!DOCTYPE, <html, <head, <body) to avoid false
-        // positives on plain-text descriptions that mention individual element names like <div>, <section>.
-        const hasRawCodeDump = !hasCodeBlocks && !hasUnclosedLargeBlock && responseText.length > 500 && (
-          (/<html[\s>]/i.test(responseText) && (/<head[\s>]/i.test(responseText) || /<body[\s>]/i.test(responseText))) ||
-          (/<style[\s>]/i.test(responseText) && (responseText.match(/[{};]\s*\w+\s*:/g) || []).length > 5) ||
-          (/<script[\s>]/i.test(responseText) && (responseText.match(/(?:function |const |let |var |=>)/g) || []).length > 3)
+        // STRICT detection: requires FULL document structure (<html> AND (<head> OR <body>)) with significant length
+        // to avoid false positives on partial explanations or snippets. Length threshold raised to 1500 chars.
+        const hasRawCodeDump = !hasCodeBlocks && !hasUnclosedLargeBlock && responseText.length > 1500 && (
+          // Full HTML document: must have <html> AND at least one of <head> or <body> with substantial content
+          (/<html[\s>]/i.test(responseText) && /<head[\s>]/i.test(responseText) && /<body[\s>]/i.test(responseText) && (responseText.match(/<\/\w+>/g) || []).length > 10) ||
+          // CSS block: must have multiple complete CSS rules (not just a few property mentions)
+          (/<style[\s>]/i.test(responseText) && (responseText.match(/\{[^}]+\}/g) || []).length > 8) ||
+          // JS block: must have multiple function/variable declarations (substantial code)
+          (/<script[\s>]/i.test(responseText) && (responseText.match(/(?:function\s+\w+|const\s+\w+\s*=|let\s+\w+\s*=|var\s+\w+\s*=)/g) || []).length > 5)
         );
 
         // Skip nudge when context is critically small — resetSession can hang on degraded KV cache

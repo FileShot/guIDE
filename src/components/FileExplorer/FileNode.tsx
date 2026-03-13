@@ -51,9 +51,14 @@ export const FileNodeComponent: React.FC<FileNodeComponentProps> = ({
   const handleClick = useCallback((event: React.MouseEvent) => {
     event.preventDefault();
     event.stopPropagation();
-    if (node.type === 'directory') onToggle(node);
+    if (node.type === 'directory') {
+      onToggle(node);
+    } else {
+      // Single-click on file opens it (regression fix: was double-click only)
+      onOpenFile?.(node);
+    }
     onSelect(node, event);
-  }, [node, onToggle, onSelect]);
+  }, [node, onToggle, onSelect, onOpenFile]);
 
   const handleExpandClick = useCallback((event: React.MouseEvent) => {
     event.preventDefault();

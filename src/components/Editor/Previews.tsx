@@ -62,7 +62,14 @@ export const BinaryPreview: React.FC<{ filePath: string; fileName: string }> = (
 // ── HTML Preview ──
 export const HtmlPreview: React.FC<{ content: string; filePath: string; onToggleCode: () => void }> = ({ content, filePath, onToggleCode }) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const [key, setKey] = useState(0);
+  const [manualKey, setManualKey] = useState(0);
+  // Auto-refresh: hash content so iframe re-renders on every edit (live preview)
+  const contentHash = useMemo(() => {
+    let h = 0;
+    for (let i = 0; i < content.length; i++) h = ((h << 5) - h + content.charCodeAt(i)) | 0;
+    return h;
+  }, [content]);
+  const key = `${manualKey}-${contentHash}`;
 
   const resolvedContent = useMemo(() => {
     const dir = filePath.replace(/\\/g, '/').replace(/\/[^/]*$/, '');
@@ -89,7 +96,7 @@ export const HtmlPreview: React.FC<{ content: string; filePath: string; onToggle
         <div className="flex-1" />
         <button
           className="p-1 text-[#858585] hover:text-white rounded hover:bg-[#3c3c3c] transition-colors"
-          onClick={() => setKey(k => k + 1)}
+          onClick={() => setManualKey(k => k + 1)}
           title="Refresh preview"
         >
           <RefreshCw size={12} />

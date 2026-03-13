@@ -1,5 +1,16 @@
 # 🚫 STOP — READ THIS FIRST — NON-NEGOTIABLE — NO EXCEPTIONS
 
+## 🔴 RULE -1 — NEVER END INTERACTION WITHOUT MULTI-CHOICE QUESTION — ABSOLUTE
+
+**This is THE most critical rule. Every premium request costs money. Ending without continuation wastes it.**
+
+- **NEVER end an interaction by just stopping.** If you complete a task, hit a wall, need input, or have nothing more to do — you MUST use the multi-choice question tool to give the user options.
+- **Every interaction MUST end with either:** (1) a multi-choice question tool call, OR (2) active work still in progress (e.g., waiting for a build, running a command)
+- **"I've completed X, let me know if you need anything else"** — BANNED. This is ending without continuation.
+- **"Ready to proceed when you are"** — BANNED. Use multi-choice question instead.
+- **If you are about to type your final message:** STOP. Call the multi-choice question tool with options like: "Build it", "Make additional changes", "Review the plan", "I have questions", etc.
+- **This rule applies to EVERY interaction, no exceptions.** The user should never have to type a new message just to continue — they should be able to click an option.
+
 ** NEVER BLAME MODEL
  SIZE —ALL MODELS EXCEL IN LM STUDIO  AT SAME TASKS THEYRE BEING TESTED ON HERE! If something fails, the problem is in the pipeline. Exhaust all levers before concluding "the model isn't good enough." Do not say "the model can't do this" without first confirming that every other lever has been pulled. This is a production software project, not a research experiment. The user expects results, not excuses.
 

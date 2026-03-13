@@ -33,6 +33,7 @@ const {
   ExecutionState,
 } = require('./agenticChatHelpers');
 const { LLMEngine } = require('./llmEngine');
+const { RollingSummary } = require('./rollingSummary');
 const { repairToolCalls: repairToolCallsFn } = require('./tools/toolParser');
 
 /**
@@ -637,7 +638,7 @@ function register(ctx) {
 
     const hwContextSize = modelStatus.modelInfo?.contextSize || 32768;
 
-    const estimateTokens = (text) => Math.ceil((text || '').length / 3.5);
+    const estimateTokens = (text) => Math.ceil((text || '').length / 4);
 
     // ModelProfile-driven budgeting
     const modelTier = llmEngine.getModelTier();
@@ -858,6 +859,9 @@ function register(ctx) {
 
     const summarizer = new ConversationSummarizer();
     summarizer.setGoal(message);
+
+    const rollingSummary = new RollingSummary();
+    rollingSummary.setGoal(message);
 
     // Auto-create todos for large/incremental tasks (helps model track progress across rotations)
     const autoTodoResult = autoCreateLargeTaskTodos(message, mcpToolServer);
@@ -1704,7 +1708,10 @@ function register(ctx) {
       if (isStale()) break;
 
       // Record plan
-      if (responseText.length > 50) summarizer.recordPlan(responseText);
+      if (responseText.length > 50) {
+        summarizer.recordPlan(responseText);
+        rollingSummary.recordPlanFromResponse(responseText);
+      }
 
       // ── Progressive Context Compaction ──
       try {
@@ -1712,8 +1719,7 @@ function register(ctx) {
         try { if (llmEngine.sequence?.nextTokenIndex) contextUsed = llmEngine.sequence.nextTokenIndex; } catch (_) {}
         if (!contextUsed) {
           const pLen = typeof currentPrompt === 'string' ? currentPrompt.length : ((currentPrompt.systemContext || '').length + (currentPrompt.userMessage || '').length);
-          // Use /3.5 instead of /4 for more conservative token estimation
-          contextUsed = Math.ceil((pLen + fullResponseText.length) / 3.5);
+          contextUsed = Math.ceil((pLen + fullResponseText.length) / 4);
         }
         const compaction = progressiveContextCompaction({
           contextUsedTokens: contextUsed, totalContextTokens: totalCtx,
@@ -1896,6 +1902,7 @@ function register(ctx) {
         summarizer.recordToolCall(tr.tool, tr.params, tr.result);
         summarizer.markPlanStepCompleted(tr.tool, tr.params);
         executionState.update(tr.tool, tr.params, tr.result, iteration);
+        rollingSummary.recordToolCall(tr.tool, tr.params, tr.result, iteration);
       }
 
       // UI events — send only non-deferred results to prevent duplicate bubbles
@@ -1953,6 +1960,21 @@ function register(ctx) {
       const iterContext = executionBlock + stepDirective + taskReminder;
       const allFeedback = toolFeedback + snapFeedback;
 
+      // ── Rolling Summary Injection ──
+      // Generate context-proportional summary for the next prompt.
+      // This ensures the model always has task awareness, not just post-rotation.
+      let rollingSummaryBlock = '';
+      {
+        let _rsCtxUsed = 0;
+        try { if (llmEngine.sequence?.nextTokenIndex) _rsCtxUsed = llmEngine.sequence.nextTokenIndex; } catch (_) {}
+        if (!_rsCtxUsed) _rsCtxUsed = Math.ceil((fullResponseText.length + (iterContext + allFeedback).length) / 4);
+        const _rsCtxPct = _rsCtxUsed / totalCtx;
+        if (rollingSummary.shouldInjectSummary(iteration, _rsCtxPct)) {
+          const summaryBudget = rollingSummary.getSummaryBudget(totalCtx, _rsCtxPct);
+          rollingSummaryBlock = rollingSummary.generateSummary(summaryBudget);
+        }
+      }
+
       if (sessionJustRotated) {
         sessionJustRotated = false;
         currentPrompt = {
@@ -1962,7 +1984,7 @@ function register(ctx) {
       } else {
         currentPrompt = {
           systemContext: buildStaticPrompt(),
-          userMessage: iterContext + buildDynamicContext() + '\n' + allFeedback + continueInstruction,
+          userMessage: iterContext + buildDynamicContext() + (rollingSummaryBlock ? '\n' + rollingSummaryBlock : '') + '\n' + allFeedback + continueInstruction,
         };
       }
     }

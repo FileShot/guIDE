@@ -148,8 +148,11 @@ class LLMEngine extends EventEmitter {
     if (this.chatHistory.length <= MAX_HISTORY_ENTRIES) return;
     const sysMsg = this.chatHistory[0];
     const keepCount = Math.ceil(this.chatHistory.length * 0.8);
+    const droppedCount = this.chatHistory.length - 1 - keepCount;
+    console.log(`[LLMEngine] _compactHistory: dropping ${droppedCount} of ${this.chatHistory.length} entries (keeping ${keepCount})`);
     this.chatHistory = [sysMsg, ...this.chatHistory.slice(-keepCount)];
     this.lastEvaluation = null;
+    this._lastCompactDropped = droppedCount;
   }
 
   _sanitizeResponse(text) {

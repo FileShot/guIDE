@@ -375,9 +375,11 @@ function progressiveContextCompaction(options) {
     if (chatHistory) pruned += pruneVerboseHistory(chatHistory, 2);
   }
 
-  // Proactive rotation at 72% to prevent context stalls (lowered from 78%)
-  // This gives more headroom for large file generation before hitting overflow
-  const shouldRotate = pct > 0.72;
+  // Proactive rotation — raised from 72% to 85% because rolling summary +
+  // progressive compression now handle context growth more gracefully.
+  // The old 72% threshold was too aggressive, causing premature rotations that
+  // destroyed conversation context unnecessarily.
+  const shouldRotate = pct > 0.85;
 
   if (pruned > 0) {
     console.log(`[Context Compaction] Phase ${pct > 0.75 ? 3 : pct > 0.60 ? 2 : 1}: compacted ${pruned} items at ${Math.round(pct * 100)}% usage`);

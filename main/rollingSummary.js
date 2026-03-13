@@ -35,6 +35,7 @@ class RollingSummary {
     this._lastSummary = '';
     this._lastSummaryTokens = 0;
     this._iterationCount = 0;
+    this._fullResults = [];          // [{tool, file, resultText, success, iteration}]
   }
 
   /**
@@ -84,6 +85,26 @@ class RollingSummary {
       }
       fs.writes++;
       fs.lastAction = `${toolName} at iteration ${iteration || this._iterationCount}`;
+    }
+  }
+
+  /**
+   * Record full tool result for tiered context assembly (Phase 2).
+   * Stores complete result text in a ring buffer for progressive summarization.
+   */
+  recordToolResult(toolName, params, result, iteration) {
+    const resultText = typeof result === 'string' ? result
+      : (result?._pruned ? `${result.tool}: ${result.status}` : JSON.stringify(result || ''));
+    this._fullResults.push({
+      tool: toolName,
+      file: (params?.filePath || params?.path || '').split(/[/\\]/).pop(),
+      resultText: resultText.substring(0, 8000),
+      success: result?.success !== false && !result?.error,
+      iteration: iteration || this._iterationCount,
+    });
+    // Ring buffer: cap at 50, keep newest 40
+    if (this._fullResults.length > 50) {
+      this._fullResults = this._fullResults.slice(-40);
     }
   }
 
@@ -260,6 +281,101 @@ class RollingSummary {
   }
 
   /**
+   * Assemble budget-aware tiered context for prompt injection (Phase 2).
+   * Replaces raw feedback concatenation with progressive summarization:
+   *   SUMMARY: goal, corrections, file state, plan
+   *   HOT  (current iteration): full tool results
+   *   WARM (recent iterations): compressed results (tool + 200-char excerpt)
+   *   COLD (old iterations): one-line bullets (tool + ok/fail)
+   *
+   * @param {number} tokenBudget - Max tokens available for this block
+   * @param {number} currentIteration - Current iteration number
+   * @param {string} currentFeedback - Raw tool feedback from current iteration
+   * @returns {string} Assembled context text fitting within budget
+   */
+  assembleTieredContext(tokenBudget, currentIteration, currentFeedback) {
+    // Fallback: if no budget or no history, return current feedback as-is
+    if (!tokenBudget || tokenBudget < 100) return currentFeedback || '';
+    if (this._fullResults.length === 0 && !this._goal) return currentFeedback || '';
+
+    let budget = tokenBudget;
+    const sections = [];
+
+    // ── TIER 0: Session summary (goal, corrections, file state, plan) ──
+    const summaryAlloc = Math.min(Math.floor(budget * 0.20), 500);
+    if (summaryAlloc > 30) {
+      const summaryText = this.generateSummary(summaryAlloc);
+      if (summaryText) {
+        sections.push(summaryText);
+        budget -= estimateTokens(summaryText);
+      }
+    }
+
+    // ── TIER 1 (HOT): Current iteration feedback — always full ──
+    if (currentFeedback) {
+      const feedbackTokens = estimateTokens(currentFeedback);
+      const hotAlloc = Math.floor(budget * 0.55);
+      if (feedbackTokens <= hotAlloc) {
+        sections.push(currentFeedback);
+        budget -= feedbackTokens;
+      } else {
+        // Truncate from the start (keep most recent results)
+        const maxChars = hotAlloc * CHARS_PER_TOKEN;
+        const truncated = currentFeedback.length > maxChars
+          ? currentFeedback.substring(currentFeedback.length - maxChars)
+          : currentFeedback;
+        sections.push(truncated);
+        budget -= hotAlloc;
+      }
+    }
+
+    // ── TIER 2 (WARM): Recent history — compressed (last 4 iterations, excl. current) ──
+    const warmResults = this._fullResults.filter(r =>
+      r.iteration < currentIteration && currentIteration - r.iteration <= 4
+    );
+    if (warmResults.length > 0 && budget > 50) {
+      const warmAlloc = Math.floor(budget * 0.60);
+      const warmLines = [];
+      let warmTokens = 0;
+      for (let i = warmResults.length - 1; i >= 0; i--) {
+        const r = warmResults[i];
+        const excerpt = r.resultText.substring(0, 200).replace(/\n/g, ' ');
+        const line = `- [iter${r.iteration}] ${r.tool}${r.file ? '(' + r.file + ')' : ''}: ${r.success ? 'ok' : 'FAIL'} — ${excerpt}`;
+        const cost = estimateTokens(line);
+        if (warmTokens + cost > warmAlloc) break;
+        warmLines.push(line);
+        warmTokens += cost;
+      }
+      if (warmLines.length > 0) {
+        sections.push(`### Earlier Results\n${warmLines.join('\n')}`);
+        budget -= warmTokens;
+      }
+    }
+
+    // ── TIER 3 (COLD): Old history — bullets only ──
+    const coldResults = this._fullResults.filter(r =>
+      currentIteration - r.iteration > 4
+    );
+    if (coldResults.length > 0 && budget > 20) {
+      const coldLines = [];
+      let coldTokens = 0;
+      for (let i = coldResults.length - 1; i >= 0; i--) {
+        const r = coldResults[i];
+        const bullet = `- ${r.tool}${r.file ? '(' + r.file + ')' : ''}: ${r.success ? 'ok' : 'fail'}`;
+        const cost = estimateTokens(bullet);
+        if (coldTokens + cost > budget) break;
+        coldLines.push(bullet);
+        coldTokens += cost;
+      }
+      if (coldLines.length > 0) {
+        sections.push(`### Previous Work\n${coldLines.join('\n')}`);
+      }
+    }
+
+    return sections.join('\n\n');
+  }
+
+  /**
    * Check if we should inject a summary into the next prompt.
    * Returns true after iteration 3 or when meaningful work has been done.
    */
@@ -303,6 +419,7 @@ class RollingSummary {
       currentPlan: this._currentPlan,
       rotationCount: this._rotationCount,
       iterationCount: this._iterationCount,
+      fullResults: this._fullResults.slice(-20),
     };
   }
 
@@ -316,6 +433,7 @@ class RollingSummary {
     rs._currentPlan = data.currentPlan || '';
     rs._rotationCount = data.rotationCount || 0;
     rs._iterationCount = data.iterationCount || 0;
+    rs._fullResults = data.fullResults || [];
     return rs;
   }
 }

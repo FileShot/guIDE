@@ -34,6 +34,8 @@ const {
 } = require('./agenticChatHelpers');
 const { LLMEngine } = require('./llmEngine');
 const { RollingSummary } = require('./rollingSummary');
+const { SessionStore } = require('./sessionStore');
+const { LongTermMemory } = require('./longTermMemory');
 const { repairToolCalls: repairToolCallsFn } = require('./tools/toolParser');
 
 /**
@@ -761,6 +763,13 @@ function register(ctx) {
       const memoryContext = memoryStore.getContextPrompt();
       if (memoryContext) appendIfBudget('\n' + memoryContext + '\n');
 
+      // Long-term memory — cross-session relevant memories
+      if (longTermMemory) {
+        const ltmBudget = Math.floor(tokenBudget * 0.08); // 8% of remaining budget
+        const ltmBlock = longTermMemory.getRelevantMemories(message, ltmBudget);
+        if (ltmBlock) appendIfBudget('\n' + ltmBlock + '\n');
+      }
+
       _staticPromptCache.set(cacheKey, prompt);
       return prompt;
     };
@@ -862,6 +871,40 @@ function register(ctx) {
 
     const rollingSummary = new RollingSummary();
     rollingSummary.setGoal(message);
+
+    // ── Long-Term Memory (Phase 4) — cross-session memory injection & extraction ──
+    const longTermMemory = new LongTermMemory();
+    try { longTermMemory.initialize(context?.projectPath); } catch (e) {
+      console.warn('[AI Chat] Long-term memory init failed:', e.message);
+    }
+
+    // ── Session Store (Phase 3) — persistent session state for crash recovery ──
+    const sessionBasePath = path.join(ctx.userDataPath || require('electron').app.getPath('userData'), 'sessions');
+    const sessionStore = new SessionStore(sessionBasePath);
+    const sessionId = `${Date.now()}_${message.substring(0, 30).replace(/[^a-z0-9]/gi, '')}`;
+    const recovered = sessionStore.initialize(sessionId);
+    if (!recovered) {
+      // Check for crash recovery from recent session
+      const recoverable = SessionStore.findRecoverableSession(sessionBasePath);
+      if (recoverable?.hasRollingSummary) {
+        const recoveredSummary = sessionStore.initialize(recoverable.sessionId)
+          ? sessionStore.loadRollingSummary(RollingSummary)
+          : null;
+        if (recoveredSummary) {
+          // Merge recovered state into current rolling summary
+          rollingSummary._completedWork = recoveredSummary._completedWork;
+          rollingSummary._fileState = recoveredSummary._fileState;
+          rollingSummary._userCorrections = recoveredSummary._userCorrections;
+          rollingSummary._keyDecisions = recoveredSummary._keyDecisions;
+          rollingSummary._currentPlan = recoveredSummary._currentPlan;
+          rollingSummary._rotationCount = recoveredSummary._rotationCount;
+          rollingSummary._fullResults = recoveredSummary._fullResults || [];
+          console.log(`[AI Chat] Recovered session state: ${recoveredSummary._completedWork.length} tool calls, ${recoveredSummary._rotationCount} rotations`);
+        }
+      }
+    }
+    // Clean up old sessions (async, non-blocking)
+    try { sessionStore.cleanup(); } catch (_) {}
 
     // Auto-create todos for large/incremental tasks (helps model track progress across rotations)
     const autoTodoResult = autoCreateLargeTaskTodos(message, mcpToolServer);
@@ -1158,9 +1201,13 @@ function register(ctx) {
               systemContext: buildStaticPrompt(),
               userMessage: buildDynamicContext(Math.floor(maxPromptTokens * 0.10)) + 
                 (actionsSummary ? '\n\n' + actionsSummary : '') +
+                '\n' + rollingSummary.generateRotationSummary(mcpToolServer?._todos) +
                 partialHint +
                 '\n\n**Context rotated. Continue the task from where you left off.**\n' + message,
             };
+            rollingSummary.markRotation();
+            sessionStore.saveRollingSummary(rollingSummary);
+            sessionStore.flush();
             continue;
           }
 
@@ -1240,10 +1287,14 @@ function register(ctx) {
 
             currentPrompt = {
               systemContext: buildStaticPrompt(),
-              userMessage: buildDynamicContext() + '\n' + convSummary + hint,
+              userMessage: buildDynamicContext() + '\n' + convSummary +
+                '\n' + rollingSummary.generateRotationSummary(mcpToolServer?._todos) + hint,
             };
             sessionJustRotated = true;
             lastConvSummary = convSummary;
+            rollingSummary.markRotation();
+            sessionStore.saveRollingSummary(rollingSummary);
+            sessionStore.flush();
             continue;
           } catch (resetErr) {
             console.error('[AI Chat] Context rotation failed:', resetErr.message);
@@ -1492,12 +1543,16 @@ function register(ctx) {
               currentPrompt = {
                 systemContext: buildStaticPrompt(),
                 userMessage: buildDynamicContext() + '\n\n' + convSummary +
+                  '\n' + rollingSummary.generateRotationSummary(mcpToolServer?._todos) +
                   `\n\n## CONTINUE FROM HERE\n---\n${partialOutput}\n---` +
                   incrementalHint + fileProgressHint +
                   `\n\n**CRITICAL: DO NOT REFUSE. DO NOT SAY "I cannot continue."**` +
                   `\nUse append_to_file to add more content. Call a tool NOW to make progress.`,
               };
               sessionJustRotated = true;
+              rollingSummary.markRotation();
+              sessionStore.saveRollingSummary(rollingSummary);
+              sessionStore.flush();
               continue;
             } catch (rotErr) {
               console.error('[AI Chat] Budget-triggered rotation failed:', rotErr.message);
@@ -1645,12 +1700,16 @@ function register(ctx) {
                 currentPrompt = {
                   systemContext: buildStaticPrompt(),
                   userMessage: buildDynamicContext() + '\n\n' + convSummary +
+                    '\n' + rollingSummary.generateRotationSummary(mcpToolServer?._todos) +
                     `\n\n## CONTINUE FROM HERE\n---\n${partialOutput}\n---` +
                     incrementalHint + fileProgressHint + explicitFileHint +
                     `\n\n**CRITICAL: DO NOT REFUSE. DO NOT SAY "I cannot continue."**` +
                     `\nUse append_to_file to add more content to the same file. Call a tool NOW to make progress.`,
                 };
                 sessionJustRotated = true;
+                rollingSummary.markRotation();
+                sessionStore.saveRollingSummary(rollingSummary);
+                sessionStore.flush();
                 continue;
               } catch (rotErr) {
                 console.error('[AI Chat] Large-output rotation failed:', rotErr.message);
@@ -1903,7 +1962,15 @@ function register(ctx) {
         summarizer.markPlanStepCompleted(tr.tool, tr.params);
         executionState.update(tr.tool, tr.params, tr.result, iteration);
         rollingSummary.recordToolCall(tr.tool, tr.params, tr.result, iteration);
+        rollingSummary.recordToolResult(tr.tool, tr.params, tr.result, iteration);
+        // Notify long-term memory when model saves a memory
+        if (tr.tool === 'save_memory' && tr.result?.success && tr.params?.key) {
+          longTermMemory.notifySaved(tr.params.key, tr.params.value);
+        }
       }
+
+      // Persist rolling summary to disk (debounced)
+      sessionStore.saveRollingSummary(rollingSummary);
 
       // UI events — send only non-deferred results to prevent duplicate bubbles
       sendToolExecutionEvents(mainWindow, uiToolResults, playwrightBrowser, { checkSuccess: true });
@@ -1960,31 +2027,36 @@ function register(ctx) {
       const iterContext = executionBlock + stepDirective + taskReminder;
       const allFeedback = toolFeedback + snapFeedback;
 
-      // ── Rolling Summary Injection ──
-      // Generate context-proportional summary for the next prompt.
-      // This ensures the model always has task awareness, not just post-rotation.
-      let rollingSummaryBlock = '';
-      {
-        let _rsCtxUsed = 0;
-        try { if (llmEngine.sequence?.nextTokenIndex) _rsCtxUsed = llmEngine.sequence.nextTokenIndex; } catch (_) {}
-        if (!_rsCtxUsed) _rsCtxUsed = Math.ceil((fullResponseText.length + (iterContext + allFeedback).length) / 4);
-        const _rsCtxPct = _rsCtxUsed / totalCtx;
-        if (rollingSummary.shouldInjectSummary(iteration, _rsCtxPct)) {
-          const summaryBudget = rollingSummary.getSummaryBudget(totalCtx, _rsCtxPct);
-          rollingSummaryBlock = rollingSummary.generateSummary(summaryBudget);
-        }
-      }
+      // ── Budget-Aware Tiered Context Assembly (Phase 2) ──
+      // Instead of dumping raw feedback + rolling summary separately,
+      // assemble a single context block within calculated token budget.
+      // HOT tier: current iteration results (full)
+      // WARM tier: recent iterations (compressed)
+      // COLD tier: old iterations (bullets)
+      const dynamicCtx = buildDynamicContext();
+      const staticTokens = estimateTokens(basePrompt);
+      const dynamicTokens = estimateTokens(dynamicCtx);
+      const iterTokens = estimateTokens(iterContext);
+      const contTokens = estimateTokens(continueInstruction);
+      const availableBudget = Math.max(
+        maxPromptTokens - staticTokens - dynamicTokens - iterTokens - contTokens - 100,
+        200
+      );
 
       if (sessionJustRotated) {
         sessionJustRotated = false;
+        const rotSummaryTokens = estimateTokens(lastConvSummary);
+        const rotBudget = Math.max(availableBudget - rotSummaryTokens, 200);
+        const assembledContext = rollingSummary.assembleTieredContext(rotBudget, iteration, allFeedback);
         currentPrompt = {
           systemContext: buildStaticPrompt(),
-          userMessage: iterContext + buildDynamicContext() + '\n' + lastConvSummary + `\nLatest results:\n${allFeedback.substring(0, 6000)}${continueInstruction}`,
+          userMessage: iterContext + dynamicCtx + '\n' + lastConvSummary + '\n' + assembledContext + continueInstruction,
         };
       } else {
+        const assembledContext = rollingSummary.assembleTieredContext(availableBudget, iteration, allFeedback);
         currentPrompt = {
           systemContext: buildStaticPrompt(),
-          userMessage: iterContext + buildDynamicContext() + (rollingSummaryBlock ? '\n' + rollingSummaryBlock : '') + '\n' + allFeedback + continueInstruction,
+          userMessage: iterContext + dynamicCtx + '\n' + assembledContext + continueInstruction,
         };
       }
     }
@@ -2021,6 +2093,15 @@ function register(ctx) {
     }
 
     memoryStore.addConversation('assistant', fullResponseText);
+
+    // Extract and save long-term memories from this conversation
+    try { longTermMemory.extractAndSave(rollingSummary, message); } catch (e) {
+      console.warn('[AI Chat] Long-term memory extraction failed:', e.message);
+    }
+
+    // Flush session store on conversation end
+    sessionStore.saveRollingSummary(rollingSummary);
+    sessionStore.flush();
 
     // Clean display text
     let cleanResponse = displayResponseText;

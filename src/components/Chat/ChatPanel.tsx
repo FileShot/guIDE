@@ -2078,13 +2078,20 @@ ${e.message}`,
         // "name" keys to avoid false-positives on non-tool JSON (e.g. {"name": "John"}).
         const incompleteToolMatch = remaining.match(/```(?:json|tool)?\s*\n?\s*\{[\s\S]*?"tool"/);
         if (incompleteToolMatch) {
-          // Suppress — incomplete tool block mid-stream is already tracked in executingTools/ToolCallGroup.
-          // Only render any text that appeared before the opening ```.
+          // Suppress the incomplete tool JSON block mid-stream.
+          // Render any text that appeared before the opening ```.
           const beforeBlock = remaining.substring(0, remaining.indexOf('```'));
           if (beforeBlock.trim()) {
             parts.push(<InlineMarkdownText key={`s-${idx}`} content={beforeBlock} />);
             idx++;
           }
+          // Show a generating indicator so the user sees activity instead of blank screen
+          parts.push(
+            <div key={`tool-gen-${idx}`} className="flex items-center gap-2 py-1 text-xs text-[#858585]">
+              <span className="animate-pulse">Generating tool call...</span>
+            </div>
+          );
+          idx++;
         } else if (remaining.trim()) {
           // Suppress incomplete non-tool fence artifact (e.g. ```html\n<div being typed)
           // — the raw backtick+language glyph shows as loose text until the block is complete.

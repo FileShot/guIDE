@@ -10,7 +10,7 @@ const { detectFamily, detectParamSize } = require('./modelDetection');
 const { sanitizeResponse } = require('./sanitize');
 
 // ─── Constants ───
-const STALL_TIMEOUT_MS = 45_000;
+const STALL_TIMEOUT_MS = 90_000;
 const MAX_HISTORY_ENTRIES = 40;
 const GPU_INIT_TIMEOUT = 120_000;
 const MODEL_LOAD_TIMEOUT = 180_000;
@@ -23,7 +23,7 @@ const TOOL_DETECT_BUFFER_MAX = 60_000;
 const KV_REUSE_COOLDOWN_TURNS = 2;
 const MAX_PARALLEL_FUNCTION_CALLS = 4;
 const CONTEXT_ABSOLUTE_CEILING = 131_072;
-const VRAM_PADDING_FLOOR_MB = 0;
+const VRAM_PADDING_FLOOR_MB = 800;
 
 let _genCounter = 0;
 
@@ -276,7 +276,14 @@ class LLMEngine extends EventEmitter {
             this.llamaInstance = await this._withTimeout(
               getLlama({
                 gpu: backendMode,
-                vramPadding: 0,
+                vramPadding: (ctx) => {
+                  const padding = Math.max(VRAM_PADDING_FLOOR_MB * 1024 * 1024, ctx.totalVram * 0.05);
+                  return padding;
+                },
+                ramPadding: () => {
+                  const totalRam = os.totalmem();
+                  return Math.min(totalRam * 0.08, 2 * 1024 ** 3);
+                },
               }),
               GPU_INIT_TIMEOUT,
               'GPU initialization',
@@ -320,14 +327,14 @@ class LLMEngine extends EventEmitter {
           const ctxTimeout = mode === false ? CTX_CREATE_TIMEOUT_CPU : CTX_CREATE_TIMEOUT_GPU;
           let maxCtx = this._computeMaxContext(gpuConfig.modelSizeGB);
           // CPU mode uses same RAM-based context sizing as GPU — no artificial cap
-          const contextMin = MIN_USABLE_GPU_CONTEXT;
+          const contextMin = (mode === false) ? 2048 : MIN_USABLE_GPU_CONTEXT;
           console.log(`[LLM DIAG] Context creation: mode=${mode}, maxCtx=${maxCtx}, contextMin=${contextMin}, modelSizeGB=${gpuConfig.modelSizeGB.toFixed(2)}`);
           loadedContext = await this._withTimeout(
             loadedModel.createContext({
               contextSize: { min: contextMin, max: maxCtx },
               flashAttention: true,
-              ignoreMemorySafetyChecks: true,
-              failedCreationRemedy: { retries: 4, autoContextSizeShrink: 0.5 },
+              ignoreMemorySafetyChecks: mode === false,
+              failedCreationRemedy: { retries: 8, autoContextSizeShrink: 0.5 },
             }),
             ctxTimeout,
             'Context creation',
@@ -1145,10 +1152,10 @@ class LLMEngine extends EventEmitter {
     // Check if context is still usable
     if (!this.context || this.context._disposed) {
       this.context = await this.model.createContext({
-        contextSize: { min: 512, max: this._computeMaxContext(0) },
+        contextSize: { min: 2048, max: this._computeMaxContext(0) },
         flashAttention: true,
-        ignoreMemorySafetyChecks: true,
-        failedCreationRemedy: { retries: 4, autoContextSizeShrink: 0.5 },
+        ignoreMemorySafetyChecks: !this.modelInfo || this.modelInfo.gpuMode === false,
+        failedCreationRemedy: { retries: 8, autoContextSizeShrink: 0.5 },
       });
     }
 
@@ -1174,10 +1181,10 @@ class LLMEngine extends EventEmitter {
         // Context is exhausted, recreate it
         try { this.context.dispose?.(); } catch {}
         this.context = await this.model.createContext({
-          contextSize: { min: 512, max: this._computeMaxContext(0) },
+          contextSize: { min: 2048, max: this._computeMaxContext(0) },
           flashAttention: true,
-          ignoreMemorySafetyChecks: true,
-          failedCreationRemedy: { retries: 4, autoContextSizeShrink: 0.5 },
+          ignoreMemorySafetyChecks: !this.modelInfo || this.modelInfo.gpuMode === false,
+          failedCreationRemedy: { retries: 8, autoContextSizeShrink: 0.5 },
         });
         
         if (this.context) {

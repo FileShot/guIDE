@@ -1439,11 +1439,10 @@ function register(ctx) {
       displayResponseText += displayChunk;
 
       // Correct UI stream buffer: the overlapping tokens were already streamed
-      // during generation. Trim them by resetting to iteration start and
-      // re-sending just the de-duplicated new content.
+      // during generation. Replace the current iteration's display with the
+      // de-duplicated content instead of resetting (avoids visual flash/jarring).
       if (_overlapLen > 0 && mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('llm-stream-reset');
-        if (displayChunk) mainWindow.webContents.send('llm-token', displayChunk);
+        mainWindow.webContents.send('llm-replace-last', displayChunk);
       }
 
       // ── SEAMLESS CONTINUATION — stitch for MCP tool detection ──
@@ -1751,6 +1750,16 @@ function register(ctx) {
               systemContext: currentPrompt.systemContext,
               userMessage: continuationMsg,
             };
+
+            // Sync frontend buffer before continuation: strip tool-fence fragments
+            // from raw streamed tokens so the committed message doesn't contain broken
+            // code fences. The overlap-based llm-replace-last (line ~1444) only fires
+            // when _overlapLen > 0. For the first pass or when overlap detection fails,
+            // raw partial fences persist in the frontend buffer. Fix that here.
+            if (_overlapLen === 0 && mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('llm-replace-last', displayChunk);
+            }
+
             continue;
           }
         }

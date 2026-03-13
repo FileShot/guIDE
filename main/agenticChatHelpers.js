@@ -369,7 +369,17 @@ function progressiveContextCompaction(options) {
       }
     }
     if (newFullResponseText.length > 15000) {
-      newFullResponseText = newFullResponseText.substring(newFullResponseText.length - 15000);
+      // Find a paragraph or line boundary near the truncation point instead of
+      // slicing blindly through code blocks or sentences.
+      const target = newFullResponseText.length - 15000;
+      let cutPoint = newFullResponseText.indexOf('\n\n', target);
+      if (cutPoint === -1 || cutPoint > target + 500) {
+        cutPoint = newFullResponseText.indexOf('\n', target);
+      }
+      if (cutPoint === -1 || cutPoint > target + 500) {
+        cutPoint = target;
+      }
+      newFullResponseText = newFullResponseText.substring(cutPoint);
       pruned++;
     }
     if (chatHistory) pruned += pruneVerboseHistory(chatHistory, 2);

@@ -419,6 +419,33 @@ const FAMILY_PROFILES = {
       context: { effectiveContextSize: 65536, maxResponseTokens: 16384 },
     },
   },
+
+  gpt: {
+    base: {
+      sampling: { temperature: 0.50, topP: 0.90, topK: 40, repeatPenalty: 1.08 },
+      thinkTokens: { mode: 'none', budget: 0 },
+    },
+    small: {
+      sampling: { temperature: 0.40, topP: 0.85, topK: 25, repeatPenalty: 1.12 },
+      prompt: { style: 'compact', fewShotExamples: 1 },
+      generation: { maxToolsPerTurn: 14 },
+    },
+    medium: {
+      sampling: { temperature: 0.50, topP: 0.90, topK: 30, repeatPenalty: 1.08 },
+      context: { effectiveContextSize: 16384 },
+      prompt: { style: 'full' },
+      generation: { maxToolsPerTurn: 15 },
+    },
+    large: {
+      context: { effectiveContextSize: 32768, maxResponseTokens: 8192 },
+      prompt: { style: 'full' },
+      generation: { maxToolsPerTurn: 25 },
+    },
+    xlarge: {
+      context: { effectiveContextSize: 65536, maxResponseTokens: 16384 },
+      generation: { maxToolsPerTurn: 50 },
+    },
+  },
 };
 
 // ─── Deep Merge (non-mutating, arrays replaced not concatenated) ───

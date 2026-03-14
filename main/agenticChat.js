@@ -572,9 +572,10 @@ function register(ctx) {
     memoryStore.addConversation('assistant', fullCloudResponse);
 
     // Clean up display — strip inline JSON tool calls with proper brace matching
+    // Only match objects with "tool" key — "name" is too common in generated code
     let cleanResponse = fullCloudResponse;
     {
-      const toolPat = /\[?\s*\{\s*"(?:tool|name)"\s*:\s*"/g;
+      const toolPat = /\[?\s*\{\s*"tool"\s*:\s*"/g;
       let tm;
       const ranges = [];
       while ((tm = toolPat.exec(cleanResponse)) !== null) {
@@ -887,8 +888,11 @@ function register(ctx) {
     const recovered = sessionStore.initialize(sessionId);
     if (!recovered) {
       // Check for crash recovery from recent session
+      // Only recover if message key matches — prevents cross-task session contamination
       const recoverable = SessionStore.findRecoverableSession(sessionBasePath);
-      if (recoverable?.hasRollingSummary) {
+      const currentMsgKey = message.substring(0, 30).replace(/[^a-z0-9]/gi, '');
+      const recoveredMsgKey = (recoverable?.sessionId || '').replace(/^\d+_/, '');
+      if (recoverable?.hasRollingSummary && recoveredMsgKey === currentMsgKey) {
         const recoveredSummary = sessionStore.initialize(recoverable.sessionId)
           ? sessionStore.loadRollingSummary(RollingSummary)
           : null;
@@ -1078,6 +1082,8 @@ function register(ctx) {
 
         // Throttled context usage updates during streaming (every 500ms)
         let _streamingResponseLen = 0;
+        let _streamingTailBuf = ''; // last ~100 chars for log preview
+        let _lastStreamLogTime = Date.now();
         const promptLen = typeof currentPrompt === 'string' ? currentPrompt.length : ((currentPrompt.systemContext || '').length + (currentPrompt.userMessage || '').length);
         const _contextUsageInterval = mainWindow ? setInterval(() => {
           try {
@@ -1085,6 +1091,14 @@ function register(ctx) {
             try { if (llmEngine.sequence?.nextTokenIndex) used = llmEngine.sequence.nextTokenIndex; } catch (_) {}
             if (!used) used = Math.ceil((promptLen + _streamingResponseLen) / 4);
             mainWindow.webContents.send('context-usage', { used, total: totalCtx });
+            // Periodic streaming progress log (every 30s) for debugging
+            const now = Date.now();
+            if (now - _lastStreamLogTime >= 30000) {
+              // Include content preview: last 80 chars of what was generated
+              const preview = _streamingTailBuf.slice(-80).replace(/\n/g, '\\n');
+              console.log(`[AI Chat] Streaming progress: ${_streamingResponseLen} chars, ~${used}/${totalCtx} ctx tokens (${Math.round(used/totalCtx*100)}%) | tail: "${preview}"`);
+              _lastStreamLogTime = now;
+            }
           } catch (_) {}
         }, 500) : null;
 
@@ -1094,7 +1108,7 @@ function register(ctx) {
             const nativeResult = await llmEngine.generateWithFunctions(
               currentPrompt, nativeFunctions,
               { ...(context?.params || {}), maxTokens: effectiveMaxTokens },
-              (token) => { if (isStale()) { llmEngine.cancelGeneration('user'); return; } _streamingResponseLen += token.length; localTokenBatcher.push(token); },
+              (token) => { if (isStale()) { llmEngine.cancelGeneration('user'); return; } _streamingResponseLen += token.length; _streamingTailBuf = (_streamingTailBuf + token).slice(-100); localTokenBatcher.push(token); },
               (thinkToken) => { if (isStale()) { llmEngine.cancelGeneration('user'); return; } localThinkingBatcher.push(thinkToken); },
               (funcCall) => {
                 if (mainWindow && !mainWindow.isDestroyed()) {
@@ -1118,6 +1132,7 @@ function register(ctx) {
             }, (token) => {
               if (isStale()) { llmEngine.cancelGeneration('user'); return; }
               _streamingResponseLen += token.length;
+              _streamingTailBuf = (_streamingTailBuf + token).slice(-100);
               localTokenBatcher.push(token);
 
               // Live tool-call bubble
@@ -1401,13 +1416,24 @@ function register(ctx) {
 
       fullResponseText += newContent;
 
-      // Strip tool fences and raw inline JSON tool calls from display copy
+      // Strip tool fences from display copy — but preserve legitimate ```json code blocks
+      // Only strip ```tool/```tool_call fences (always tool calls) and ```json fences
+      // that actually contain tool call JSON ({"tool": "..."}). This prevents stripping
+      // legitimate JSON code examples (package.json, API responses, configs) which caused
+      // line count regressions (e.g. 210 → 160 lines when Express.js tutorials were stripped).
       let displayChunk = newContent
-        .replace(/\n?```(?:json|tool_call|tool)\b[\s\S]*?```\n?/g, '')
-        .replace(/\n?```(?:json|tool_call|tool)\b[\s\S]*$/g, '');
+        .replace(/\n?```(?:tool_call|tool)\b[\s\S]*?```\n?/g, '')
+        .replace(/\n?```(?:tool_call|tool)\b[\s\S]*$/g, '')
+        .replace(/\n?```json\b([\s\S]*?)```\n?/g, (match, content) => {
+          return /"\s*tool\s*"\s*:\s*"/.test(content) ? '' : match;
+        })
+        .replace(/\n?```json\b([\s\S]*)$/g, (match, content) => {
+          return /"\s*tool\s*"\s*:\s*"/.test(content) ? '' : match;
+        });
       // Strip inline JSON tool calls with proper brace matching (handles nested objects)
+      // Only match objects with "tool" key — "name" is too common in generated code
       {
-        const toolPattern = /\[?\s*\{\s*"(?:tool|name)"\s*:\s*"/g;
+        const toolPattern = /\[?\s*\{\s*"tool"\s*:\s*"/g;
         let tm;
         const ranges = [];
         while ((tm = toolPattern.exec(displayChunk)) !== null) {
@@ -1737,9 +1763,90 @@ function register(ctx) {
             const maxTailChars = Math.max(500, Math.min(Math.floor(remainingTokens * 0.3 * 4), 3000));
             if (_hasUnclosedToolFence) {
               const partialFence = _stitchedForMcp.slice(_fenceIdx);
-              _pendingPartialBlock = partialFence; // keep FULL text for stitching
-              const tailForModel = partialFence.length > maxTailChars ? partialFence.slice(-maxTailChars) : partialFence;
-              continuationMsg = `${taskHint}${fileManifest}[Continue the tool call JSON from exactly where it was cut. Output ONLY the JSON continuation. Do NOT restart the tool call. Continue from:\n${tailForModel}]`;
+
+              // ── Salvage-and-Append: when a write_file call is truncated mid-content,
+              //    salvage the partial file, write it to disk, then switch the model to
+              //    append_to_file for the remaining content. This prevents the model from
+              //    re-generating the entire file (which causes 87%+ overlap → rotation). ──
+              const _isWriteFile = partialFence.includes('"write_file"');
+              const _hasFP = /"filePath"\s*:\s*"[^"]+"/.test(partialFence);
+              const _hasLongContent = /"content"\s*:\s*"[\s\S]{200,}/.test(partialFence);
+
+              let _didSalvageAppend = false;
+              if (_isWriteFile && _hasFP && _hasLongContent) {
+                const salvaged = salvagePartialToolCall(_stitchedForMcp, _fenceIdx);
+                if (salvaged) {
+                  try {
+                    const salvageMatch = salvaged.match(/```json\n([\s\S]*?)\n```/);
+                    const salvageJson = salvageMatch ? JSON.parse(salvageMatch[1]) : null;
+                    const salvagePath = salvageJson?.params?.filePath;
+                    const salvageContent = salvageJson?.params?.content || '';
+
+                    if (salvagePath && salvageContent.length >= 100) {
+                      const writeResult = await mcpToolServer.executeTool('write_file', {
+                        filePath: salvagePath,
+                        content: salvageContent,
+                      });
+                      const lineCount = salvageContent.split('\n').length;
+                      console.log(`[AI Chat] Salvage-and-append: wrote ${lineCount} lines to "${salvagePath}"`);
+
+                      // Update writeFileHistory — blocks future write_file, forces append_to_file
+                      if (!writeFileHistory[salvagePath]) writeFileHistory[salvagePath] = { count: 0, maxLen: 0 };
+                      writeFileHistory[salvagePath].count++;
+                      if (salvageContent.length > writeFileHistory[salvagePath].maxLen) {
+                        writeFileHistory[salvagePath].maxLen = salvageContent.length;
+                      }
+
+                      // Send UI event for the artifact
+                      if (mainWindow && !mainWindow.isDestroyed()) {
+                        mainWindow.webContents.send('mcp-tool-results', [{
+                          tool: 'write_file',
+                          params: { filePath: salvagePath, content: '...(salvaged partial)' },
+                          result: writeResult,
+                        }]);
+                      }
+
+                      // Track in summarizers
+                      try {
+                        summarizer.recordToolCall('write_file', { filePath: salvagePath }, writeResult);
+                        rollingSummary.recordToolCall('write_file', { filePath: salvagePath }, writeResult, iteration);
+                      } catch (_) {}
+
+                      // Build continuation prompt with completeness detection
+                      const allLines = salvageContent.split('\n');
+                      const lastLines = allLines.slice(-10).join('\n');
+                      _pendingPartialBlock = null; // switch from JSON stitching to free-form
+
+                      // Heuristic: detect if salvaged file looks syntactically complete
+                      const trimmedEnd = salvageContent.trimEnd();
+                      const lastCodeLine = trimmedEnd.split('\n').pop().trim();
+                      const looksComplete = /^(module\.exports\s*=|export\s+(default\s+)?|\}\s*;?\s*$|\}\)\s*;?\s*$)/.test(lastCodeLine);
+
+                      if (looksComplete) {
+                        // File appears complete — redirect model to remaining task
+                        console.log(`[AI Chat] Salvaged file "${salvagePath}" looks complete (${lineCount} lines, ends: "${lastCodeLine.substring(0, 50)}")`);
+                        continuationMsg = `${taskHint}${fileManifest}[File "${salvagePath}" has been written successfully (${lineCount} lines). This file is COMPLETE — do NOT rewrite or append to it. Continue with your original task — create the remaining files that were requested. Use write_file for each new file.]`;
+                      } else {
+                        // File is mid-content — tell model to append
+                        continuationMsg = `${taskHint}${fileManifest}[File "${salvagePath}" has been written with ${lineCount} lines so far. The file is NOT complete — more content is needed. Use append_to_file (NOT write_file) with filePath="${salvagePath}" to continue adding content from where the file ends. Here are the last 10 lines of the file:\n\`\`\`\n${lastLines}\n\`\`\`\nCall append_to_file now to add the next section starting after line ${lineCount}.]`;
+                      }
+
+                      // Counteract iteration-- from above: salvage is a new agentic pass
+                      iteration++;
+                      _didSalvageAppend = true;
+                    }
+                  } catch (salvErr) {
+                    console.warn(`[AI Chat] Salvage-and-append failed: ${salvErr.message}`);
+                  }
+                }
+              }
+
+              if (!_didSalvageAppend) {
+                // Existing logic: continue the JSON from where it was cut
+                _pendingPartialBlock = partialFence; // keep FULL text for stitching
+                const tailForModel = partialFence.length > maxTailChars ? partialFence.slice(-maxTailChars) : partialFence;
+                continuationMsg = `${taskHint}${fileManifest}[Continue the tool call JSON from exactly where it was cut. Output ONLY the JSON continuation. Do NOT restart the tool call. Continue from:\n${tailForModel}]`;
+              }
             } else {
               _pendingPartialBlock = responseText; // enable overlap detection for ALL continuation types
               const tailForModel = responseText.length > maxTailChars ? responseText.slice(-maxTailChars) : responseText;
@@ -2118,13 +2225,20 @@ function register(ctx) {
     let cleanResponse = displayResponseText;
     cleanResponse = cleanResponse.replace(/<think(?:ing)?>\s*[\s\S]*?<\/think(?:ing)?>/gi, '');
     cleanResponse = cleanResponse.replace(/<\/?think(?:ing)?>/gi, '');
-    // Strip any tool call fence artifacts that leaked through continuation boundaries
-    cleanResponse = cleanResponse.replace(/\n?```(?:json|tool_call|tool)\b[\s\S]*?```\n?/g, '');
-    cleanResponse = cleanResponse.replace(/\n?```(?:json|tool_call|tool)\b[\s\S]*/g, '');
+    // Strip tool call fence artifacts — but preserve legitimate ```json code blocks
+    cleanResponse = cleanResponse.replace(/\n?```(?:tool_call|tool)\b[\s\S]*?```\n?/g, '');
+    cleanResponse = cleanResponse.replace(/\n?```(?:tool_call|tool)\b[\s\S]*/g, '');
+    cleanResponse = cleanResponse.replace(/\n?```json\b([\s\S]*?)```\n?/g, (match, content) => {
+      return /"\s*tool\s*"\s*:\s*"/.test(content) ? '' : match;
+    });
+    cleanResponse = cleanResponse.replace(/\n?```json\b([\s\S]*)$/g, (match, content) => {
+      return /"\s*tool\s*"\s*:\s*"/.test(content) ? '' : match;
+    });
     cleanResponse = cleanResponse.replace(/^\s*```\s*$/gm, '');
     // Strip raw inline JSON tool calls with proper brace matching (handles nested objects)
+    // Only match objects with "tool" key — "name" is too common in generated code
     {
-      const toolPat = /\[?\s*\{\s*"(?:tool|name)"\s*:\s*"/g;
+      const toolPat = /\[?\s*\{\s*"tool"\s*:\s*"/g;
       let tm;
       const ranges = [];
       while ((tm = toolPat.exec(cleanResponse)) !== null) {

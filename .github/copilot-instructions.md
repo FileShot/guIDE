@@ -154,7 +154,7 @@ Read this list first. Every item has a full section below.
 - **Tests: three dimensions** — Coherence + tool correctness + response quality. Never count alone
 - **Never tailor changes to pass tests** — Tests reveal real behavior. Don't teach to the test
 - **Never revert without explaining why pre-fix state was working** — A revert is not a fix
-- **Hardware-agnostic always** — Never target a specific machine, GPU, or model size
+- **Hardware-agnostic always** — Never target a specific machine, GPU, or model size. Never hardcode a context size number (e.g. `contextSize: 8192`) — always compute from actual available RAM/VRAM at runtime. Hardcoded resource numbers are a hardware-specific violation even if they "work" on the dev machine. **Corollary — do NOT use `{min, max}` range-based context selection for `qwen35` SSM/Mamba hybrid architectures**: node-llama-cpp's binary-search estimator inflates KV cache requirements by 100x for these models (uses `trainContextSize=262144` as base), returning near-minimum context even on 32GB RAM machines. Always use explicit computed size + `ignoreMemorySafetyChecks: true` + `failedCreationRemedy: {retries:8, autoContextSizeShrink:0.5}` so actual hardware capacity drives the result.
 - **Production software** — Every fix must work for 4GB GPU users AND 128GB workstation users
 - **No cloud APIs as primary** — This is a local-first product. Cloud is not the answer
 - **Read CHANGES_LOG.md before proposing any fix** — Context resets. The log is the anchor

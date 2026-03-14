@@ -288,7 +288,7 @@ function evaluateResponse(responseText, functionCalls, taskType, iteration) {
     /\{\s*"(?:tool|name)"\s*:\s*"[^"]+"/.test(text);
   if (hasToolJson) return { verdict: 'COMMIT', reason: 'text_tool_call' };
 
-  if (text.length < 15) return { verdict: 'ROLLBACK', reason: 'empty' };
+  if (text.length === 0) return { verdict: 'ROLLBACK', reason: 'empty' };
 
   return { verdict: 'COMMIT', reason: 'default' };
 }

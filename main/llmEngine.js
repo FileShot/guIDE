@@ -10,11 +10,12 @@ const { detectFamily, detectParamSize } = require('./modelDetection');
 const { sanitizeResponse } = require('./sanitize');
 
 // ─── Constants ───
-const STALL_TIMEOUT_MS = 90_000;
+const STALL_TIMEOUT_GPU_MS = 90_000;
+const STALL_TIMEOUT_CPU_MS = 300_000;
 const MAX_HISTORY_ENTRIES = 40;
 const GPU_INIT_TIMEOUT = 120_000;
 const MODEL_LOAD_TIMEOUT = 180_000;
-const CTX_CREATE_TIMEOUT_GPU = 15_000;
+const CTX_CREATE_TIMEOUT_GPU = 90_000; // longer to allow auto-shrink retries
 const CTX_CREATE_TIMEOUT_CPU = 60_000;
 const DISPOSE_TIMEOUT = 10_000;
 const MIN_AGENTIC_CONTEXT = 4096;
@@ -297,7 +298,13 @@ class LLMEngine extends EventEmitter {
             this.llamaInstance.loadModel({
               modelPath,
               gpuLayers: typeof mode === 'number' ? mode : undefined,
-              defaultContextFlashAttention: true,
+              // Disable flash attention at model level — we control it per-context.
+              // SSM/Mamba hybrid architectures (e.g. qwen35) don't support flash attn on SSM layers.
+              defaultContextFlashAttention: false,
+              // Bypass VRAM orchestrator safety checks: the estimator massively overestimates
+              // KV cache for SSM/Mamba hybrids (uses trainContextSize=262144 as base → ~7GB estimate
+              // even for 0.8B models). Actual allocation is handled by llama.cpp's C++ layer.
+              ignoreMemorySafetyChecks: true,
               useMmap: true,
               onLoadProgress: (p) => {
                 this.emit('status', { state: 'loading', message: `Loading model... ${Math.round(p * 100)}%`, progress: p });
@@ -325,17 +332,60 @@ class LLMEngine extends EventEmitter {
 
           // Now try to create context on this model
           const ctxTimeout = mode === false ? CTX_CREATE_TIMEOUT_CPU : CTX_CREATE_TIMEOUT_GPU;
-          let maxCtx = this._computeMaxContext(gpuConfig.modelSizeGB);
-          // CPU mode uses same RAM-based context sizing as GPU — no artificial cap
-          const contextMin = (mode === false) ? 2048 : MIN_USABLE_GPU_CONTEXT;
-          console.log(`[LLM DIAG] Context creation: mode=${mode}, maxCtx=${maxCtx}, contextMin=${contextMin}, modelSizeGB=${gpuConfig.modelSizeGB.toFixed(2)}`);
+          // Compute target context size from actual available resources (not a {min,max} range).
+          // Range-based selection uses resolveContextContextSizeOption's binary search which
+          // massively overestimates KV cache for SSM/Mamba hybrid architectures (qwen35 etc.),
+          // yielding near-minimum context (2048-2304) even with 32GB RAM. Passing an explicit
+          // number with ignoreMemorySafetyChecks bypasses the estimator and lets llama.cpp
+          // allocate based on actual hardware capacity. failedCreationRemedy auto-shrinks if
+          // the requested size truly can't fit.
+          //
+          // PARTIAL GPU OFFLOADING: When model > VRAM (e.g. 4.2GB model on 4GB GPU),
+          // only a fraction of layers live in VRAM. The OLD code subtracted FULL model
+          // size from VRAM for ALL GPU modes, yielding kvBudget=0 and minimum context
+          // for any model larger than VRAM — forcing CPU fallback even when partial
+          // offloading works. FIX: detect partial offloading from actual gpuLayers
+          // and compute context from RAM (where most KV cache lives in split mode).
+          const actualGpuLayers = loadedModel.gpuLayers || 0;
+          const estTotalLayers = gpuConfig.estimatedLayers || 32;
+          const isPartialOffload = mode !== false && actualGpuLayers > 0 && actualGpuLayers < estTotalLayers;
+          let targetCtx;
+          if (mode === false) {
+            targetCtx = this._computeMaxContext(gpuConfig.modelSizeGB);         // RAM-based for CPU
+          } else if (isPartialOffload) {
+            // Partial GPU offload — KV cache is split between VRAM and RAM.
+            // Must limit by BOTH RAM (RAM-side KV cache) AND VRAM (GPU-side KV cache).
+            // Using only RAM-based calculation creates an oversized context (e.g. 131072) that
+            // reserves virtual VRAM exceeding physical capacity → CUDA OOM crash at first generation.
+            const gpuFraction = actualGpuLayers / estTotalLayers;
+            const ramModelGB = gpuConfig.modelSizeGB * (1 - gpuFraction);
+            const ramBasedCtx = this._computeMaxContext(ramModelGB);
+            // VRAM-based limit: GPU layers still need VRAM for their portion of the KV cache.
+            const vramBasedCtx = gpuConfig.vramGB > 0
+              ? this._computeMaxContextGpu(gpuConfig.vramGB, gpuConfig.modelSizeGB, actualGpuLayers, estTotalLayers)
+              : ramBasedCtx;
+            targetCtx = Math.min(ramBasedCtx, vramBasedCtx);
+            console.log(`[LLM] Partial GPU offload: ${actualGpuLayers}/${estTotalLayers} layers on GPU, RAM model portion=${ramModelGB.toFixed(2)}GB, ramCtx=${ramBasedCtx}, vramCtx=${vramBasedCtx}, targetCtx=${targetCtx}`);
+          } else {
+            targetCtx = this._computeGpuContextSize(gpuConfig);                // VRAM-based for full GPU
+          }
+          let nativeTrainCtx = 0;
+          try { nativeTrainCtx = loadedModel.trainContextSize || 0; } catch (_) {}
+          // Respect the model's actual train context ceiling
+          const clampedCtx = nativeTrainCtx > 0 ? Math.min(targetCtx, nativeTrainCtx) : targetCtx;
+          console.log(`[LLM DIAG] Context creation: mode=${mode}, targetCtx=${targetCtx}, clampedCtx=${clampedCtx}, trainCtx=${nativeTrainCtx}, modelSizeGB=${gpuConfig.modelSizeGB.toFixed(2)}`);
+
+          const ctxRequest = {
+            contextSize: clampedCtx,
+            // Flash attention only on GPU; SSM/Mamba hybrid layers don't support it on CPU.
+            flashAttention: mode !== false,
+            // Bypass estimator safety checks — see loadModel comment above.
+            ignoreMemorySafetyChecks: true,
+            // Auto-shrink if actual allocation fails: halve context up to 8 times before giving up.
+            failedCreationRemedy: { retries: 8, autoContextSizeShrink: 0.5 },
+          };
           loadedContext = await this._withTimeout(
-            loadedModel.createContext({
-              contextSize: { min: contextMin, max: maxCtx },
-              flashAttention: true,
-              ignoreMemorySafetyChecks: mode === false,
-              failedCreationRemedy: { retries: 8, autoContextSizeShrink: 0.5 },
-            }),
+            loadedModel.createContext(ctxRequest),
             ctxTimeout,
             'Context creation',
           );
@@ -502,11 +552,54 @@ class LLMEngine extends EventEmitter {
 
   _computeMaxContext(modelSizeGB) {
     const freeRam = os.freemem();
-    const kvPerToken = modelSizeGB < 2 ? 0.5 : modelSizeGB < 8 ? 1.0 : 2.0; // KB per token estimate
-    const availableForKV = Math.max(0, freeRam - 2 * 1024 ** 3); // reserve 2GB RAM
+    // KV cache size per token depends on model architecture/size.
+    // These are conservative estimates; actual values vary by architecture.
+    // With ignoreMemorySafetyChecks+failedCreationRemedy, overestimates are safe —
+    // node-llama-cpp auto-shrinks on actual OOM.
+    const kvPerToken = modelSizeGB < 2 ? 0.5 : modelSizeGB < 8 ? 1.0 : 2.0; // KB per token
+    const availableForKV = Math.max(0, freeRam - 2 * 1024 ** 3); // reserve 2GB for OS
     const maxFromRam = Math.floor(availableForKV / (kvPerToken * 1024));
-    const result = Math.min(CONTEXT_ABSOLUTE_CEILING, Math.max(2048, maxFromRam));
+    const result = Math.min(CONTEXT_ABSOLUTE_CEILING, Math.max(4096, maxFromRam));
     console.log(`[LLM] _computeMaxContext: modelSize=${modelSizeGB.toFixed(2)}GB, freeRam=${(freeRam / 1024 ** 3).toFixed(1)}GB, kvPerToken=${kvPerToken}KB, availableForKV=${(availableForKV / 1024 ** 3).toFixed(1)}GB, maxFromRam=${maxFromRam}, result=${result}`);
+    return result;
+  }
+
+  // Compute max context for GPU mode based on VRAM remaining after model weights.
+  // All values are read from actual hardware at runtime — never hardcoded to a specific machine.
+  _computeMaxContextGpu(totalVramGB, modelSizeGB, gpuLayers, estimatedTotalLayers) {
+    const layerFraction = gpuLayers / Math.max(1, estimatedTotalLayers || 32);
+    const modelVramGB = modelSizeGB * layerFraction;
+    // For partial GPU offload (layerFraction < 1), the token embedding tables are typically
+    // kept in VRAM regardless of layer fraction (needed by the GPU layers). The simple
+    // modelSizeGB * layerFraction formula does NOT account for this, causing VRAM OOM
+    // during generation (compute scratch + embeddings exceed available VRAM).
+    // Conservative estimate: embedding/output projection overhead ≈ 25% of model size.
+    // This is intentionally conservative — underpredictiing context is safe, OOM is not.
+    const isPartialOffload = layerFraction < 1.0;
+    const embeddingOverheadGB = isPartialOffload ? modelSizeGB * 0.25 : 0;
+    const freeForKV = Math.max(0, totalVramGB - modelVramGB - embeddingOverheadGB - VRAM_PADDING_FLOOR_MB / 1024);
+    // Conservative KV per token estimates (KB) — overestimates trigger auto-shrink safely
+    const kvPerTokenKB = modelSizeGB < 2 ? 56 : modelSizeGB < 8 ? 100 : 200;
+    const maxFromVram = Math.floor((freeForKV * 1024 * 1024) / kvPerTokenKB);
+    const result = Math.min(CONTEXT_ABSOLUTE_CEILING, Math.max(4096, maxFromVram));
+    console.log(`[LLM] _computeMaxContextGpu: totalVram=${totalVramGB.toFixed(2)}GB, modelGPU=${modelVramGB.toFixed(2)}GB, embeddingOverhead=${embeddingOverheadGB.toFixed(2)}GB, freeForKV=${freeForKV.toFixed(2)}GB, kvKBPerToken=${kvPerTokenKB}, result=${result}`);
+    return result;
+  }
+
+  _computeGpuContextSize(gpuConfig) {
+    // Estimate max context size that fits in VRAM after model weights and padding.
+    // ALL values read from actual hardware at runtime — never hardcoded to a specific machine.
+    // failedCreationRemedy will auto-shrink if actual allocation fails (handles imprecision).
+    const vramMB = (gpuConfig.vramGB || 0) * 1024;
+    const modelSizeMB = (gpuConfig.modelSizeGB || 0) * 1024;
+    const kvBudgetMB = Math.max(0, vramMB - modelSizeMB - VRAM_PADDING_FLOOR_MB);
+    // KV cache per token for typical architectures — model size is the best available proxy
+    // without reading architecture metadata. Overestimating is safe (auto-shrink handles it).
+    // Qwen3.5 SSM hybrid (0.8B): ~56KB/token. Larger models scale accordingly.
+    const kvPerTokenKB = gpuConfig.modelSizeGB < 2 ? 56 : gpuConfig.modelSizeGB < 8 ? 100 : 200;
+    const maxFromVram = kvBudgetMB > 0 ? Math.floor((kvBudgetMB * 1024) / kvPerTokenKB) : 4096;
+    const result = Math.min(CONTEXT_ABSOLUTE_CEILING, Math.max(4096, maxFromVram));
+    console.log(`[LLM] _computeGpuContextSize: vramMB=${vramMB.toFixed(0)}, modelMB=${modelSizeMB.toFixed(0)}, kvBudgetMB=${kvBudgetMB.toFixed(0)}, kvPerToken=${kvPerTokenKB}KB, maxFromVram=${maxFromVram}, result=${result}`);
     return result;
   }
 
@@ -548,16 +641,21 @@ class LLMEngine extends EventEmitter {
     // Compact history if too long
     this._compactHistory();
 
-    // Stall watchdog
+    // Stall watchdog — two-phase: longer timeout for prompt eval (first token),
+    // shorter timeout for generation stalls (between tokens)
+    const PROMPT_EVAL_TIMEOUT_MS = (this.modelInfo?.gpuMode === false) ? STALL_TIMEOUT_CPU_MS : STALL_TIMEOUT_CPU_MS; // prompt eval always gets the long timeout
+    const stallTimeoutMs = (this.modelInfo?.gpuMode === false) ? STALL_TIMEOUT_CPU_MS : STALL_TIMEOUT_GPU_MS;
     let stallTimer = null;
+    let _firstTokenReceived = false;
     const resetStallTimer = () => {
       if (stallTimer) clearTimeout(stallTimer);
+      const timeout = _firstTokenReceived ? stallTimeoutMs : PROMPT_EVAL_TIMEOUT_MS;
       stallTimer = setTimeout(() => {
         if (_genCounter === genId && this.abortController) {
-          console.log(`[LLM] Stall watchdog fired after ${STALL_TIMEOUT_MS / 1000}s — aborting generation`);
+          console.log(`[LLM] Stall watchdog fired after ${timeout / 1000}s — aborting generation (phase=${_firstTokenReceived ? 'gen' : 'prompt-eval'})`);
           this.cancelGeneration('timeout');
         }
-      }, STALL_TIMEOUT_MS);
+      }, timeout);
     };
 
     // Generation timeout
@@ -590,6 +688,7 @@ class LLMEngine extends EventEmitter {
     };
 
     const onResponseChunk = (chunk) => {
+      if (!_firstTokenReceived) { _firstTokenReceived = true; }
       resetStallTimer();
 
       if (chunk.segmentType === 'thought') {
@@ -914,16 +1013,21 @@ class LLMEngine extends EventEmitter {
     this._abortReason = null;
     const genId = ++_genCounter;
 
-    // Stall watchdog
+    // Stall watchdog — two-phase: longer timeout for prompt eval (first token),
+    // shorter timeout for generation stalls (between tokens)
+    const PROMPT_EVAL_TIMEOUT_MS_FN = (this.modelInfo?.gpuMode === false) ? STALL_TIMEOUT_CPU_MS : STALL_TIMEOUT_CPU_MS;
+    const stallTimeoutMs = (this.modelInfo?.gpuMode === false) ? STALL_TIMEOUT_CPU_MS : STALL_TIMEOUT_GPU_MS;
     let stallTimer = null;
+    let _firstTokenReceived = false;
     const resetStallTimer = () => {
       if (stallTimer) clearTimeout(stallTimer);
+      const timeout = _firstTokenReceived ? stallTimeoutMs : PROMPT_EVAL_TIMEOUT_MS_FN;
       stallTimer = setTimeout(() => {
         if (_genCounter === genId && this.abortController) {
-          console.log(`[LLM] Stall watchdog fired after ${STALL_TIMEOUT_MS / 1000}s — aborting generation (functions mode)`);
+          console.log(`[LLM] Stall watchdog fired after ${timeout / 1000}s — aborting generation (functions mode, phase=${_firstTokenReceived ? 'gen' : 'prompt-eval'})`);
           this.cancelGeneration('timeout');
         }
-      }, STALL_TIMEOUT_MS);
+      }, timeout);
     };
 
     const collectedCalls = [];
@@ -974,6 +1078,7 @@ class LLMEngine extends EventEmitter {
         signal: this.abortController?.signal,
         tokenPredictor: this.tokenPredictor,
         onFunctionCall: (call) => {
+          if (!_firstTokenReceived) { _firstTokenReceived = true; }
           resetStallTimer();
           const log = require('./logger');
           log.info(`Function call: ${call.functionName}(${JSON.stringify(call.params)})`);
@@ -981,12 +1086,14 @@ class LLMEngine extends EventEmitter {
           if (onFunctionCall) onFunctionCall(call);
         },
         onFunctionCallParamsChunk: (chunk) => {
+          if (!_firstTokenReceived) { _firstTokenReceived = true; }
           resetStallTimer();
           if (chunk.done && onToken) {
             onToken(JSON.stringify(chunk.params));
           }
         },
         onResponseChunk: (chunk) => {
+          if (!_firstTokenReceived) { _firstTokenReceived = true; }
           resetStallTimer();
           if (chunk.segmentType === 'thought') {
             thinkingTokenCount++;
@@ -1151,10 +1258,14 @@ class LLMEngine extends EventEmitter {
 
     // Check if context is still usable
     if (!this.context || this.context._disposed) {
+      const gpuIsActive = this.modelInfo && this.modelInfo.gpuMode !== false;
+      const ctxSize = gpuIsActive
+        ? this._computeGpuContextSize({ vramGB: this._cachedVramGB || 0, modelSizeGB: this.modelInfo?.modelSizeGB || 0 })
+        : this._computeMaxContext(this.modelInfo?.modelSizeGB || 0);
       this.context = await this.model.createContext({
-        contextSize: { min: 2048, max: this._computeMaxContext(0) },
-        flashAttention: true,
-        ignoreMemorySafetyChecks: !this.modelInfo || this.modelInfo.gpuMode === false,
+        contextSize: ctxSize,
+        flashAttention: gpuIsActive,
+        ignoreMemorySafetyChecks: true,
         failedCreationRemedy: { retries: 8, autoContextSizeShrink: 0.5 },
       });
     }
@@ -1180,10 +1291,14 @@ class LLMEngine extends EventEmitter {
         
         // Context is exhausted, recreate it
         try { this.context.dispose?.(); } catch {}
+        const gpuIsActive2 = this.modelInfo && this.modelInfo.gpuMode !== false;
+        const ctxSize2 = gpuIsActive2
+          ? this._computeGpuContextSize({ vramGB: this._cachedVramGB || 0, modelSizeGB: this.modelInfo?.modelSizeGB || 0 })
+          : this._computeMaxContext(this.modelInfo?.modelSizeGB || 0);
         this.context = await this.model.createContext({
-          contextSize: { min: 2048, max: this._computeMaxContext(0) },
-          flashAttention: true,
-          ignoreMemorySafetyChecks: !this.modelInfo || this.modelInfo.gpuMode === false,
+          contextSize: ctxSize2,
+          flashAttention: gpuIsActive2,
+          ignoreMemorySafetyChecks: true,
           failedCreationRemedy: { retries: 8, autoContextSizeShrink: 0.5 },
         });
         

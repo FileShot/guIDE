@@ -1337,6 +1337,11 @@ class MCPToolServer {
       }
 
       await fs.mkdir(path.dirname(fullPath), { recursive: true });
+      // Defensive unescape: if content has no real newlines but has literal \n sequences,
+      // the model double-escaped during JSON generation. Convert to real newlines.
+      if (typeof content === 'string' && !content.includes('\n') && content.includes('\\n')) {
+        content = content.replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\r/g, '\r');
+      }
       await fs.writeFile(fullPath, content, 'utf8');
 
       if (this.browserManager?.parentWindow) {
@@ -1896,6 +1901,11 @@ class MCPToolServer {
       }
 
       await fs.mkdir(path.dirname(fullPath), { recursive: true });
+      // Defensive unescape: if content has no real newlines but has literal \n sequences,
+      // the model double-escaped during JSON generation. Convert to real newlines.
+      if (typeof content === 'string' && !content.includes('\n') && content.includes('\\n')) {
+        content = content.replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\r/g, '\r');
+      }
       await fs.appendFile(fullPath, content, 'utf8');
 
       let fullContent = content;

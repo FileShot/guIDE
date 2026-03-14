@@ -224,9 +224,14 @@ function extractJsonObjects(text) {
     const pathMatch = partial.match(/"(?:filePath|path)"\s*:\s*"([^"]+)"/);
     const contentMatch = partial.match(/"content"\s*:\s*"([\s\S]{20,})$/);
     if (pathMatch && contentMatch) {
+      let truncatedContent = contentMatch[1];
+      // Unescape JSON escape sequences — content came from raw regex match, not JSON.parse
+      truncatedContent = truncatedContent
+        .replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\r/g, '\r')
+        .replace(/\\'/g, "'").replace(/\\\\/g, '\\');
       objects.push({
         tool: 'write_file',
-        params: { filePath: pathMatch[1], content: contentMatch[1] },
+        params: { filePath: pathMatch[1], content: truncatedContent },
         _truncated: true,
       });
     }

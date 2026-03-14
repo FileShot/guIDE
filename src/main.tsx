@@ -3,6 +3,11 @@
  * Copyright (c) 2025-2026 Brendan Gray (GitHub: FileShot)
  * All Rights Reserved. See LICENSE for terms.
  */
+
+// In Electron, window.electronAPI is set by preload.js before this module runs.
+// In a browser (dev.graysoft.dev / localhost:3200), this import sets it up via WebSocket.
+import './shims/webElectronAPI';
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';

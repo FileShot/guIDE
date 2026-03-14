@@ -113,6 +113,12 @@ function createIpcTokenBatcher(mainWindow, channel, canSend, opts = {}) {
     try {
       if (!mainWindow || mainWindow.isDestroyed() || !mainWindow.webContents || mainWindow.webContents.isDestroyed()) return;
       if (typeof canSend === 'function' && !canSend()) return;
+      // Token batch logging: log what the model generates so we can diagnose
+      // generation stalls, false-close bugs, and unexpected content mid-stream.
+      if (channel === 'llm-token') {
+        const preview = text.length > 120 ? text.slice(0, 80) + '…' + text.slice(-20) : text;
+        console.log('[LLM-BATCH]', JSON.stringify(preview));
+      }
       mainWindow.webContents.send(channel, text);
     } catch (_) {}
   };

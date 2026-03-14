@@ -2411,40 +2411,26 @@ class MCPToolServer {
       }
     }
 
-    // Param inference: fix "." or "" filePath when user message references a real file
+    // Param inference: fix "." or "" filePath for file operations when user message references a real file
+    // NOTE: list_directory is excluded — ".", "./", and "" all resolve correctly to the project root
+    // in _listDirectory via path.join(projectPath, "."). Keyword extraction from user messages
+    // was removed because it's a classifier pattern that mis-triggers on common words like "build".
     if (options.userMessage) {
       for (const call of toolCalls) {
         if (!call || typeof call.tool !== 'string') continue;
         const fp = call.params?.filePath ?? call.params?.path ?? call.params?.file_path ?? '';
         const isFileOp = ['read_file', 'write_file', 'edit_file'].includes(call.tool);
-        const isListOp = call.tool === 'list_directory';
         const pathIsBad = fp === '.' || fp === './' || fp === '' || fp === '..';
 
-        if (pathIsBad && (isFileOp || isListOp)) {
+        if (pathIsBad && isFileOp) {
           const msg = options.userMessage;
-          if (isFileOp) {
-            const fileMatch = msg.match(/\b([\w.-]+\.(?:json|js|ts|tsx|jsx|md|html|css|yml|yaml|toml|py|sh|bat|txt|xml|env|cfg|conf|ini|log|csv))\b/i);
-            if (fileMatch) {
-              const inferred = fileMatch[1];
-              console.log(`[MCP] Param inference: "${call.tool}" filePath "${fp}" → "${inferred}" (from user message)`);
-              call.params = { ...call.params, filePath: inferred };
-              if (call.params.path) delete call.params.path;
-              if (call.params.file_path) delete call.params.file_path;
-            }
-          } else if (isListOp) {
-            const dirMatch = msg.match(/\b(src|main|scripts|tests|components|services|utils|config|public|build|dist|output|lib|assets)\b/i);
-            if (dirMatch) {
-              const inferred = dirMatch[1].toLowerCase();
-              const dp = call.params?.dirPath ?? call.params?.path ?? call.params?.directory ?? '.';
-              if (dp === '.' || dp === '' || dp === './') {
-                console.log(`[MCP] Param inference: "list_directory" path "${dp}" → "${inferred}" (from user message)`);
-                call.params = { ...call.params };
-                if (call.params.dirPath != null) call.params.dirPath = inferred;
-                else if (call.params.directory != null) call.params.directory = inferred;
-                else if (call.params.path != null) call.params.path = inferred;
-                else call.params.dirPath = inferred;
-              }
-            }
+          const fileMatch = msg.match(/\b([\w.-]+\.(?:json|js|ts|tsx|jsx|md|html|css|yml|yaml|toml|py|sh|bat|txt|xml|env|cfg|conf|ini|log|csv))\b/i);
+          if (fileMatch) {
+            const inferred = fileMatch[1];
+            console.log(`[MCP] Param inference: "${call.tool}" filePath "${fp}" → "${inferred}" (from user message)`);
+            call.params = { ...call.params, filePath: inferred };
+            if (call.params.path) delete call.params.path;
+            if (call.params.file_path) delete call.params.file_path;
           }
         }
       }
@@ -2532,7 +2518,37 @@ class MCPToolServer {
             const wfLimit = (options.continuationCount || 0) > 0 ? 1 : 2;
             if (wfPath && options.writeFileHistory[wfPath] && options.writeFileHistory[wfPath].count >= wfLimit) {
               console.log(`[MCP] Write dedup: blocking ${call.tool} to "${wfPath}" (already written ${options.writeFileHistory[wfPath].count}x)`);
-              results.push({ tool: call.tool, params: call.params, result: { success: false, error: `BLOCKED: "${wfPath}" has already been written ${options.writeFileHistory[wfPath].count} times this conversation. Use append_to_file or edit_file instead.` } });
+              // Auto-convert: extract new content and append instead of blocking outright
+              let autoConverted = false;
+              const newContent = call.params?.content || '';
+              if (newContent.length > 50) {
+                try {
+                  const _fs = require('fs'), _path = require('path');
+                  const fullPath = _path.resolve(this.projectPath || '.', wfPath);
+                  const existing = _fs.existsSync(fullPath) ? _fs.readFileSync(fullPath, 'utf-8') : '';
+                  if (existing.length > 0) {
+                    const el = existing.split('\n'), nl = newContent.split('\n');
+                    let m = 0;
+                    for (let i = 0; i < Math.min(el.length, nl.length); i++) { if (el[i].trimEnd() === nl[i].trimEnd()) m++; else break; }
+                    if (m > 5 && nl.length > el.length) {
+                      const suffix = nl.slice(m).join('\n');
+                      if (suffix.trim().length > 20) {
+                        console.log(`[MCP] Write dedup auto-convert: "${wfPath}" (${m}/${el.length} overlap, appending ${nl.length - m} new lines)`);
+                        const ar = await this.executeTool('append_to_file', { filePath: wfPath, content: suffix });
+                        results.push({ tool: 'append_to_file', params: { filePath: wfPath, content: '...(auto-converted)' }, result: ar });
+                        autoConverted = true;
+                      }
+                    }
+                    if (!autoConverted && m > el.length * 0.5) {
+                      results.push({ tool: call.tool, params: call.params, result: { success: true, message: `File "${wfPath}" already written (${el.length} lines). Move on to next task.` } });
+                      autoConverted = true;
+                    }
+                  }
+                } catch (e) { console.warn(`[MCP] Write dedup auto-convert failed: ${e.message}`); }
+              }
+              if (!autoConverted) {
+                results.push({ tool: call.tool, params: call.params, result: { success: false, error: `BLOCKED: "${wfPath}" already written ${options.writeFileHistory[wfPath].count} times. Use append_to_file or edit_file instead.` } });
+              }
               continue;
             }
           }
@@ -2605,7 +2621,37 @@ class MCPToolServer {
         const wfLimit = (options.continuationCount || 0) > 0 ? 1 : 2;
         if (wfPath && options.writeFileHistory[wfPath] && options.writeFileHistory[wfPath].count >= wfLimit) {
           console.log(`[MCP] Write dedup: blocking ${call.tool} to "${wfPath}" (already written ${options.writeFileHistory[wfPath].count}x)`);
-          results.push({ tool: call.tool, params: call.params, result: { success: false, error: `BLOCKED: "${wfPath}" has already been written ${options.writeFileHistory[wfPath].count} times this conversation. Use append_to_file or edit_file instead.` } });
+          // Auto-convert: extract new content and append instead of blocking outright
+          let autoConverted = false;
+          const newContent = call.params?.content || '';
+          if (newContent.length > 50) {
+            try {
+              const _fs = require('fs'), _path = require('path');
+              const fullPath = _path.resolve(this.projectPath || '.', wfPath);
+              const existing = _fs.existsSync(fullPath) ? _fs.readFileSync(fullPath, 'utf-8') : '';
+              if (existing.length > 0) {
+                const el = existing.split('\n'), nl = newContent.split('\n');
+                let m = 0;
+                for (let i = 0; i < Math.min(el.length, nl.length); i++) { if (el[i].trimEnd() === nl[i].trimEnd()) m++; else break; }
+                if (m > 5 && nl.length > el.length) {
+                  const suffix = nl.slice(m).join('\n');
+                  if (suffix.trim().length > 20) {
+                    console.log(`[MCP] Write dedup auto-convert: "${wfPath}" (${m}/${el.length} overlap, appending ${nl.length - m} new lines)`);
+                    const ar = await this.executeTool('append_to_file', { filePath: wfPath, content: suffix });
+                    results.push({ tool: 'append_to_file', params: { filePath: wfPath, content: '...(auto-converted)' }, result: ar });
+                    autoConverted = true;
+                  }
+                }
+                if (!autoConverted && m > el.length * 0.5) {
+                  results.push({ tool: call.tool, params: call.params, result: { success: true, message: `File "${wfPath}" already written (${el.length} lines). Move on to next task.` } });
+                  autoConverted = true;
+                }
+              }
+            } catch (e) { console.warn(`[MCP] Write dedup auto-convert failed: ${e.message}`); }
+          }
+          if (!autoConverted) {
+            results.push({ tool: call.tool, params: call.params, result: { success: false, error: `BLOCKED: "${wfPath}" already written ${options.writeFileHistory[wfPath].count} times. Use append_to_file or edit_file instead.` } });
+          }
           continue;
         }
       }

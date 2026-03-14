@@ -54,26 +54,19 @@ export function useChatStreaming(): ChatStreamingState {
     // This way, tokens are accepted during active generation, but discarded after clear/cancel
     // until a new generation begins and re-syncs the epochs.
 
-    // Typewriter effect: advance at a fixed chars-per-second rate, time-based not frame-based.
-    // Frame-based (e.g. 15 chars/frame) runs 2.4x faster on 144Hz than 60Hz monitors.
-    // Time-based ensures the same pace on all hardware regardless of refresh rate.
-    // 100 chars/sec: deliberate pace to avoid overwhelming the user with fast text.
-    const CHARS_PER_SECOND = 100;
-    let lastFrameTime = 0;
-    const flushStreamUpdate = (timestamp: number) => {
+    // RAF-batched display: show the full buffer on every animation frame.
+    // Local models stream tokens one-at-a-time at hardware speed — no artificial
+    // pacing is needed. Cloud models deliver fast batches, but the natural RAF
+    // (16ms/frame) provides sufficient smoothing without a rate cap.
+    // The old 100 chars/sec typewriter caused the UI to fall permanently behind
+    // local generation (which can exceed 200 chars/sec), making code blocks appear
+    // frozen while the backend kept producing tokens.
+    const flushStreamUpdate = () => {
       streamRafRef.current = null;
       streamDirtyRef.current = false;
       const buffer = streamBufferRef.current;
-      const elapsed = lastFrameTime === 0 ? 16 : Math.min(timestamp - lastFrameTime, 100); // cap at 100ms to avoid huge jump after tab switch
-      lastFrameTime = timestamp;
-      const charsThisFrame = Math.max(1, Math.round(CHARS_PER_SECOND * elapsed / 1000));
-      const target = Math.min(displayPosRef.current + charsThisFrame, buffer.length);
-      displayPosRef.current = target;
-      setStreamingText(buffer.slice(0, target));
-      // Continue animating until the full buffer has been revealed
-      if (target < buffer.length) {
-        streamRafRef.current = requestAnimationFrame(flushStreamUpdate);
-      }
+      displayPosRef.current = buffer.length;
+      setStreamingText(buffer);
     };
     const flushThinkingUpdate = () => {
       thinkingRafRef.current = null;

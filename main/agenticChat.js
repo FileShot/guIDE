@@ -314,6 +314,12 @@ function register(ctx) {
     const { mainWindow, isStale, waitWhilePaused, _readConfig, _reportTokenStats } = helpers;
     const { cloudLLM, mcpToolServer, playwrightBrowser, browserManager, ragEngine, memoryStore, webSearch, licenseManager } = ctx;
 
+    // Sync project path from frontend context (survives server restarts)
+    if (context?.projectPath) {
+      mcpToolServer.projectPath = context.projectPath;
+      ctx.currentProjectPath = context.projectPath;
+    }
+
     const cloudStatus = cloudLLM.getStatus();
     if (!cloudStatus.providers.includes(context.cloudProvider)) {
       return { success: false, error: `Provider "${context.cloudProvider}" not configured.` };
@@ -623,6 +629,12 @@ function register(ctx) {
     const { mainWindow, isStale, waitWhilePaused, _readConfig, _reportTokenStats, MAX_AGENTIC_ITERATIONS } = helpers;
     const { llmEngine, mcpToolServer, playwrightBrowser, browserManager, ragEngine, memoryStore, ConversationSummarizer, DEFAULT_SYSTEM_PREAMBLE, DEFAULT_COMPACT_PREAMBLE } = ctx;
 
+    // Sync project path from frontend context (survives server restarts)
+    if (context?.projectPath) {
+      mcpToolServer.projectPath = context.projectPath;
+      ctx.currentProjectPath = context.projectPath;
+    }
+
     const modelStatus = llmEngine.getStatus();
 
     // Wait for model to be ready before proceeding (prevents "Model not ready" errors)
@@ -879,6 +891,7 @@ function register(ctx) {
     let _pendingPartialBlock = null;
     let lastIterationResponse = '';
     let nonContextRetries = 0;
+    let iterationDisplayStartLen = 0; // Fix 3: track where the current iteration's display text starts
     const executionState = new ExecutionState();
 
     // ── Session Store (Phase 3) — persistent session state for crash recovery ──
@@ -1002,6 +1015,11 @@ function register(ctx) {
             if (preGenResult.rotated) {
               contextRotations++;
               lastConvSummary = preGenResult.summary || '';
+              // Reset LLM session so stale pruned chatHistory doesn't confuse the model.
+              // Without this, Phase 3 compaction leaves 2 chatHistory entries with old
+              // operator content → model continues from wrong position after rotation.
+              try { await llmEngine.resetSession(true); } catch (_) {}
+              try { await ensureLlmChat(llmEngine, getNodeLlamaCppPath); } catch (_) {}
             }
             if (preGenResult.clearContinuation) {
               fullResponseText = '';
@@ -1075,7 +1093,16 @@ function register(ctx) {
 
       let result;
       try {
-        if (mainWindow) mainWindow.webContents.send('llm-iteration-begin');
+        // Fix 2: Only send llm-iteration-begin on the first pass of each iteration.
+        // Continuation passes (continuationCount > 0) reuse the same logical iteration,
+        // so the frontend's iterationStartOffsetRef should stay at the iteration start —
+        // not reset per-pass. This prevents code blocks spanning continuations from being
+        // split at per-pass boundaries, reducing visual "code block reset" artifacts.
+        if (mainWindow && continuationCount === 0) mainWindow.webContents.send('llm-iteration-begin');
+        // Fix 3: Track where this iteration's display text starts, in sync with llm-iteration-begin.
+        // Only reset on new iterations, NOT continuation passes. This lets us send the full
+        // accumulated display text for the iteration in llm-replace-last calls.
+        if (continuationCount === 0) iterationDisplayStartLen = displayResponseText.length;
 
         const localTokenBatcher = createIpcTokenBatcher(mainWindow, 'llm-token', () => !isStale(), { flushIntervalMs: 25, maxBufferChars: 2048 });
         const localThinkingBatcher = createIpcTokenBatcher(mainWindow, 'llm-thinking-token', () => !isStale(), { flushIntervalMs: 35, maxBufferChars: 2048 });
@@ -1219,6 +1246,7 @@ function register(ctx) {
               userMessage: buildDynamicContext(Math.floor(maxPromptTokens * 0.10)) + 
                 (actionsSummary ? '\n\n' + actionsSummary : '') +
                 '\n' + rollingSummary.generateRotationSummary(mcpToolServer?._todos) +
+                executionState.getSummary() +
                 partialHint +
                 '\n\n**Context rotated. Continue the task from where you left off.**\n' + message,
             };
@@ -1305,7 +1333,8 @@ function register(ctx) {
             currentPrompt = {
               systemContext: buildStaticPrompt(),
               userMessage: buildDynamicContext() + '\n' + convSummary +
-                '\n' + rollingSummary.generateRotationSummary(mcpToolServer?._todos) + hint,
+                '\n' + rollingSummary.generateRotationSummary(mcpToolServer?._todos) +
+                executionState.getSummary() + hint,
             };
             sessionJustRotated = true;
             lastConvSummary = convSummary;
@@ -1467,8 +1496,11 @@ function register(ctx) {
       // Correct UI stream buffer: the overlapping tokens were already streamed
       // during generation. Replace the current iteration's display with the
       // de-duplicated content instead of resetting (avoids visual flash/jarring).
+      // Fix 3: Send the FULL accumulated display for this iteration (not just this pass's chunk).
+      // Combined with Fix 2 (stable offset), the frontend replaces from the iteration start,
+      // so the accumulated text grows monotonically across continuation passes.
       if (_overlapLen > 0 && mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('llm-replace-last', displayChunk);
+        mainWindow.webContents.send('llm-replace-last', displayResponseText.slice(iterationDisplayStartLen));
       }
 
       // ── SEAMLESS CONTINUATION — stitch for MCP tool detection ──
@@ -1571,6 +1603,7 @@ function register(ctx) {
                 systemContext: buildStaticPrompt(),
                 userMessage: buildDynamicContext() + '\n\n' + convSummary +
                   '\n' + rollingSummary.generateRotationSummary(mcpToolServer?._todos) +
+                  executionState.getSummary() +
                   `\n\n## CONTINUE FROM HERE\n---\n${partialOutput}\n---` +
                   incrementalHint + fileProgressHint +
                   `\n\n**CRITICAL: DO NOT REFUSE. DO NOT SAY "I cannot continue."**` +
@@ -1728,6 +1761,7 @@ function register(ctx) {
                   systemContext: buildStaticPrompt(),
                   userMessage: buildDynamicContext() + '\n\n' + convSummary +
                     '\n' + rollingSummary.generateRotationSummary(mcpToolServer?._todos) +
+                    executionState.getSummary() +
                     `\n\n## CONTINUE FROM HERE\n---\n${partialOutput}\n---` +
                     incrementalHint + fileProgressHint + explicitFileHint +
                     `\n\n**CRITICAL: DO NOT REFUSE. DO NOT SAY "I cannot continue."**` +
@@ -1748,8 +1782,13 @@ function register(ctx) {
             console.log(`[AI Chat] Seamless continuation ${continuationCount}/50 — ${truncReason} (${responseText.length} chars this pass, ${fullResponseText.length} total)`);
             iteration--;
 
-            // Cap effectiveMaxTokens on continuation passes to avoid overflowing context
-            const remainingTokens = Math.max(0, totalCtx - Math.ceil(((typeof currentPrompt === 'string' ? currentPrompt.length : ((currentPrompt.systemContext || '').length + (currentPrompt.userMessage || '').length)) + fullResponseText.length) / 4));
+            // Cap effectiveMaxTokens on continuation passes to avoid overflowing context.
+            // Use actual KV cache position (nextTokenIndex) instead of char estimate — char
+            // estimate is off by ~3-4x at high context, allowing fatal C++ context shift at 99%+.
+            let _seqUsedForCap = 0;
+            try { if (llmEngine.sequence?.nextTokenIndex) _seqUsedForCap = llmEngine.sequence.nextTokenIndex; } catch (_) {}
+            if (!_seqUsedForCap) _seqUsedForCap = Math.ceil(((typeof currentPrompt === 'string' ? currentPrompt.length : ((currentPrompt.systemContext || '').length + (currentPrompt.userMessage || '').length)) + fullResponseText.length) / 4);
+            const remainingTokens = Math.max(0, Math.floor(totalCtx * 0.88) - _seqUsedForCap);
             effectiveMaxTokens = Math.min(effectiveMaxTokens, Math.max(256, Math.floor(remainingTokens * 0.70)));
 
             let continuationMsg;
@@ -1791,8 +1830,10 @@ function register(ctx) {
                       console.log(`[AI Chat] Salvage-and-append: wrote ${lineCount} lines to "${salvagePath}"`);
 
                       // Update writeFileHistory — blocks future write_file, forces append_to_file
+                      // Set count=2 (not 1) so guard fires even when continuationCount resets to 0
+                      // (wfLimit = continuationCount>0 ? 1 : 2; guard fires when count >= wfLimit)
                       if (!writeFileHistory[salvagePath]) writeFileHistory[salvagePath] = { count: 0, maxLen: 0 };
-                      writeFileHistory[salvagePath].count++;
+                      writeFileHistory[salvagePath].count = Math.max(writeFileHistory[salvagePath].count + 1, 2);
                       if (salvageContent.length > writeFileHistory[salvagePath].maxLen) {
                         writeFileHistory[salvagePath].maxLen = salvageContent.length;
                       }
@@ -1806,10 +1847,13 @@ function register(ctx) {
                         }]);
                       }
 
-                      // Track in summarizers
+                      // Track in summarizers + execution state (include content for accurate line counting)
                       try {
-                        summarizer.recordToolCall('write_file', { filePath: salvagePath }, writeResult);
-                        rollingSummary.recordToolCall('write_file', { filePath: salvagePath }, writeResult, iteration);
+                        const salvageParams = { filePath: salvagePath, content: salvageContent };
+                        summarizer.recordToolCall('write_file', salvageParams, writeResult);
+                        rollingSummary.recordToolCall('write_file', salvageParams, writeResult, iteration);
+                        rollingSummary.recordToolResult('write_file', salvageParams, writeResult, iteration);
+                        executionState.update('write_file', salvageParams, writeResult, iteration);
                       } catch (_) {}
 
                       // Build continuation prompt with completeness detection
@@ -1820,7 +1864,21 @@ function register(ctx) {
                       // Heuristic: detect if salvaged file looks syntactically complete
                       const trimmedEnd = salvageContent.trimEnd();
                       const lastCodeLine = trimmedEnd.split('\n').pop().trim();
-                      const looksComplete = /^(module\.exports\s*=|export\s+(default\s+)?|\}\s*;?\s*$|\}\)\s*;?\s*$)/.test(lastCodeLine);
+                      const _ext = (salvagePath.match(/\.([^.]+)$/) || [])[1] || '';
+                      let looksComplete = false;
+                      if (/^html?$/i.test(_ext)) {
+                        // HTML files: must contain </html> to be considered complete
+                        looksComplete = /<\/html\s*>/i.test(trimmedEnd);
+                      } else if (/^css$/i.test(_ext)) {
+                        // CSS files: a lone } is never a reliable completion signal
+                        looksComplete = false;
+                      } else {
+                        looksComplete = /^(module\.exports\s*=|export\s+(default\s+)?|\}\s*;?\s*$|\}\)\s*;?\s*$)/.test(lastCodeLine);
+                      }
+                      // Secondary check: if file has open HTML tags without closing counterparts, it's not complete
+                      if (looksComplete && /<(style|script)\b/i.test(salvageContent) && !/<\/(style|script)\s*>/i.test(salvageContent)) {
+                        looksComplete = false;
+                      }
 
                       if (looksComplete) {
                         // File appears complete — redirect model to remaining task
@@ -1834,6 +1892,60 @@ function register(ctx) {
                       // Counteract iteration-- from above: salvage is a new agentic pass
                       iteration++;
                       _didSalvageAppend = true;
+
+                      // ── Session reset after salvage-and-append ──
+                      // Without this, the KV cache contains the model's own write_file
+                      // call from the previous iteration. The model "sees" that output
+                      // and re-generates the same file from scratch instead of continuing
+                      // with append_to_file. Resetting gives the model a clean slate.
+                      try {
+                        await llmEngine.resetSession(true);
+                        await ensureLlmChat(llmEngine, getNodeLlamaCppPath);
+                        _pendingPartialBlock = null;
+
+                        const salvSummary = summarizer.generateSummary({
+                          maxTokens: Math.min(Math.floor(totalCtx * 0.25), 3000),
+                          activeTodos: mcpToolServer?._todos || [],
+                        });
+                        const salvFileProgress = Object.keys(summarizer.fileProgress).length > 0
+                          ? `\n**FILES IN PROGRESS:** ${Object.entries(summarizer.fileProgress).map(([f, p]) => `${f} (${p.writtenLines} lines)`).join(', ')}`
+                          : '';
+
+                        currentPrompt = {
+                          systemContext: buildStaticPrompt(),
+                          userMessage: buildDynamicContext() + '\n\n' + salvSummary +
+                            '\n' + rollingSummary.generateRotationSummary(mcpToolServer?._todos) +
+                            executionState.getSummary() +
+                            salvFileProgress +
+                            `\n\n${continuationMsg}`,
+                        };
+                        sessionJustRotated = true;
+                        console.log(`[AI Chat] Post-salvage session reset: clean context for append continuation`);
+                        // Close any unclosed code fence in displayResponseText so the
+                        // continuation's new content doesn't get merged with the old
+                        // fence by the frontend's regex parser. Count ``` occurrences;
+                        // odd = unclosed fence.
+                        const fenceCount = (displayResponseText.match(/```/g) || []).length;
+                        if (fenceCount % 2 === 1) {
+                          displayResponseText += '\n```\n';
+                          console.log(`[AI Chat] Closed unclosed code fence in displayResponseText after salvage`);
+                        }
+                        // Reset continuationCount so the next loop pass sends
+                        // llm-iteration-begin and properly resets the frontend's
+                        // iteration tracking (iterationStartOffsetRef).
+                        continuationCount = 0;
+                        // Sync frontend buffer: replace raw streamed tokens (which may contain
+                        // an unclosed code fence from the truncated output) with the cleaned
+                        // display text. Without this, the unclosed fence from iteration 1
+                        // bleeds into iteration 2's text, causing the code block to "reset."
+                        if (mainWindow && !mainWindow.isDestroyed()) {
+                          mainWindow.webContents.send('llm-replace-last', displayResponseText.slice(iterationDisplayStartLen));
+                        }
+                        continue;
+                      } catch (resetErr) {
+                        console.warn(`[AI Chat] Post-salvage reset failed: ${resetErr.message}`);
+                        // Fall through to generic continuation prompt
+                      }
                     }
                   } catch (salvErr) {
                     console.warn(`[AI Chat] Salvage-and-append failed: ${salvErr.message}`);
@@ -1860,11 +1972,10 @@ function register(ctx) {
 
             // Sync frontend buffer before continuation: strip tool-fence fragments
             // from raw streamed tokens so the committed message doesn't contain broken
-            // code fences. The overlap-based llm-replace-last (line ~1444) only fires
-            // when _overlapLen > 0. For the first pass or when overlap detection fails,
-            // raw partial fences persist in the frontend buffer. Fix that here.
+            // code fences. Fix 3: send the full accumulated display for this iteration
+            // so the frontend buffer grows monotonically (same as the overlap case).
             if (_overlapLen === 0 && mainWindow && !mainWindow.isDestroyed()) {
-              mainWindow.webContents.send('llm-replace-last', displayChunk);
+              mainWindow.webContents.send('llm-replace-last', displayResponseText.slice(iterationDisplayStartLen));
             }
 
             continue;
@@ -1875,12 +1986,12 @@ function register(ctx) {
       // Not truncated — reset continuation
       if (!_wasTruncated) continuationCount = 0;
 
-      // Send done:true for text-mode tool bubble
-      if (_tStart !== -1 && _tName && !nativeFunctionCalls.length && mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('llm-tool-generating', {
-          callIndex: _tIdx, functionName: _tName, paramsText: '', done: true,
-        });
-      }
+      // Fix 1: REMOVED standalone done:true for text-mode tool bubble.
+      // Previously this fired here BEFORE tool parsing/execution, creating a visible gap
+      // where the generating bubble disappeared but the executing bubble hadn't appeared yet.
+      // Now done:true is sent in two places:
+      // (a) Just before sendToolExecutionEvents (when tools ARE found) — near-zero gap
+      // (b) In the "no tool calls" branch (when tools are NOT found) — clears stale bubble
 
       if (isStale()) break;
 
@@ -1974,7 +2085,27 @@ function register(ctx) {
         }
       }
 
+      // Fix 22: Non-thinking models with tool calls also need llm-replace-last to clean
+      // the raw tool-call JSON from the frontend stream buffer before the next iteration.
+      // Without this, iteration N's raw token JSON (e.g. {"tool":"write_file",...}) stays
+      // in streamBufferRef. When llm-iteration-begin fires for iteration N+1, the offset
+      // is set AFTER the stale JSON, so N+1's tokens append after it — causing the entire
+      // next response to appear as a sudden "wall of text" rather than streaming.
+      // The thinking-model path (above) already does this via llm-replace-last('').
+      if (!_isThinkingModel && toolResults.hasToolCalls && toolResults.results.length > 0 && mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('llm-replace-last', displayResponseText.slice(iterationDisplayStartLen));
+      }
+
       if (!toolResults.hasToolCalls || toolResults.results.length === 0) {
+        // Fix 1(b): Clear text-mode tool generating bubble when no tool calls were found.
+        // The model may have streamed partial tool JSON (triggering the generating bubble)
+        // but the final response didn't contain valid tool calls. Clear the stale bubble.
+        if (_tStart !== -1 && _tName && !nativeFunctionCalls.length && mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('llm-tool-generating', {
+            callIndex: _tIdx, functionName: _tName, paramsText: '', done: true,
+          });
+        }
+
         // Check for repetition
         const failure = classifyResponseFailure(responseText, false, 'general', iteration, message, lastIterationResponse, {});
         lastIterationResponse = responseText;
@@ -2091,6 +2222,13 @@ function register(ctx) {
       sessionStore.saveRollingSummary(rollingSummary);
 
       // UI events — send only non-deferred results to prevent duplicate bubbles
+      // Fix 1(a): Send done:true for text-mode tool bubble RIGHT BEFORE tool-executing events.
+      // This minimizes the gap where the generating bubble is gone but executing hasn't appeared.
+      if (_tStart !== -1 && _tName && !nativeFunctionCalls.length && mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('llm-tool-generating', {
+          callIndex: _tIdx, functionName: _tName, paramsText: '', done: true,
+        });
+      }
       sendToolExecutionEvents(mainWindow, uiToolResults, playwrightBrowser, { checkSuccess: true });
 
       // Build tool feedback
@@ -2486,7 +2624,45 @@ async function executeNativeToolCalls(opts) {
         const filePath = call.params?.filePath || call.params?.path;
         const writeLimit = (continuationCount || 0) > 0 ? 1 : 2;
         if (filePath && writeFileHistory[filePath]?.count >= writeLimit) {
-          results.push({ tool: call.tool, params: call.params, result: { success: false, error: `BLOCKED: "${filePath}" already written ${writeFileHistory[filePath].count} times. Use append_to_file or edit_file instead.` } });
+          // Auto-convert write_file → append_to_file: extract only new content
+          const newContent = call.params?.content || '';
+          let autoConverted = false;
+          if (newContent.length > 50) {
+            try {
+              const fs = require('fs');
+              const path = require('path');
+              const fullPath = path.resolve(mcpToolServer.projectPath || '.', filePath);
+              const existingContent = fs.existsSync(fullPath) ? fs.readFileSync(fullPath, 'utf-8') : '';
+              if (existingContent.length > 0) {
+                const existingLines = existingContent.split('\n');
+                const newLines = newContent.split('\n');
+                let matchedLines = 0;
+                for (let i = 0; i < Math.min(existingLines.length, newLines.length); i++) {
+                  if (existingLines[i].trimEnd() === newLines[i].trimEnd()) matchedLines++;
+                  else break;
+                }
+                if (matchedLines > 5 && newLines.length > existingLines.length) {
+                  const newSuffix = newLines.slice(matchedLines).join('\n');
+                  if (newSuffix.trim().length > 20) {
+                    console.log(`[AI Chat] Auto-convert write_file→append_to_file: "${filePath}" (${matchedLines}/${existingLines.length} lines overlap, appending ${newLines.length - matchedLines} new lines)`);
+                    const appendResult = await mcpToolServer.executeTool('append_to_file', { filePath, content: newSuffix });
+                    results.push({ tool: 'append_to_file', params: { filePath, content: '...(auto-converted from write_file)' }, result: appendResult });
+                    autoConverted = true;
+                  }
+                }
+                if (!autoConverted && matchedLines > existingLines.length * 0.5) {
+                  console.log(`[AI Chat] Auto-convert: "${filePath}" already complete (${matchedLines}/${existingLines.length} lines match, no new content)`);
+                  results.push({ tool: call.tool, params: call.params, result: { success: true, message: `File "${filePath}" is already written (${existingLines.length} lines). Move on to the next task.` } });
+                  autoConverted = true;
+                }
+              }
+            } catch (autoErr) {
+              console.warn(`[AI Chat] Auto-convert failed: ${autoErr.message}`);
+            }
+          }
+          if (!autoConverted) {
+            results.push({ tool: call.tool, params: call.params, result: { success: false, error: `BLOCKED: "${filePath}" already written ${writeFileHistory[filePath].count} times. Use append_to_file or edit_file instead.` } });
+          }
           continue;
         }
       }

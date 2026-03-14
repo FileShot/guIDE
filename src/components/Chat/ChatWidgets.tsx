@@ -313,12 +313,13 @@ export const ToolCallGroup: React.FC<{ children: React.ReactNode; count: number 
 // ── Code Block with Copy/Apply ──
 const COLLAPSE_LINE_THRESHOLD = 6; // Collapse code blocks taller than this many lines
 
-export const CodeBlock: React.FC<{ code: string; language: string; onApply: () => void; isToolCall?: boolean; isStreaming?: boolean; isAlreadyWritten?: boolean; onSaveAsFile?: (code: string, language: string) => void }> = ({ code, language, onApply, isToolCall, isStreaming, isAlreadyWritten, onSaveAsFile }) => {
+export const CodeBlock: React.FC<{ code: string; language: string; onApply: () => void; isToolCall?: boolean; isStreaming?: boolean; isAlreadyWritten?: boolean; onSaveAsFile?: (code: string, language: string) => void; defaultCollapsed?: boolean }> = ({ code, language, onApply, isToolCall, isStreaming, isAlreadyWritten, onSaveAsFile, defaultCollapsed }) => {
   const [copied, setCopied] = useState(false);
   const lineCount = code.split('\n').length;
   const isLong = lineCount > COLLAPSE_LINE_THRESHOLD;
   // Default to collapsed for long blocks; keep streaming blocks expanded so users can watch generation
-  const [expanded, setExpanded] = useState(!!isStreaming || !isLong);
+  // defaultCollapsed forces collapsed on first render (used for live tool call generation bubbles)
+  const [expanded, setExpanded] = useState(defaultCollapsed ? false : !!isStreaming || !isLong);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(code);
@@ -334,12 +335,12 @@ export const CodeBlock: React.FC<{ code: string; language: string; onApply: () =
       <div className="flex items-center justify-between px-3 py-1.5 bg-[#262626] border-b border-[#3c3c3c]">
         <div className="flex items-center gap-2">
           <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded" style={{ backgroundColor: 'color-mix(in srgb, var(--theme-accent) 15%, transparent)', color: 'var(--theme-accent)' }}>{language || 'code'}</span>
-          {isLong && (
+          {(isLong || defaultCollapsed) && (
             <span className="text-[9px] text-[#858585]">({lineCount} lines)</span>
           )}
         </div>
         <div className="flex items-center gap-1">
-          {isLong && (
+          {(isLong || defaultCollapsed) && (
             <button
               className="flex items-center gap-1 text-[10px] text-[#858585] hover:text-white px-1.5 py-0.5 rounded hover:bg-[#3c3c3c]"
               onClick={() => setExpanded(!expanded)}
@@ -388,10 +389,10 @@ export const CodeBlock: React.FC<{ code: string; language: string; onApply: () =
         </div>
       </div>
       <div className="relative">
-        <pre className={`p-3 overflow-x-auto text-[12px] font-mono bg-[#1e1e1e] leading-relaxed ${!expanded ? 'max-h-[120px] overflow-hidden' : ''}`}>
+        <pre className={`p-3 overflow-x-auto text-[12px] font-mono bg-[#1e1e1e] leading-relaxed ${!expanded ? (defaultCollapsed ? 'hidden' : 'max-h-[120px] overflow-hidden') : ''}`}>
           <code>{displayCode}</code>
         </pre>
-        {isLong && !expanded && (
+        {isLong && !expanded && !defaultCollapsed && (
           <div
             className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-[#1e1e1e] to-transparent flex items-end justify-center pb-1 cursor-pointer"
             onClick={() => setExpanded(true)}

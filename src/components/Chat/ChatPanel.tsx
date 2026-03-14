@@ -272,11 +272,13 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
 
   // ── Stuck generation detection: show warning if no activity for 2 minutes ──
   useEffect(() => {
-    if (streamingText || thinkingSegments.length > 0 || agenticProgress) {
+    // Fix 4: Include executingTools in activity tracking so tool execution pauses
+    // (which can legitimately take >2 minutes for complex tools) don't trigger stuck warning.
+    if (streamingText || thinkingSegments.length > 0 || agenticProgress || executingTools.length > 0) {
       lastActivityRef.current = Date.now();
       setGenerationStuck(false);
     }
-  }, [streamingText, thinkingSegments, agenticProgress]);
+  }, [streamingText, thinkingSegments, agenticProgress, executingTools]);
 
   useEffect(() => {
     if (!isGenerating) {
@@ -1120,14 +1122,12 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   };
 
   const clearChat = async () => {
-    // Cancel any ongoing generation first — prevents ghost responses resuming after clear
-    if (isGenerating) {
-      // AWAIT the cancel to ensure the backend fully stops before resetting.
-      // llm-cancel already calls resetSession() internally, so we skip
-      // the separate llmResetSession() call below to avoid a race.
-      await window.electronAPI?.llmCancel();
-      setIsGenerating(false);
-    }
+    // ALWAYS cancel regardless of isGenerating state — a no-op cancel is harmless,
+    // a missed cancel causes ghost generation after page refresh or new session load
+    // when React state shows isGenerating=false but the backend loop is still running.
+    // llm-cancel calls resetSession() internally, so no separate resetSession() needed.
+    await window.electronAPI?.llmCancel();
+    setIsGenerating(false);
     // INCREMENT epoch — causes the token listener to discard any tokens still in the
     // IPC pipeline from the old generation. This is the definitive fix for ghost tokens
     // appearing in the new chat after pressing the trash can button.
@@ -1148,10 +1148,6 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     setPendingFileChanges([]);
     setCheckpoints(new Map());
     setTodos([]);
-    // Only call resetSession if we didn't already cancel (cancel does its own reset)
-    if (!isGenerating) {
-      await window.electronAPI?.llmResetSession();
-    }
     // Clear conversation memory so new session doesn't inherit old context
     (window as any).electronAPI?.memoryClearConversations?.();
   };
@@ -1938,16 +1934,84 @@ ${e.message}`,
     const toolResultMap = extractToolResults(text);
 
     // Find all complete code blocks (``` ... ```)
-    const completeBlockRegex = /```[\s\S]*?```/g;
+    // Pattern that matches text strongly indicative of code (not prose).
+    // Used to detect false fence closes from triple backticks inside generated code
+    // (e.g., template literals containing markdown examples).
+    const STRONG_CODE_RE = /^(?:\s{2,}\S|\s*(?:\/\/|\/\*|\*\/)|\s*(?:import|export|from|class|function|const|let|var|return|if|else|for|while|do|switch|case|break|continue|try|catch|finally|throw|new|this|async|await|def|elif|except|with|yield|super|extends|implements)\b|\s*[})\];]|\s*\.[a-zA-Z_$]|\s*[`"']|\s*@[a-zA-Z]|\s*(?:=>|->)|\s*[a-zA-Z_$][a-zA-Z0-9_$.]*\s*[({\[:=])/;
+
+    // Fix 23: Depth-counter-based block detection.
+    // Replaces the regex approach (Fix 21) which still false-closed on column-0 inner fences
+    // inside JSDoc @example blocks (e.g. ```js opener at col 0 inside a /** comment */`.
+    // A fence opener is ```lang at column 0 — increments depth.
+    // A fence closer is ``` alone at column 0 — decrements depth.
+    // Only adds a block to results when depth returns to 0, ensuring nested inner fences
+    // (even at column 0) never cause a premature close of the outermost block.
+    const extractCompleteBlocks = (src: string): Array<{start: number; end: number; matchStr: string}> => {
+      const result: Array<{start: number; end: number; matchStr: string}> = [];
+      const ls = src.split('\n');
+      let pos = 0;
+      let depth = 0;
+      let bStart = -1;
+      let bStartPos = -1;
+      for (let li = 0; li < ls.length; li++) {
+        const ln = ls[li];
+        const lineEnd = pos + ln.length;
+        if (/^```\S/.test(ln)) {
+          // Opening fence (has language tag at col 0)
+          if (depth === 0) { bStart = li; bStartPos = pos; }
+          depth++;
+        } else if (/^```\s*$/.test(ln)) {
+          // Closing fence (bare ``` at col 0)
+          if (depth > 0) {
+            depth--;
+            if (depth === 0 && bStart !== -1) {
+              const blockEnd = lineEnd + (li < ls.length - 1 ? 1 : 0);
+              result.push({ start: bStartPos, end: blockEnd, matchStr: src.substring(bStartPos, blockEnd) });
+              bStart = -1; bStartPos = -1;
+            }
+          }
+        }
+        pos = lineEnd + 1;
+      }
+      return result;
+    };
+    const completeBlocks = extractCompleteBlocks(text);
     const parts: React.ReactNode[] = [];
     let lastIndex = 0;
-    let match;
     let idx = 0;
 
-    while ((match = completeBlockRegex.exec(text)) !== null) {
+    for (const blockMatch of completeBlocks) {
+      // RESIDUAL FALSE-CLOSE GUARD: If text after the "complete" block still looks like
+      // code continuation (e.g. shell heredoc with ``` at line start inside code),
+      // treat it as a false close and fall through to streaming render.
+      const afterMatch = text.substring(blockMatch.end);
+      const firstContentLine = afterMatch.split('\n').find(l => l.trim().length > 0);
+      if (firstContentLine && (() => {
+        const trimmedFirst = firstContentLine.trim();
+        return STRONG_CODE_RE.test(trimmedFirst) && !/^\s*```/.test(trimmedFirst);
+      })()) {
+          // Process text before this match (if any), then break
+          if (blockMatch.start > lastIndex) {
+            let before = text.substring(lastIndex, blockMatch.start);
+            before = before.replace(/\n*## Tool Execution Results[\s\S]*/g, '');
+            before = before.replace(/\n*### \S+ \[(?:OK|FAIL)\][\s\S]*/g, '');
+            if (before.trim() && !before.trim().startsWith('### Tool Execution Results')) {
+              const segments = splitInlineToolCalls(stripTrailingPartialToolCall(before));
+              for (const seg of segments) {
+                if (seg.type !== 'tool') {
+                  parts.push(<InlineMarkdownText key={`s-${idx}`} content={seg.content} />);
+                }
+                idx++;
+              }
+            }
+          }
+          lastIndex = blockMatch.start; // Remaining starts at the false-close block's opening ```
+          break;
+      }
+
       // Text before this code block
-      if (match.index > lastIndex) {
-        let before = text.substring(lastIndex, match.index);
+      if (blockMatch.start > lastIndex) {
+        let before = text.substring(lastIndex, blockMatch.start);
         // Strip everything from "## Tool Execution Results" to end of this text segment —
         // results are already merged into CollapsibleToolBlock via extractToolResults().
         before = before.replace(/\n*## Tool Execution Results[\s\S]*/g, '');
@@ -2015,7 +2079,7 @@ ${e.message}`,
         }
       }
       // The complete code block — render with full styling
-      const block = match[0];
+      const block = blockMatch.matchStr;
       const firstLine = block.indexOf('\n');
       const lang = block.substring(3, firstLine > 0 ? firstLine : 3).trim();
       const code = firstLine > 0 ? block.substring(firstLine + 1, block.length - 3) : block.substring(3, block.length - 3);
@@ -2050,7 +2114,7 @@ ${e.message}`,
       } else {
         parts.push(<CodeBlock key={`b-${idx}`} code={code} language={lang} onApply={() => onApplyCode(currentFile, code)} onSaveAsFile={handleSaveAsFile} />);
       }
-      lastIndex = match.index + match[0].length;
+      lastIndex = blockMatch.end;
       idx++;
     }
 
@@ -2098,7 +2162,38 @@ ${e.message}`,
           // Once the closing ``` arrives it becomes a proper CodeBlock via completeBlockRegex.
           const openFenceIdx = remaining.indexOf('```');
           const hasOpenFence = openFenceIdx !== -1;
-          const hasClosingFence = hasOpenFence && remaining.indexOf('```', openFenceIdx + 3) !== -1;
+          // Smart closing fence detection: scan for ``` on its own line,
+          // but skip false closes (triple backticks inside generated code
+          // like template literals with embedded markdown).
+          let hasClosingFence = false;
+          if (hasOpenFence) {
+            const afterOpen = remaining.substring(openFenceIdx + 3);
+            const firstNl = afterOpen.indexOf('\n');
+            if (firstNl >= 0) {
+              const contentAfterLang = afterOpen.substring(firstNl + 1);
+              const contentLines = contentAfterLang.split('\n');
+              for (let li = 0; li < contentLines.length; li++) {
+                if (/^[ \t]{0,3}```[ \t]*$/.test(contentLines[li])) {
+                  // Potential closing fence — validate by checking what follows
+                  const afterLines = contentLines.slice(li + 1);
+                  const nextContent = afterLines.find(l => l.trim().length > 0);
+                  if (!nextContent) {
+                    // Nothing after close — during streaming, prefer to keep fence open
+                    // (streaming code block is better UX than a collapsed complete block)
+                    break;
+                  }
+                  const trimmedNext = nextContent.trim();
+                  if (STRONG_CODE_RE.test(trimmedNext) && !/^```/.test(trimmedNext)) {
+                    // Followed by code — likely false close (template literal etc.), skip
+                    continue;
+                  }
+                  // Followed by prose or new fence — real close
+                  hasClosingFence = true;
+                  break;
+                }
+              }
+            }
+          }
           if (hasOpenFence && !hasClosingFence) {
             // Incomplete fence — render text before the fence, then render partial code as a live CodeBlock
             let beforeFence = remaining.substring(0, openFenceIdx).trim();
@@ -2762,7 +2857,7 @@ ${e.message}`,
                                   <span className="text-[9px] text-[#858585] animate-pulse ml-1">writing…</span>
                                 </div>
                                 {partialContent ? (
-                                  <CodeBlock code={partialContent} language={lang} onApply={() => {}} isToolCall={true} />
+                                  <CodeBlock code={partialContent} language={lang} onApply={() => {}} isToolCall={true} defaultCollapsed={true} />
                                 ) : (
                                   <div className="flex items-center gap-2 px-2 py-1.5 bg-[#1e1e1e] rounded-md">
                                     <Loader2 size={10} className="animate-spin text-[#007acc]" />

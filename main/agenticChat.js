@@ -1198,6 +1198,13 @@ function register(ctx) {
                 }
                 mainWindow.webContents.send('llm-tool-generating', {
                   callIndex: _tIdx, functionName: _tName, paramsText, done: false,
+                  // Fix 30B: Send accurate line count from untruncated content
+                  lineCount: (() => {
+                    const cIdx = raw.indexOf('"content"');
+                    if (cIdx === -1) return 0;
+                    const afterContent = raw.slice(cIdx);
+                    return (afterContent.match(/\\n/g) || []).length + 1;
+                  })(),
                 });
               }
             }, (thinkToken) => {
@@ -1803,16 +1810,17 @@ function register(ctx) {
             if (_hasUnclosedToolFence) {
               const partialFence = _stitchedForMcp.slice(_fenceIdx);
 
-              // ── Salvage-and-Append: when a write_file call is truncated mid-content,
-              //    salvage the partial file, write it to disk, then switch the model to
-              //    append_to_file for the remaining content. This prevents the model from
-              //    re-generating the entire file (which causes 87%+ overlap → rotation). ──
+              // ── Salvage-and-Append: when a write_file or append_to_file call is
+              //    truncated mid-content, salvage the partial content, write/append it
+              //    to disk, then tell the model to continue with append_to_file for the
+              //    remaining content. This prevents content loss during long generations. ──
               const _isWriteFile = partialFence.includes('"write_file"');
+              const _isAppendFile = partialFence.includes('"append_to_file"');
               const _hasFP = /"filePath"\s*:\s*"[^"]+"/.test(partialFence);
               const _hasLongContent = /"content"\s*:\s*"[\s\S]{200,}/.test(partialFence);
 
               let _didSalvageAppend = false;
-              if (_isWriteFile && _hasFP && _hasLongContent) {
+              if ((_isWriteFile || _isAppendFile) && _hasFP && _hasLongContent) {
                 const salvaged = salvagePartialToolCall(_stitchedForMcp, _fenceIdx);
                 if (salvaged) {
                   try {
@@ -1822,47 +1830,64 @@ function register(ctx) {
                     const salvageContent = salvageJson?.params?.content || '';
 
                     if (salvagePath && salvageContent.length >= 100) {
-                      const writeResult = await mcpToolServer.executeTool('write_file', {
+                      const salvageTool = _isAppendFile ? 'append_to_file' : 'write_file';
+                      const writeResult = await mcpToolServer.executeTool(salvageTool, {
                         filePath: salvagePath,
                         content: salvageContent,
                       });
-                      const lineCount = salvageContent.split('\n').length;
-                      console.log(`[AI Chat] Salvage-and-append: wrote ${lineCount} lines to "${salvagePath}"`);
+                      // For append, use fullContent (entire file) for accurate line count
+                      const finalContent = (salvageTool === 'append_to_file' && writeResult?.fullContent)
+                        ? writeResult.fullContent : salvageContent;
+                      const lineCount = finalContent.split('\n').length;
+                      console.log(`[AI Chat] Salvage-and-append: ${salvageTool === 'append_to_file' ? 'appended' : 'wrote'} ${lineCount} lines to "${salvagePath}"`);
 
                       // Update writeFileHistory — blocks future write_file, forces append_to_file
                       // Set count=2 (not 1) so guard fires even when continuationCount resets to 0
                       // (wfLimit = continuationCount>0 ? 1 : 2; guard fires when count >= wfLimit)
                       if (!writeFileHistory[salvagePath]) writeFileHistory[salvagePath] = { count: 0, maxLen: 0 };
                       writeFileHistory[salvagePath].count = Math.max(writeFileHistory[salvagePath].count + 1, 2);
-                      if (salvageContent.length > writeFileHistory[salvagePath].maxLen) {
-                        writeFileHistory[salvagePath].maxLen = salvageContent.length;
+                      if (finalContent.length > writeFileHistory[salvagePath].maxLen) {
+                        writeFileHistory[salvagePath].maxLen = finalContent.length;
                       }
 
-                      // Send UI event for the artifact
+                      // Send UI events for the artifact — first executing, then results,
+                      // so the frontend's completedStreamingTools picks up the code block.
+                      // For append, use fullContent so the unified code block shows the entire file.
+                      const salvageDisplayContent = (salvageTool === 'append_to_file' && writeResult?.fullContent)
+                        ? writeResult.fullContent : salvageContent;
+                      const salvageToolEntry = {
+                        tool: salvageTool,
+                        params: { filePath: salvagePath, content: salvageDisplayContent },
+                        result: writeResult,
+                      };
                       if (mainWindow && !mainWindow.isDestroyed()) {
-                        mainWindow.webContents.send('mcp-tool-results', [{
-                          tool: 'write_file',
-                          params: { filePath: salvagePath, content: '...(salvaged partial)' },
-                          result: writeResult,
-                        }]);
+                        mainWindow.webContents.send('mcp-executing-tools', [{ tool: salvageTool, params: { filePath: salvagePath, content: salvageDisplayContent } }]);
+                        mainWindow.webContents.send('mcp-tool-results', [salvageToolEntry]);
+                        // Notify file explorer that a file was created/modified
+                        mainWindow.webContents.send('files-changed');
+                        mainWindow.webContents.send('open-file', salvagePath);
                       }
+                      // Track in allToolResults so the committed message includes this code block
+                      allToolResults.push(salvageToolEntry);
 
                       // Track in summarizers + execution state (include content for accurate line counting)
                       try {
                         const salvageParams = { filePath: salvagePath, content: salvageContent };
-                        summarizer.recordToolCall('write_file', salvageParams, writeResult);
-                        rollingSummary.recordToolCall('write_file', salvageParams, writeResult, iteration);
-                        rollingSummary.recordToolResult('write_file', salvageParams, writeResult, iteration);
-                        executionState.update('write_file', salvageParams, writeResult, iteration);
+                        summarizer.recordToolCall(salvageTool, salvageParams, writeResult);
+                        rollingSummary.recordToolCall(salvageTool, salvageParams, writeResult, iteration);
+                        rollingSummary.recordToolResult(salvageTool, salvageParams, writeResult, iteration);
+                        executionState.update(salvageTool, salvageParams, writeResult, iteration);
                       } catch (_) {}
 
                       // Build continuation prompt with completeness detection
-                      const allLines = salvageContent.split('\n');
+                      // For append, use finalContent (full file) for completeness check
+                      const checkContent = finalContent;
+                      const allLines = checkContent.split('\n');
                       const lastLines = allLines.slice(-10).join('\n');
                       _pendingPartialBlock = null; // switch from JSON stitching to free-form
 
                       // Heuristic: detect if salvaged file looks syntactically complete
-                      const trimmedEnd = salvageContent.trimEnd();
+                      const trimmedEnd = checkContent.trimEnd();
                       const lastCodeLine = trimmedEnd.split('\n').pop().trim();
                       const _ext = (salvagePath.match(/\.([^.]+)$/) || [])[1] || '';
                       let looksComplete = false;
@@ -1876,7 +1901,7 @@ function register(ctx) {
                         looksComplete = /^(module\.exports\s*=|export\s+(default\s+)?|\}\s*;?\s*$|\}\)\s*;?\s*$)/.test(lastCodeLine);
                       }
                       // Secondary check: if file has open HTML tags without closing counterparts, it's not complete
-                      if (looksComplete && /<(style|script)\b/i.test(salvageContent) && !/<\/(style|script)\s*>/i.test(salvageContent)) {
+                      if (looksComplete && /<(style|script)\b/i.test(checkContent) && !/<\/(style|script)\s*>/i.test(checkContent)) {
                         looksComplete = false;
                       }
 
@@ -2183,7 +2208,15 @@ function register(ctx) {
       const uiToolResults = toolResults.results.filter(tr => !tr._deferred);
 
       // Accumulate only non-deferred tool results for UI
-      allToolResults.push(...uiToolResults);
+      // For append_to_file, replace params.content with the full file content
+      // so the committed message shows one unified code block per file
+      const enrichedForStorage = uiToolResults.map(tr => {
+        if (tr.tool === 'append_to_file' && tr.result?.fullContent) {
+          return { ...tr, params: { ...tr.params, content: tr.result.fullContent } };
+        }
+        return tr;
+      });
+      allToolResults.push(...enrichedForStorage);
       capArray(allToolResults, 50);
 
       // Compress old tool results
@@ -2244,7 +2277,17 @@ function register(ctx) {
         snapFeedback = `\n### Page snapshot after ${snapResult.triggerTool}\n${snapResult.snapshotText}\n\n**${snapResult.elementCount} elements.** Use [ref=N] with browser_click/type.\n`;
       }
 
-      if (mainWindow) mainWindow.webContents.send('mcp-tool-results', uiToolResults);
+      if (mainWindow) {
+        // For append_to_file, replace params.content with the full file content
+        // so the frontend can display one unified code block per file
+        const enrichedResults = uiToolResults.map(tr => {
+          if (tr.tool === 'append_to_file' && tr.result?.fullContent) {
+            return { ...tr, params: { ...tr.params, content: tr.result.fullContent } };
+          }
+          return tr;
+        });
+        mainWindow.webContents.send('mcp-tool-results', enrichedResults);
+      }
       fullResponseText += toolFeedback + snapFeedback;
       if (fullResponseText.length > MAX_RESPONSE_SIZE) {
         fullResponseText = fullResponseText.substring(fullResponseText.length - MAX_RESPONSE_SIZE);
@@ -2407,12 +2450,29 @@ function register(ctx) {
     const localTokensUsed = estimateTokens(fullResponseText);
     _reportTokenStats(localTokensUsed, mainWindow);
 
+    // Dedup write tools by filePath: keep only the latest entry per file
+    // so the committed message shows one unified code block per file
+    const WRITE_TOOLS_DEDUP = new Set(['write_file', 'create_file', 'edit_file', 'append_to_file']);
+    const writePathLatest = new Map();
+    for (let i = allToolResults.length - 1; i >= 0; i--) {
+      const tr = allToolResults[i];
+      if (WRITE_TOOLS_DEDUP.has(tr.tool) && tr.params?.filePath) {
+        if (!writePathLatest.has(tr.params.filePath)) {
+          writePathLatest.set(tr.params.filePath, i);
+        }
+      }
+    }
+    const dedupedToolResults = allToolResults.filter((tr, idx) => {
+      if (!WRITE_TOOLS_DEDUP.has(tr.tool) || !tr.params?.filePath) return true;
+      return writePathLatest.get(tr.params.filePath) === idx;
+    });
+
     return {
       success: true,
       text: cleanResponse,
       model: modelStatus.modelInfo?.name || 'local',
       tokensUsed: localTokensUsed,
-      toolResults: allToolResults.length > 0 ? allToolResults : undefined,
+      toolResults: dedupedToolResults.length > 0 ? dedupedToolResults : undefined,
       iterations: iteration,
     };
   }

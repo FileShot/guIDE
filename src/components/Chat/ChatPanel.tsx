@@ -98,10 +98,13 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   // Ref so IPC callbacks (closed over at mount) can always read the latest executing list
   const executingToolsRef = useRef<Array<{tool: string; params: any}>>([]);
   // Live tool-generation streaming bubbles (shown while model is writing tool call JSON)
-  const [generatingToolCalls, setGeneratingToolCalls] = useState<Array<{callIndex: number; functionName: string; paramsText: string}>>([]);
-  const generatingToolCallsRef = useRef<Array<{callIndex: number; functionName: string; paramsText: string}>>([]);
+  const [generatingToolCalls, setGeneratingToolCalls] = useState<Array<{callIndex: number; functionName: string; paramsText: string; lineCount?: number}>>([]);
+  const generatingToolCallsRef = useRef<Array<{callIndex: number; functionName: string; paramsText: string; lineCount?: number}>>([]);
   const [agenticProgress, setAgenticProgress] = useState<{ iteration: number; maxIterations: number } | null>(null);
   const [agenticPhases, setAgenticPhases] = useState<Array<{ phase: string; label: string; status: 'running' | 'done' }>>([]);
+  // Fix 30D: File content accumulator — tracks completed file content per filePath
+  // so append streaming can show base + growing append in one unified block
+  const fileContentAccRef = useRef<Map<string, string>>(new Map());
   const [_showThinking, _setShowThinking] = useState(false);
   const [cloudProviders, setCloudProviders] = useState<{ provider: string; label: string; models: { id: string; name: string }[] }[]>([]);
   const [allCloudProviders, setAllCloudProviders] = useState<{ provider: string; label: string; models: { id: string; name: string }[]; hasKey: boolean }[]>([]);
@@ -249,15 +252,12 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   useEffect(() => { isGeneratingRef.current = isGenerating; }, [isGenerating]);
 
   useEffect(() => {
-    // Only scroll on message-count or generation-state changes.
-    // During streaming, Virtuoso's followOutput handles auto-follow via
-    // content-height change detection — no need to scrollToIndex every token.
+    // Fix 30E: During generation, let Virtuoso's followOutput handle scrolling entirely.
+    // Only use scrollToIndex when generation starts (once) and when it ends.
+    // This prevents layout-shift-triggered scroll jumps from code block dedup transitions.
     if (isGenerating && !manualScrollUpRef.current) {
-      if (messages.length > 0 && virtuosoRef.current) {
-        virtuosoRef.current.scrollToIndex({ index: messages.length, behavior: 'auto', align: 'end' });
-      } else {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
-      }
+      // Virtuoso followOutput handles continuous auto-scroll during generation.
+      // No scrollToIndex here — it causes jumps when streaming area height changes.
     } else if (!isGenerating && !userScrolledUpRef.current) {
       // Not generating — normal scroll-to-bottom for new messages
       if (messages.length > 0 && virtuosoRef.current) {
@@ -446,30 +446,56 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       // as ✓ checkmarks instead of vanishing the instant the tool finishes.
       let finished = executingToolsRef.current;
       // Merge results from IPC payload into completed tools
+      // Fix 30A: Match by tool+filePath for write tools (enriched params differ from originals)
       if (resultsData && Array.isArray(resultsData) && finished.length > 0) {
-        finished = finished.map((ft, idx) => {
-          const matchResult = resultsData.find(r => r.tool === ft.tool && JSON.stringify(r.params) === JSON.stringify(ft.params));
-          return matchResult ? { ...ft, result: matchResult.result } : ft;
+        const WRITE_MERGE = new Set(['write_file', 'create_file', 'edit_file', 'append_to_file']);
+        finished = finished.map((ft) => {
+          let matchResult;
+          if (WRITE_MERGE.has(ft.tool)) {
+            // For write tools, match by tool name + filePath (params.content may differ due to enrichment)
+            const ftPath = ft.params?.filePath || ft.params?.fileName || '';
+            matchResult = resultsData.find(r => r.tool === ft.tool && (r.params?.filePath || r.params?.fileName || '') === ftPath);
+          } else {
+            matchResult = resultsData.find(r => r.tool === ft.tool && JSON.stringify(r.params) === JSON.stringify(ft.params));
+          }
+          // Adopt enriched params AND result from the IPC payload
+          return matchResult ? { ...ft, params: matchResult.params, result: matchResult.result } : ft;
         });
       }
+      // Fix 28: If executingTools was empty but resultsData has entries (salvage-and-append
+      // sends mcp-tool-results directly without a prior mcp-executing-tools), promote the
+      // results directly into completedStreamingTools so code blocks remain visible.
+      if (finished.length === 0 && resultsData && Array.isArray(resultsData) && resultsData.length > 0) {
+        finished = resultsData.map(r => ({ tool: r.tool, params: r.params, result: r.result }));
+      }
       if (finished.length > 0) {
-        // Bug 1 fix: Dedup write tools by tool+filePath, keeping latest entry
+        // Fix 30D: Update file content accumulator with completed write tool content
+        const WRITE_ACC = new Set(['write_file', 'create_file', 'edit_file', 'append_to_file']);
+        for (const ft of finished) {
+          if (WRITE_ACC.has(ft.tool) && ft.params?.content) {
+            const fp = ft.params?.filePath || ft.params?.fileName || '';
+            if (fp) fileContentAccRef.current.set(fp, ft.params.content as string);
+          }
+        }
+        // Bug 1 fix: Dedup write tools by filePath only (not tool+filePath),
+        // so write_file and append_to_file on the same file merge into one entry
+        // showing the full file content in a single code block.
         setCompletedStreamingTools(prev => {
           const combined = [...prev, ...finished];
           const writeTools = ['write_file', 'create_file', 'edit_file', 'append_to_file'];
           const seen = new Map<string, number>();
-          // Find latest index for each write tool+filePath combo
+          // Find latest index for each filePath combo (regardless of tool name)
           for (let i = combined.length - 1; i >= 0; i--) {
             const td = combined[i];
             if (writeTools.includes(td.tool)) {
-              const key = `${td.tool}:${td.params?.filePath || td.params?.fileName || ''}`;
+              const key = td.params?.filePath || td.params?.fileName || '';
               if (!seen.has(key)) seen.set(key, i);
             }
           }
-          // Keep non-write tools + only the latest of each write tool+filePath
+          // Keep non-write tools + only the latest write tool per filePath
           return combined.filter((td, idx) => {
             if (!writeTools.includes(td.tool)) return true;
-            const key = `${td.tool}:${td.params?.filePath || td.params?.fileName || ''}`;
+            const key = td.params?.filePath || td.params?.fileName || '';
             return seen.get(key) === idx;
           });
         });
@@ -480,11 +506,11 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       refreshPendingChanges();
     });
 
-    const cleanupToolGenerating = api.onLlmToolGenerating?.((data: { callIndex: number; functionName: string; paramsText: string; done: boolean }) => {
+    const cleanupToolGenerating = api.onLlmToolGenerating?.((data: { callIndex: number; functionName: string; paramsText: string; done: boolean; lineCount?: number }) => {
       // Update or remove the entry for this callIndex
       const filtered = generatingToolCallsRef.current.filter(t => t.callIndex !== data.callIndex);
       if (!data.done) {
-        filtered.push({ callIndex: data.callIndex, functionName: data.functionName, paramsText: data.paramsText });
+        filtered.push({ callIndex: data.callIndex, functionName: data.functionName, paramsText: data.paramsText, lineCount: data.lineCount });
       }
       generatingToolCallsRef.current = filtered;
       setGeneratingToolCalls([...filtered]);
@@ -830,6 +856,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     setStreamingText('');
     setThinkingSegments([]);
     setCompletedStreamingTools([]);
+    fileContentAccRef.current.clear(); // Fix 30D: Clear accumulator on new generation
     generatingToolCallsRef.current = [];
     setGeneratingToolCalls([]);
     executingToolsRef.current = [];
@@ -1858,10 +1885,20 @@ ${e.message}`,
         const MSG_LANG_MAP: Record<string, string> = { ts: 'typescript', tsx: 'tsx', js: 'javascript', jsx: 'jsx', py: 'python', rs: 'rust', go: 'go', java: 'java', cs: 'csharp', cpp: 'cpp', c: 'c', html: 'html', css: 'css', json: 'json', yaml: 'yaml', yml: 'yaml', md: 'markdown', sh: 'bash', bat: 'batch', txt: 'text', xml: 'xml', sql: 'sql' };
         const writeFlatNodes: React.ReactNode[] = [];
         const nonWriteMsgTools: MCPToolResult[] = [];
-        msg.toolsUsed.forEach((tu, i) => {
+        // Dedup write tools by filePath: keep only the LATEST per file so one code block per file
+        const writeToolsByPath = new Map<string, { tu: any; idx: number }>();
+        msg.toolsUsed.forEach((tu: any, i: number) => {
           const isMsgWriteTool = WRITE_TOOLS_MSG.includes(tu.tool);
-          const msgWriteContent = isMsgWriteTool ? tu.params?.content as string | undefined : undefined;
-          if (isMsgWriteTool && msgWriteContent) {
+          if (isMsgWriteTool && tu.params?.content) {
+            const fp = (tu.params?.filePath as string || tu.params?.fileName as string || '');
+            writeToolsByPath.set(fp, { tu, idx: i }); // latest wins
+          } else if (!isMsgWriteTool) {
+            nonWriteMsgTools.push(tu);
+          }
+        });
+        writeToolsByPath.forEach(({ tu, idx: i }) => {
+          const msgWriteContent = tu.params?.content as string;
+          if (msgWriteContent) {
             const msgWriteFilePath = (tu.params?.filePath as string || '');
             const msgWriteExt = msgWriteFilePath.includes('.') ? msgWriteFilePath.split('.').pop()?.toLowerCase() || '' : '';
             const msgWriteLang = MSG_LANG_MAP[msgWriteExt] || msgWriteExt || 'code';
@@ -1875,8 +1912,6 @@ ${e.message}`,
                 <CodeBlock code={msgWriteContent} language={msgWriteLang} onApply={() => onApplyCode(currentFile, msgWriteContent)} isToolCall={true} isAlreadyWritten={isOk} />
               </div>
             );
-          } else {
-            nonWriteMsgTools.push(tu);
           }
         });
         const extraNodes: React.ReactNode[] = [...writeFlatNodes];
@@ -2831,45 +2866,128 @@ ${e.message}`,
                         </div>
                       </div>
                     )}
-                    {generatingToolCalls.length > 0 && (() => {
-                      const WRITE_TOOLS_GEN = ['write_file', 'create_file', 'edit_file', 'append_to_file'];
-                      const LANG_MAP_GEN: Record<string, string> = { ts: 'typescript', tsx: 'tsx', js: 'javascript', jsx: 'jsx', py: 'python', rs: 'rust', go: 'go', java: 'java', cs: 'csharp', cpp: 'cpp', c: 'c', html: 'html', css: 'css', json: 'json', yaml: 'yaml', yml: 'yaml', md: 'markdown', sh: 'bash', bat: 'batch', txt: 'text', xml: 'xml', sql: 'sql' };
-                      const writeGenTools = generatingToolCalls.filter(tc => WRITE_TOOLS_GEN.includes(tc.functionName));
-                      const nonWriteGenTools = generatingToolCalls.filter(tc => !WRITE_TOOLS_GEN.includes(tc.functionName));
+                    {/* Fix 30C: Unified per-file write tool display + non-write tool display */}
+                    {(generatingToolCalls.length > 0 || completedStreamingTools.length > 0 || executingTools.length > 0) && (() => {
+                      const WRITE_TOOLS_UNI = ['write_file', 'create_file', 'edit_file', 'append_to_file'];
+                      const LANG_MAP_UNI: Record<string, string> = { ts: 'typescript', tsx: 'tsx', js: 'javascript', jsx: 'jsx', py: 'python', rs: 'rust', go: 'go', java: 'java', cs: 'csharp', cpp: 'cpp', c: 'c', html: 'html', css: 'css', json: 'json', yaml: 'yaml', yml: 'yaml', md: 'markdown', sh: 'bash', bat: 'batch', txt: 'text', xml: 'xml', sql: 'sql' };
+
+                      // ── Build unified file map from all three sources ──
+                      const fileMap = new Map<string, { baseContent: string; streamContent: string; status: 'streaming' | 'executing' | 'done'; lineCount?: number; result?: any }>();
+
+                      // 1. Completed write tools (already finished + deduped)
+                      completedStreamingTools.filter(td => WRITE_TOOLS_UNI.includes(td.tool)).forEach(td => {
+                        const fp = (td.params?.filePath || td.params?.fileName || '') as string;
+                        if (!fp) return;
+                        fileMap.set(fp, {
+                          baseContent: (td.params?.content as string) || '',
+                          streamContent: '',
+                          status: 'done',
+                          result: (td as any).result,
+                        });
+                      });
+
+                      // 2. Executing write tools (disk I/O in progress)
+                      executingTools.filter(td => WRITE_TOOLS_UNI.includes(td.tool)).forEach(td => {
+                        const fp = (td.params?.filePath || td.params?.fileName || '') as string;
+                        if (!fp) return;
+                        const existing = fileMap.get(fp);
+                        if (existing && td.tool === 'append_to_file') {
+                          existing.status = 'executing';
+                        } else {
+                          fileMap.set(fp, {
+                            baseContent: (td.params?.content as string) || '',
+                            streamContent: '',
+                            status: 'executing',
+                          });
+                        }
+                      });
+
+                      // 3. Generating write tools (LLM streaming tool call JSON)
+                      generatingToolCalls.filter(tc => WRITE_TOOLS_UNI.includes(tc.functionName)).forEach(tc => {
+                        const fpMatch = tc.paramsText.match(/"filePath"\s*:\s*"([^"]+)"/);
+                        const fp = fpMatch ? fpMatch[1] : '';
+                        if (!fp) return;
+                        const contentMatch = tc.paramsText.match(/"content"\s*:\s*"([\s\S]*)/);
+                        let partialContent = '';
+                        if (contentMatch) {
+                          partialContent = contentMatch[1].replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+                        }
+                        const existing = fileMap.get(fp);
+                        if (existing && tc.functionName === 'append_to_file') {
+                          // Appending to previously completed file — merge base + streaming
+                          existing.streamContent = partialContent;
+                          existing.status = 'streaming';
+                          existing.lineCount = tc.lineCount;
+                        } else if (existing) {
+                          // Re-writing same file — take streaming content
+                          existing.baseContent = '';
+                          existing.streamContent = partialContent;
+                          existing.status = 'streaming';
+                          existing.lineCount = tc.lineCount;
+                        } else {
+                          // New file being written — check accumulator for base content
+                          const accBase = (tc.functionName === 'append_to_file') ? (fileContentAccRef.current.get(fp) || '') : '';
+                          fileMap.set(fp, {
+                            baseContent: accBase,
+                            streamContent: partialContent,
+                            status: 'streaming',
+                            lineCount: tc.lineCount,
+                          });
+                        }
+                      });
+
+                      // ── Render one block per file ──
+                      const fileBlocks = Array.from(fileMap.entries()).map(([fp, data]) => {
+                        const fullContent = data.baseContent + data.streamContent;
+                        const fname = fp.includes('/') ? fp.split('/').pop() || fp : fp.includes('\\') ? fp.split('\\').pop() || fp : fp;
+                        const ext = fp.includes('.') ? fp.split('.').pop()?.toLowerCase() || '' : '';
+                        const lang = LANG_MAP_UNI[ext] || ext || 'code';
+                        const isOk = data.result?.success !== false;
+                        const isDone = data.status === 'done';
+
+                        // Line count: for streaming, use backend lineCount + base lines if content appears truncated
+                        let displayLineCount = fullContent ? fullContent.split('\n').length : 0;
+                        if (data.status === 'streaming' && data.lineCount) {
+                          const baseLines = data.baseContent ? data.baseContent.split('\n').length : 0;
+                          const totalFromBackend = baseLines + data.lineCount;
+                          if (totalFromBackend > displayLineCount) displayLineCount = totalFromBackend;
+                        }
+
+                        return (
+                          <div key={`file-${fp}`} className="mt-2">
+                            <div className="flex items-center gap-1.5 mb-1 px-0.5">
+                              {isDone ? (
+                                isOk ? <Check size={11} className="text-[#89d185] flex-shrink-0" /> : <X size={11} className="text-[#f14c4c] flex-shrink-0" />
+                              ) : (
+                                <Loader2 size={10} className="animate-spin text-[#007acc] flex-shrink-0" />
+                              )}
+                              <span className={`text-[11px] font-medium ${isDone ? 'text-[#d4d4d4]' : 'text-[#dcdcaa]'}`}>{fname || 'file'}</span>
+                              {isDone && <span className={`text-[9px] ${isOk ? 'text-[#89d185]' : 'text-[#f14c4c]'}`}>[{isOk ? 'OK' : 'FAIL'}]</span>}
+                              {!isDone && <span className="text-[9px] text-[#858585] animate-pulse ml-1">{data.status === 'executing' ? 'executing...' : 'writing...'}</span>}
+                              {displayLineCount > 0 && <span className="text-[9px] text-[#858585] ml-1">({displayLineCount} lines)</span>}
+                            </div>
+                            {fullContent ? (
+                              <CodeBlock code={fullContent} language={lang} onApply={isDone ? () => onApplyCode(currentFile, fullContent) : () => {}} isToolCall={true} defaultCollapsed={!isDone} />
+                            ) : (
+                              <div className="flex items-center gap-2 px-2 py-1.5 bg-[#1e1e1e] rounded-md">
+                                <Loader2 size={10} className="animate-spin text-[#007acc]" />
+                                <span className="text-[11px] text-[#858585]">Creating {fname}<span className="animate-pulse">...</span></span>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      });
+
+                      // ── Non-write tools: keep existing rendering ──
+                      const nonWriteGenTools = generatingToolCalls.filter(tc => !WRITE_TOOLS_UNI.includes(tc.functionName));
+                      const nonWriteDone = completedStreamingTools.filter(td => !WRITE_TOOLS_UNI.includes(td.tool));
+                      const nonWriteExec = executingTools.filter(td => !WRITE_TOOLS_UNI.includes(td.tool));
+
+                      if (fileBlocks.length === 0 && nonWriteGenTools.length === 0 && nonWriteDone.length === 0 && nonWriteExec.length === 0) return null;
+
                       return (
                         <>
-                          {writeGenTools.map((tc) => {
-                            const fpMatch = tc.paramsText.match(/"filePath"\s*:\s*"([^"]+)"/);
-                            const fp = fpMatch ? fpMatch[1] : '';
-                            const fname = fp.includes('/') ? fp.split('/').pop() || fp : fp.includes('\\') ? fp.split('\\').pop() || fp : fp;
-                            const ext = fp.includes('.') ? fp.split('.').pop()?.toLowerCase() || '' : '';
-                            const lang = LANG_MAP_GEN[ext] || ext || 'code';
-                            const contentMatch = tc.paramsText.match(/"content"\s*:\s*"([\s\S]*)/);
-                            let partialContent = '';
-                            if (contentMatch) {
-                              partialContent = contentMatch[1].replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\"/g, '"').replace(/\\\\/g, '\\');
-                            }
-                            return (
-                              <div key={`gen-${tc.callIndex}`} className="mt-2">
-                                <div className="flex items-center gap-1.5 mb-1 px-0.5">
-                                  <Loader2 size={10} className="animate-spin text-[#007acc] flex-shrink-0" />
-                                  <span className="text-[11px] text-[#dcdcaa] font-medium">{fname || tc.functionName}</span>
-                                  <span className="text-[9px] text-[#858585] animate-pulse ml-1">writing…</span>
-                                </div>
-                                {partialContent ? (
-                                  <CodeBlock code={partialContent} language={lang} onApply={() => {}} isToolCall={true} defaultCollapsed={true} />
-                                ) : (
-                                  <div className="flex items-center gap-2 px-2 py-1.5 bg-[#1e1e1e] rounded-md">
-                                    <Loader2 size={10} className="animate-spin text-[#007acc]" />
-                                    <span className="text-[11px] text-[#858585]">
-                                      {fp ? `Creating ${fname}` : `Generating ${tc.functionName}`}
-                                      <span className="animate-pulse">…</span>
-                                    </span>
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
+                          {fileBlocks}
                           {nonWriteGenTools.length > 0 && (
                             <div className="mt-2">
                               <ToolCallGroup count={nonWriteGenTools.length}>
@@ -2885,7 +3003,7 @@ ${e.message}`,
                                     } else if (urlMatch) {
                                       try { partialDetail = new URL(urlMatch[1]).hostname; } catch { partialDetail = urlMatch[1].substring(0, 30); }
                                     } else if (qMatch) {
-                                      partialDetail = qMatch[1].substring(0, 25) + (qMatch[1].length > 25 ? '…' : '');
+                                      partialDetail = qMatch[1].substring(0, 25) + (qMatch[1].length > 25 ? '...' : '');
                                     }
                                   } catch {}
                                   const genLabel = partialDetail ? `${tc.functionName}: ${partialDetail}` : tc.functionName;
@@ -2894,7 +3012,7 @@ ${e.message}`,
                                       <div>
                                         <div className="flex items-center gap-2 mb-2">
                                           <Loader2 size={12} className="animate-spin text-[#007acc]" />
-                                          <span className="text-[11px] text-[#858585]">Generating tool call…</span>
+                                          <span className="text-[11px] text-[#858585]">Generating tool call...</span>
                                         </div>
                                         {tc.paramsText && (
                                           <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2 max-h-[180px] overflow-y-auto">{tc.paramsText}</pre>
@@ -2906,59 +3024,6 @@ ${e.message}`,
                               </ToolCallGroup>
                             </div>
                           )}
-                        </>
-                      );
-                    })()}
-                    {(completedStreamingTools.length > 0 || executingTools.length > 0) && (() => {
-                      const WRITE_TOOLS_LIVE = ['write_file', 'create_file', 'edit_file', 'append_to_file'];
-                      const LANG_MAP_LIVE: Record<string, string> = { ts: 'typescript', tsx: 'tsx', js: 'javascript', jsx: 'jsx', py: 'python', rs: 'rust', go: 'go', java: 'java', cs: 'csharp', cpp: 'cpp', c: 'c', html: 'html', css: 'css', json: 'json', yaml: 'yaml', yml: 'yaml', md: 'markdown', sh: 'bash', bat: 'batch', txt: 'text', xml: 'xml', sql: 'sql' };
-                      const nonWriteDone = completedStreamingTools.filter(td => !WRITE_TOOLS_LIVE.includes(td.tool));
-                      const nonWriteExec = executingTools.filter(td => !WRITE_TOOLS_LIVE.includes(td.tool));
-                      return (
-                        <>
-                          {completedStreamingTools.filter(td => WRITE_TOOLS_LIVE.includes(td.tool)).map((toolData, i) => {
-                            const doneFilePath = ((toolData.params?.filePath || toolData.params?.fileName || '') as string);
-                            const doneExt = doneFilePath.includes('.') ? doneFilePath.split('.').pop()?.toLowerCase() || '' : '';
-                            const doneLang = LANG_MAP_LIVE[doneExt] || doneExt || 'code';
-                            const doneContent = toolData.params?.content as string | undefined;
-                            // Bug 1 fix: Use actual result status instead of hardcoded 'ok'
-                            const isStreamOk = (toolData as any).result?.success !== false;
-                            return (
-                              <div key={`done-flat-${i}`} className="mt-2">
-                                <div className="flex items-center gap-1.5 mb-1 px-0.5">
-                                  {isStreamOk ? (
-                                    <Check size={11} className="text-[#89d185] flex-shrink-0" />
-                                  ) : (
-                                    <X size={11} className="text-[#f14c4c] flex-shrink-0" />
-                                  )}
-                                  <span className="text-[11px] text-[#d4d4d4] font-medium">{getToolLabel(toolData, isStreamOk ? 'ok' : 'fail')}</span>
-                                </div>
-                                {doneContent ? (
-                                  <CodeBlock code={doneContent} language={doneLang} onApply={() => onApplyCode(currentFile, doneContent)} isToolCall={true} />
-                                ) : (
-                                  <div className={`text-[11px] px-0.5 ${isStreamOk ? 'text-[#89d185]' : 'text-[#f14c4c]'}`}>{isStreamOk ? 'Written' : 'Failed'}</div>
-                                )}
-                              </div>
-                            );
-                          })}
-                          {executingTools.filter(td => WRITE_TOOLS_LIVE.includes(td.tool)).map((toolData, i) => {
-                            const filePath = ((toolData.params?.filePath || toolData.params?.fileName || '') as string);
-                            const ext = filePath.includes('.') ? filePath.split('.').pop()?.toLowerCase() || '' : '';
-                            const language = LANG_MAP_LIVE[ext] || ext || 'code';
-                            const codeContent = toolData.params?.content as string | undefined;
-                            return (
-                              <div key={`exec-flat-${i}`} className="mt-2">
-                                <div className="flex items-center gap-1.5 mb-1 px-0.5">
-                                  <Loader2 size={10} className="animate-spin text-[#007acc] flex-shrink-0" />
-                                  <span className="text-[11px] text-[#dcdcaa] font-medium">{getToolLabel(toolData, 'running')}</span>
-                                  <span className="text-[9px] text-[#858585] animate-pulse ml-1">executing…</span>
-                                </div>
-                                {codeContent ? (
-                                  <CodeBlock code={codeContent} language={language} onApply={() => {}} isToolCall={true} />
-                                ) : null}
-                              </div>
-                            );
-                          })}
                           {(nonWriteDone.length > 0 || nonWriteExec.length > 0) && (
                             <div className="mt-2">
                               <ToolCallGroup count={nonWriteDone.length + nonWriteExec.length}>

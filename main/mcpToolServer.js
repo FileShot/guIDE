@@ -1921,7 +1921,7 @@ class MCPToolServer {
         });
       }
 
-      return { success: true, path: fullPath, isNew, message: `Appended ${content.length} chars to ${path.basename(fullPath)}` };
+      return { success: true, path: fullPath, isNew, message: `Appended ${content.length} chars to ${path.basename(fullPath)}`, fullContent };
     } catch (error) {
       return { success: false, error: error.message };
     }

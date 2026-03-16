@@ -8,6 +8,33 @@
 'use strict';
 
 /**
+ * Check if a file's content looks syntactically complete.
+ * Returns true if the file appears to be complete, false otherwise.
+ * Used after write_file/append_to_file to decide if model should keep appending.
+ */
+function checkFileCompleteness(content, filePath) {
+  if (!content || content.length < 20) return false;
+  const trimmedEnd = content.trimEnd();
+  const lastCodeLine = trimmedEnd.split('\n').pop().trim();
+  const ext = (filePath?.match(/\.([^.]+)$/) || [])[1] || '';
+  let looksComplete = false;
+  if (/^html?$/i.test(ext)) {
+    // Fix 42: Anchor to end of content — </html> must be near the end, not just anywhere in the string.
+    // Without $, a </html> inside a JS string/template in the middle of the file triggers a false positive.
+    looksComplete = /<\/html\s*>\s*$/i.test(trimmedEnd);
+  } else if (/^css$/i.test(ext)) {
+    looksComplete = false; // lone } is unreliable for CSS
+  } else {
+    looksComplete = /^(module\.exports\s*=|export\s+(default\s+)?|\}\s*;?\s*$|\}\)\s*;?\s*$)/.test(lastCodeLine);
+  }
+  // Secondary: open HTML tags without closing counterparts = incomplete
+  if (looksComplete && /<(style|script)\b/i.test(content) && !/<\/(style|script)\s*>/i.test(content)) {
+    looksComplete = false;
+  }
+  return looksComplete;
+}
+
+/**
  * Near-duplicate detection using word-level Jaccard overlap.
  * Two texts with >80% word overlap are considered near-duplicates.
  */
@@ -345,8 +372,20 @@ function progressiveContextCompaction(options) {
   let pruned = 0;
   let newFullResponseText = fullResponseText;
 
-  // Phase 1: Compress old tool results (45-60%)
-  if (pct > 0.45 && allToolResults.length > 4) {
+  // Dynamic thresholds: small contexts need EARLIER compaction because each tool result
+  // and chat turn consumes a proportionally larger fraction of available space.
+  // For ctx ≤ 16K, shift all thresholds down by 15 percentage points.
+  // For ctx ≤ 8K, shift down by 25 percentage points.
+  const offset = totalContextTokens <= 8192 ? 0.25
+    : totalContextTokens <= 16384 ? 0.15
+    : 0;
+  const phase1Threshold = 0.45 - offset;
+  const phase2Threshold = 0.60 - offset;
+  const phase3Threshold = 0.75 - offset;
+  const rotateThreshold = 0.85 - offset;
+
+  // Phase 1: Compress old tool results
+  if (pct > phase1Threshold && allToolResults.length > 4) {
     for (let i = 0; i < allToolResults.length - 4; i++) {
       const tr = allToolResults[i];
       if (tr.result?._pruned) continue;
@@ -359,13 +398,13 @@ function progressiveContextCompaction(options) {
     }
   }
 
-  // Phase 2: Prune verbose chat history (60-75%)
-  if (pct > 0.60 && chatHistory) {
+  // Phase 2: Prune verbose chat history
+  if (pct > phase2Threshold && chatHistory) {
     pruned += pruneVerboseHistory(chatHistory, 6);
   }
 
-  // Phase 3: Aggressive compaction (75-85%)
-  if (pct > 0.75) {
+  // Phase 3: Aggressive compaction
+  if (pct > phase3Threshold) {
     for (let i = 0; i < allToolResults.length - 2; i++) {
       const tr = allToolResults[i];
       if (!tr.result?._pruned) {
@@ -375,8 +414,6 @@ function progressiveContextCompaction(options) {
       }
     }
     if (newFullResponseText.length > 15000) {
-      // Find a paragraph or line boundary near the truncation point instead of
-      // slicing blindly through code blocks or sentences.
       const target = newFullResponseText.length - 15000;
       let cutPoint = newFullResponseText.indexOf('\n\n', target);
       if (cutPoint === -1 || cutPoint > target + 500) {
@@ -391,18 +428,14 @@ function progressiveContextCompaction(options) {
     if (chatHistory) pruned += pruneVerboseHistory(chatHistory, 2);
   }
 
-  // Proactive rotation — raised from 72% to 85% because rolling summary +
-  // progressive compression now handle context growth more gracefully.
-  // The old 72% threshold was too aggressive, causing premature rotations that
-  // destroyed conversation context unnecessarily.
-  const shouldRotate = pct > 0.85;
+  const shouldRotate = pct > rotateThreshold;
 
   if (pruned > 0) {
-    console.log(`[Context Compaction] Phase ${pct > 0.75 ? 3 : pct > 0.60 ? 2 : 1}: compacted ${pruned} items at ${Math.round(pct * 100)}% usage`);
+    console.log(`[Context Compaction] Phase ${pct > phase3Threshold ? 3 : pct > phase2Threshold ? 2 : 1}: compacted ${pruned} items at ${Math.round(pct * 100)}% usage (ctx=${totalContextTokens}, rotateAt=${Math.round(rotateThreshold * 100)}%)`);
   }
 
   return {
-    phase: pct > 0.80 ? 4 : pct > 0.75 ? 3 : pct > 0.60 ? 2 : pct > 0.45 ? 1 : 0,
+    phase: pct > (phase3Threshold + 0.05) ? 4 : pct > phase3Threshold ? 3 : pct > phase2Threshold ? 2 : pct > phase1Threshold ? 1 : 0,
     pruned,
     newFullResponseText,
     shouldRotate,
@@ -473,7 +506,15 @@ function formatSuccessfulToolResult(tr, opts = {}) {
           }
         }
       } else {
-        text += `*Content appended. If more content remains, call append_to_file again.*\n`;
+        const appendFullContent = tr.result?.fullContent || '';
+        const appendFilePath = tr.result?.path || tr.params?.filePath || '';
+        if (appendFullContent && !checkFileCompleteness(appendFullContent, appendFilePath)) {
+          const appendLines = appendFullContent.split('\n');
+          const appendTail = appendLines.slice(-10).join('\n');
+          text += `**WARNING: File "${appendFilePath}" is still NOT complete after this append (${appendLines.length} lines total).** The file is missing closing tags or content. You MUST call append_to_file again with actual code content. Do NOT send empty content. Here are the last 10 lines of the file:\n\`\`\`\n${appendTail}\n\`\`\`\nContinue from here.\n`;
+        } else {
+          text += `*Content appended successfully.*\n`;
+        }
       }
       break;
     }
@@ -641,6 +682,7 @@ class ExecutionState {
 
 module.exports = {
   isNearDuplicate,
+  checkFileCompleteness,
   autoSnapshotAfterBrowserAction,
   sendToolExecutionEvents,
   capArray,

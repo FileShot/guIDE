@@ -66,6 +66,9 @@ export function useChatStreaming(): ChatStreamingState {
       streamDirtyRef.current = false;
       const buffer = streamBufferRef.current;
       displayPosRef.current = buffer.length;
+      if (buffer.length <= 50 || buffer.length % 500 < 20) {
+        console.log('[STREAM-DIAG] flushStreamUpdate: bufLen=', buffer.length, 'preview:', JSON.stringify(buffer.slice(0, 40)));
+      }
       setStreamingText(buffer);
     };
     const flushThinkingUpdate = () => {
@@ -91,9 +94,17 @@ export function useChatStreaming(): ChatStreamingState {
 
     const cleanupToken = api.onLlmToken((token: string) => {
       // Discard tokens when epoch is out of sync (stale IPC pipeline tokens after clear/cancel)
-      if (streamEpochRef.current !== activeEpochRef.current) return;
+      if (streamEpochRef.current !== activeEpochRef.current) {
+        console.warn('[STREAM-DIAG] Token DISCARDED — epoch mismatch:', streamEpochRef.current, '!==', activeEpochRef.current, 'token:', token.slice(0, 30));
+        return;
+      }
 
       streamBufferRef.current += token;
+      // Diagnostic: log first 5 tokens and every 50th after
+      const bufLen = streamBufferRef.current.length;
+      if (bufLen <= 50 || bufLen % 500 < token.length) {
+        console.log('[STREAM-DIAG] Token received, bufLen:', bufLen, 'token:', JSON.stringify(token.slice(0, 20)));
+      }
       wasRespondingRef.current = true;
 
       // Normalize <thinking> variants to <think>
@@ -155,7 +166,7 @@ export function useChatStreaming(): ChatStreamingState {
         .replace(/```(?:json|tool_call|tool)[^\n]*\n[\s\S]*?```/g, '')
         // Strip any remaining lone opening fence markers left after partial streaming
         .replace(/^`{1,3}(?:json|tool_call|tool)\s*/gim, '')
-        // Strip pipeline planning directive headers that models echo in reasoning
+  // Strip pipeline planning directive headers that models echo in reasoning
         .replace(/^##\s*(?:NEXT STEP|CURRENT STEP|PLAN COMPLETE)[^\n]*\n?/gim, '')
         .replace(/^\*\*(?:NOW|DO NOW):\*\*[^\n]*\n?/gim, '')
         // Strip reasoning step header artifacts (dashes + "next reasoning step" + dashes)
@@ -169,6 +180,7 @@ export function useChatStreaming(): ChatStreamingState {
     // When the backend sends llm-replace-last with just the current iteration's cleaned text,
     // we prepend prior iterations' text so we don't wipe what the user was reading.
     const cleanupIterationBegin = (api as any).onLlmIterationBegin?.(() => {
+      console.log('[STREAM-DIAG] llm-iteration-begin: offset set to', streamBufferRef.current.length);
       iterationStartOffsetRef.current = streamBufferRef.current.length;
     });
 
@@ -178,6 +190,7 @@ export function useChatStreaming(): ChatStreamingState {
     const cleanupReplace = api.onLlmReplaceLast?.((cleanedText: string) => {
       if (streamEpochRef.current !== activeEpochRef.current) return;
       const prefix = streamBufferRef.current.slice(0, iterationStartOffsetRef.current);
+      console.log('[STREAM-DIAG] llm-replace-last: prefixLen=', prefix.length, 'cleanedLen=', cleanedText.length, 'cleaned:', JSON.stringify((cleanedText || '').slice(0, 60)));
       // Preserve text from prior iterations — only replace current iteration's portion
       streamBufferRef.current = prefix + cleanedText;
       // Jump display to buffer end — corrections show immediately, no typewriter delay
@@ -188,6 +201,7 @@ export function useChatStreaming(): ChatStreamingState {
     // ROLLBACK signal — backend is retrying after a bad response; clear only the current
     // iteration's streamed tokens, preserving text from prior iterations.
     const cleanupReset = (api as any).onLlmStreamReset?.(() => {
+      console.log('[STREAM-DIAG] llm-stream-reset: trimming to offset', iterationStartOffsetRef.current, 'current bufLen=', streamBufferRef.current.length);
       if (streamRafRef.current) cancelAnimationFrame(streamRafRef.current);
       streamRafRef.current = null;
       // Trim back to the start of the current iteration only — prior iterations' text stays visible

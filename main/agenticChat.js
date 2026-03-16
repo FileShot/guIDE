@@ -30,6 +30,7 @@ const {
   classifyResponseFailure,
   progressiveContextCompaction,
   buildToolFeedback,
+  checkFileCompleteness,
   ExecutionState,
 } = require('./agenticChatHelpers');
 const { LLMEngine } = require('./llmEngine');
@@ -877,6 +878,8 @@ function register(ctx) {
     let _pendingDroppedFilePaths = [];
     const toolFailCounts = {};
     let nudgesRemaining = 3;
+    let todoNudgesRemaining = 3;
+    let _emptyWriteRetries = 0;
     let contextRotations = 0;
     let lastConvSummary = '';
     let sessionJustRotated = false;
@@ -892,6 +895,8 @@ function register(ctx) {
     let lastIterationResponse = '';
     let nonContextRetries = 0;
     let iterationDisplayStartLen = 0; // Fix 3: track where the current iteration's display text starts
+    let _incompleteFileLastLines = {}; // Track line counts for no-progress detection (BUG 8/18)
+    let _incompleteFileStallCount = 0; // Consecutive iterations with no line growth
     const executionState = new ExecutionState();
 
     // ── Session Store (Phase 3) — persistent session state for crash recovery ──
@@ -1005,7 +1010,7 @@ function register(ctx) {
         const preGenResult = preGenerationContextCheck({
           llmEngine, totalCtx, currentPrompt, fullResponseText,
           allToolResults, contextRotations, MAX_CONTEXT_ROTATIONS: MAX_CONTEXT_ROTATIONS,
-          summarizer, buildStaticPrompt, buildDynamicContext, maxPromptTokens, message,
+          summarizer, buildStaticPrompt, buildDynamicContext, maxPromptTokens, maxResponseTokens, message,
           continuationCount, _pendingPartialBlock, mcpToolServer,
         });
         if (preGenResult) {
@@ -1361,10 +1366,67 @@ function register(ctx) {
           break;
         }
 
-        // Fatal errors
+        // Fatal errors — attempt recovery for disposal errors before giving up
         const errLower = (genError.message || '').toLowerCase();
-        const isFatal = ['model not loaded', 'object is disposed', 'model is disposed'].some(pat => errLower.includes(pat));
-        if (isFatal) {
+        const isDisposed = ['object is disposed', 'model is disposed'].some(pat => errLower.includes(pat));
+        const isFatalNoRecovery = errLower.includes('model not loaded');
+
+        if (isDisposed && !isFatalNoRecovery) {
+          console.log('[AI Chat] Sequence disposed — attempting recovery via resetSession');
+          try {
+            await Promise.race([
+              llmEngine.resetSession(true),
+              new Promise((_, rej) => setTimeout(() => rej(new Error('resetSession timeout')), 15000)),
+            ]);
+            console.log('[AI Chat] Recovery after disposal succeeded — continuing loop');
+            sessionJustRotated = true;
+            contextRotations++;
+            summarizer.markRotation();
+            lastConvSummary = summarizer.generateQuickSummary(mcpToolServer?._todos);
+            currentPrompt = {
+              systemContext: buildStaticPrompt(),
+              userMessage: buildDynamicContext(Math.floor(maxPromptTokens * 0.10)) +
+                '\n' + (lastConvSummary || '') +
+                '\n' + rollingSummary.generateRotationSummary(mcpToolServer?._todos) +
+                executionState.getSummary() +
+                '\n\n**Context was recovered after an error. Continue the task.**\n' + message,
+            };
+            rollingSummary.markRotation();
+            continue;
+          } catch (recoveryErr) {
+            console.error('[AI Chat] Recovery via resetSession failed:', recoveryErr.message, '— attempting full context recreation');
+            // Second attempt: dispose everything and recreate context from scratch
+            try {
+              if (llmEngine.chat) { try { llmEngine.chat.dispose?.(); } catch {} llmEngine.chat = null; }
+              if (llmEngine.sequence) { try { llmEngine.sequence.dispose?.(); } catch {} llmEngine.sequence = null; }
+              if (llmEngine.context) { try { llmEngine.context.dispose?.(); } catch {} llmEngine.context = null; }
+              // Force resetSession to recreate context (it checks for null context)
+              await Promise.race([
+                llmEngine.resetSession(true),
+                new Promise((_, rej) => setTimeout(() => rej(new Error('full recreation timeout')), 20000)),
+              ]);
+              console.log('[AI Chat] Full context recreation succeeded — continuing loop');
+              sessionJustRotated = true;
+              contextRotations++;
+              summarizer.markRotation();
+              lastConvSummary = summarizer.generateQuickSummary(mcpToolServer?._todos);
+              currentPrompt = {
+                systemContext: buildStaticPrompt(),
+                userMessage: buildDynamicContext(Math.floor(maxPromptTokens * 0.10)) +
+                  '\n' + (lastConvSummary || '') +
+                  '\n' + rollingSummary.generateRotationSummary(mcpToolServer?._todos) +
+                  executionState.getSummary() +
+                  '\n\n**Context was fully recovered. Continue the task.**\n' + message,
+              };
+              rollingSummary.markRotation();
+              continue;
+            } catch (recreateErr) {
+              console.error('[AI Chat] Full context recreation also failed:', recreateErr.message);
+            }
+          }
+        }
+
+        if (isFatalNoRecovery || isDisposed) {
           const msg = `\n\n*[Generation stopped: ${genError.message.substring(0, 200)}. Please reload the model.]*\n`;
           if (mainWindow) mainWindow.webContents.send('llm-token', msg);
           fullResponseText += msg;
@@ -1439,12 +1501,35 @@ function register(ctx) {
       // so duplicate content never enters the display pipeline.
       let _overlapLen = 0;
       if (_pendingPartialBlock && continuationCount > 0) {
+        // Pass 1: Exact character-level overlap (fast, precise)
         const maxCheck = Math.min(_pendingPartialBlock.length, responseText.length, 2000);
         for (let len = maxCheck; len >= 20; len--) {
           const suffix = _pendingPartialBlock.slice(-len);
           if (responseText.startsWith(suffix)) { _overlapLen = len; break; }
         }
-        if (_overlapLen > 0) {
+        // Pass 2: Line-level overlap (catches near-duplicates with whitespace differences)
+        if (_overlapLen === 0) {
+          const prevLines = _pendingPartialBlock.split('\n');
+          const newLines = responseText.split('\n');
+          const tailCheck = Math.min(prevLines.length, 50);
+          for (let tailSize = tailCheck; tailSize >= 3; tailSize--) {
+            const prevTail = prevLines.slice(-tailSize);
+            let match = true;
+            for (let j = 0; j < tailSize && j < newLines.length; j++) {
+              if (prevTail[j].trimEnd() !== newLines[j].trimEnd()) { match = false; break; }
+            }
+            if (match && tailSize <= newLines.length) {
+              // Calculate byte offset for the matched line count
+              _overlapLen = newLines.slice(0, tailSize).join('\n').length;
+              if (tailSize < newLines.length) _overlapLen++; // account for the newline
+              console.log(`[AI Chat] Continuation line-level overlap: ${tailSize} lines (${_overlapLen} chars)`);
+              break;
+            }
+          }
+        }
+        if (_overlapLen > 0 && _overlapLen === maxCheck) {
+          // Exact match logged already
+        } else if (_overlapLen > 0) {
           console.log(`[AI Chat] Continuation overlap: removed ${_overlapLen} duplicate chars`);
         }
       }
@@ -1799,7 +1884,8 @@ function register(ctx) {
             effectiveMaxTokens = Math.min(effectiveMaxTokens, Math.max(256, Math.floor(remainingTokens * 0.70)));
 
             let continuationMsg;
-            const taskHint = message ? `[Task: ${message.substring(0, 100)}${message.length > 100 ? '...' : ''}]\n` : '';
+            // Fix 33B: Expand from 100 to 500 chars so the model sees full scope of work after salvage
+            const taskHint = message ? `[Task: ${message.substring(0, 500)}${message.length > 500 ? '...' : ''}]\n` : '';
             // Include written-files manifest so model knows what already exists
             const writtenPaths = Object.keys(writeFileHistory).filter(k => writeFileHistory[k].count > 0);
             const fileManifest = writtenPaths.length > 0
@@ -1841,11 +1927,12 @@ function register(ctx) {
                       const lineCount = finalContent.split('\n').length;
                       console.log(`[AI Chat] Salvage-and-append: ${salvageTool === 'append_to_file' ? 'appended' : 'wrote'} ${lineCount} lines to "${salvagePath}"`);
 
-                      // Update writeFileHistory — blocks future write_file, forces append_to_file
-                      // Set count=2 (not 1) so guard fires even when continuationCount resets to 0
-                      // (wfLimit = continuationCount>0 ? 1 : 2; guard fires when count >= wfLimit)
+                      // Update writeFileHistory — only for write_file, not append_to_file
+                      // append_to_file is inherently incremental and should never be blocked
                       if (!writeFileHistory[salvagePath]) writeFileHistory[salvagePath] = { count: 0, maxLen: 0 };
-                      writeFileHistory[salvagePath].count = Math.max(writeFileHistory[salvagePath].count + 1, 2);
+                      if (salvageTool === 'write_file') {
+                        writeFileHistory[salvagePath].count++;
+                      }
                       if (finalContent.length > writeFileHistory[salvagePath].maxLen) {
                         writeFileHistory[salvagePath].maxLen = finalContent.length;
                       }
@@ -1886,24 +1973,9 @@ function register(ctx) {
                       const lastLines = allLines.slice(-10).join('\n');
                       _pendingPartialBlock = null; // switch from JSON stitching to free-form
 
-                      // Heuristic: detect if salvaged file looks syntactically complete
-                      const trimmedEnd = checkContent.trimEnd();
-                      const lastCodeLine = trimmedEnd.split('\n').pop().trim();
-                      const _ext = (salvagePath.match(/\.([^.]+)$/) || [])[1] || '';
-                      let looksComplete = false;
-                      if (/^html?$/i.test(_ext)) {
-                        // HTML files: must contain </html> to be considered complete
-                        looksComplete = /<\/html\s*>/i.test(trimmedEnd);
-                      } else if (/^css$/i.test(_ext)) {
-                        // CSS files: a lone } is never a reliable completion signal
-                        looksComplete = false;
-                      } else {
-                        looksComplete = /^(module\.exports\s*=|export\s+(default\s+)?|\}\s*;?\s*$|\}\)\s*;?\s*$)/.test(lastCodeLine);
-                      }
-                      // Secondary check: if file has open HTML tags without closing counterparts, it's not complete
-                      if (looksComplete && /<(style|script)\b/i.test(checkContent) && !/<\/(style|script)\s*>/i.test(checkContent)) {
-                        looksComplete = false;
-                      }
+                      // Use extracted checkFileCompleteness heuristic
+                      const looksComplete = checkFileCompleteness(checkContent, salvagePath);
+                      const lastCodeLine = checkContent.trimEnd().split('\n').pop().trim();
 
                       if (looksComplete) {
                         // File appears complete — redirect model to remaining task
@@ -1990,10 +2062,28 @@ function register(ctx) {
               continuationMsg = `${taskHint}${fileManifest}[Continue your response exactly where you left off. Do not restart or repeat content. Here is the end of what you wrote:\n${tailForModel}]`;
             }
 
-            currentPrompt = {
-              systemContext: currentPrompt.systemContext,
-              userMessage: continuationMsg,
-            };
+            // Fix 41: Enrich maxTokens continuation prompt with full context (conversation summary,
+            // rolling summary, execution state, file progress) — same as the salvage-and-append path.
+            // Without this, the model only sees systemContext + lean continuationMsg, loses track of
+            // what files were written, and starts over from scratch.
+            {
+              const contSummary = summarizer.generateSummary({
+                maxTokens: Math.min(Math.floor(totalCtx * 0.25), 3000),
+                activeTodos: mcpToolServer?._todos || [],
+              });
+              const contFileProgress = Object.keys(summarizer.fileProgress).length > 0
+                ? `\n**FILES IN PROGRESS:** ${Object.entries(summarizer.fileProgress).map(([f, p]) => `${f} (${p.writtenLines} lines)`).join(', ')}`
+                : '';
+
+              currentPrompt = {
+                systemContext: currentPrompt.systemContext || buildStaticPrompt(),
+                userMessage: buildDynamicContext() + '\n\n' + contSummary +
+                  '\n' + rollingSummary.generateRotationSummary(mcpToolServer?._todos) +
+                  executionState.getSummary() +
+                  contFileProgress +
+                  `\n\n${continuationMsg}`,
+              };
+            }
 
             // Sync frontend buffer before continuation: strip tool-fence fragments
             // from raw streamed tokens so the committed message doesn't contain broken
@@ -2140,6 +2230,37 @@ function register(ctx) {
           break;
         }
 
+        // Fix 35: When write_file was dropped due to empty content, retry with feedback
+        // instead of ending the loop. The model needs to know its call was rejected.
+        const _droppedPaths = toolResults.droppedFilePaths || [];
+        if (_droppedPaths.length > 0 && _emptyWriteRetries < 2 && iteration < MAX_AGENTIC_ITERATIONS - 1) {
+          _emptyWriteRetries++;
+          const pathList = _droppedPaths.join(', ');
+          console.log(`[AI Chat] Fix 35: Empty write_file retry ${_emptyWriteRetries}/2 for: ${pathList}`);
+          fullResponseText = '';
+          if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('llm-stream-reset');
+          summarizer.markRotation();
+          lastConvSummary = summarizer.generateQuickSummary(mcpToolServer?._todos);
+          try {
+            await Promise.race([
+              llmEngine.resetSession(true),
+              new Promise((_, rej) => setTimeout(() => rej(new Error('resetSession timeout')), 8000)),
+            ]);
+          } catch (resetErr) {
+            console.warn(`[AI Chat] Fix 35 resetSession failed: ${resetErr.message}`);
+          }
+          sessionJustRotated = true;
+          currentPrompt = {
+            systemContext: buildStaticPrompt(),
+            userMessage: buildDynamicContext(Math.floor(maxPromptTokens * 0.10)) + '\n' + message +
+              '\n\n[SYSTEM: Your write_file call was rejected because the content field was empty. ' +
+              'You MUST put actual code in the content field. For large files, write the first 200-300 lines ' +
+              'of real working code with write_file, then use append_to_file for each additional section. ' +
+              'Do NOT send empty content.]',
+          };
+          continue;
+        }
+
         // Code-dump nudge — detect large code blocks (fenced or raw) that should be files
         const _allCodeBlocks = [...responseText.matchAll(/```(?:html?|css|javascript|js|typescript|ts|python|py|json)\s*\n([\s\S]*?)```/gi)];
         const hasCodeBlocks = _allCodeBlocks.some(m => m[1].length > 500);
@@ -2168,7 +2289,18 @@ function register(ctx) {
           if (_nudgeUsed > 0 && _nudgeUsed / totalCtx > 0.50) contextTooSmallForNudge = true;
         }
 
-        if ((hasCodeBlocks || hasUnclosedLargeBlock || hasRawCodeDump) && nudgesRemaining > 0 && iteration < MAX_AGENTIC_ITERATIONS - 1 && !contextTooSmallForNudge) {
+        // Fix 40B: Skip code-dump nudge if any detected code block looks like a tool call attempt.
+        // Models sometimes emit write_todos/update_todo/run_command as ```json blocks that the
+        // formal parser couldn't parse (e.g. malformed JSON). Erasing these destroys the model's
+        // tool invocation intent. Instead, let the response flow through to normal no-tool handling.
+        let hasToolCallInCodeBlock = false;
+        if (hasCodeBlocks) {
+          hasToolCallInCodeBlock = _allCodeBlocks.some(m =>
+            m[1].length > 500 && /"(?:tool|name)"\s*:\s*"/.test(m[1])
+          );
+        }
+
+        if ((hasCodeBlocks || hasUnclosedLargeBlock || hasRawCodeDump) && nudgesRemaining > 0 && iteration < MAX_AGENTIC_ITERATIONS - 1 && !contextTooSmallForNudge && !hasToolCallInCodeBlock) {
           nudgesRemaining--;
           console.log(`[AI Chat] Code-dump nudge firing (codeBlocks=${hasCodeBlocks}, unclosed=${hasUnclosedLargeBlock}, rawDump=${hasRawCodeDump})`);
           // Strip the raw code dump from accumulated response to free context budget.
@@ -2192,6 +2324,36 @@ function register(ctx) {
           currentPrompt = {
             systemContext: buildStaticPrompt(),
             userMessage: buildDynamicContext(Math.floor(maxPromptTokens * 0.10)) + '\n' + message + '\n\n[SYSTEM: You wrote code directly in chat. Use write_file tool to save it. Format: ```json\n{"tool":"write_file","params":{"filePath":"filename.ext","content":"..."}}\n```]',
+          };
+          continue;
+        }
+
+        // Fix 38A: When todos are pending but model produced no tool calls,
+        // nudge it to continue instead of ending the loop prematurely.
+        const _pendingTodos = (mcpToolServer._todos || []).filter(t => t.status === 'pending' || t.status === 'in-progress');
+        if (_pendingTodos.length > 0 && todoNudgesRemaining > 0 && iteration < MAX_AGENTIC_ITERATIONS - 1) {
+          todoNudgesRemaining--;
+          console.log(`[AI Chat] Fix 38A: Todo-continuation nudge (${_pendingTodos.length} pending, nudges left: ${todoNudgesRemaining})`);
+          fullResponseText = '';
+          if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('llm-stream-reset');
+          summarizer.markRotation();
+          lastConvSummary = summarizer.generateQuickSummary(mcpToolServer?._todos);
+          try {
+            await Promise.race([
+              llmEngine.resetSession(true),
+              new Promise((_, rej) => setTimeout(() => rej(new Error('resetSession timeout')), 8000)),
+            ]);
+          } catch (resetErr) {
+            console.warn(`[AI Chat] Fix 38A resetSession failed: ${resetErr.message}`);
+          }
+          sessionJustRotated = true;
+          const nextTodo = _pendingTodos.find(t => t.status === 'in-progress') || _pendingTodos[0];
+          currentPrompt = {
+            systemContext: buildStaticPrompt(),
+            userMessage: buildDynamicContext(Math.floor(maxPromptTokens * 0.10)) + '\n' + message +
+              '\n\n[SYSTEM: You have ' + _pendingTodos.length + ' pending steps in your plan. ' +
+              'Do NOT summarize or ask questions. Execute the next step NOW: "' + nextTodo.text + '" ' +
+              'Call the appropriate tool immediately.]',
           };
           continue;
         }
@@ -2319,9 +2481,94 @@ function register(ctx) {
 
       const executionBlock = executionState.getSummary();
       const hasBrowserAction = toolResults.results.some(tr => tr.tool?.startsWith('browser_'));
-      const continueInstruction = hasBrowserAction
-        ? '\n\nThe snapshot above has [ref=N]. Use browser_click/type with ref. Output next tool call now.'
-        : '\n\nSummarize what was accomplished. Only call another tool if the user\'s request clearly requires additional steps not yet started.';
+
+      // Fix 32A + 33: Check if any file written/appended is still incomplete.
+      // Also catch failed empty appends (Fix 33A rejects them) — the file is still incomplete.
+      const incompleteFiles = toolResults.results
+        .filter(tr => (tr.tool === 'write_file' || tr.tool === 'append_to_file'))
+        .filter(tr => {
+          if (tr.result?.success) {
+            const fullContent = tr.result?.fullContent || tr.params?.content || '';
+            const filePath = tr.result?.path || tr.params?.filePath || '';
+            return fullContent.length > 50 && !checkFileCompleteness(fullContent, filePath);
+          }
+          // Failed append due to empty content — file is still incomplete
+          if (tr.tool === 'append_to_file' && !tr.result?.success && tr.result?.error?.includes('empty')) {
+            return true;
+          }
+          return false;
+        })
+        .map(tr => tr.result?.path || tr.params?.filePath);
+
+      let continueInstruction;
+      if (hasBrowserAction) {
+        continueInstruction = '\n\nThe snapshot above has [ref=N]. Use browser_click/type with ref. Output next tool call now.';
+      } else if (incompleteFiles.length > 0) {
+        const lastFile = incompleteFiles[incompleteFiles.length - 1];
+        const lastResult = toolResults.results.find(tr => (tr.result?.path || tr.params?.filePath) === lastFile);
+        const lastFullContent = lastResult?.result?.fullContent || lastResult?.params?.content || '';
+        const currentLineCount = lastFullContent ? lastFullContent.split('\n').length : 0;
+
+        // No-progress detection for incomplete file continuations (BUG 8/18)
+        const prevLineCount = _incompleteFileLastLines[lastFile] || 0;
+        if (currentLineCount > 0 && currentLineCount <= prevLineCount) {
+          _incompleteFileStallCount++;
+          console.log(`[AI Chat] Incomplete file no progress: "${lastFile}" at ${currentLineCount} lines (stall #${_incompleteFileStallCount})`);
+        } else {
+          _incompleteFileStallCount = 0;
+        }
+        _incompleteFileLastLines[lastFile] = currentLineCount;
+
+        // After 2 stalls, rotate context to give model a fresh start focused on completion
+        if (_incompleteFileStallCount >= 2 && contextRotations < MAX_CONTEXT_ROTATIONS) {
+          console.log(`[AI Chat] Incomplete file stall x${_incompleteFileStallCount} — rotating context for focused completion`);
+          _incompleteFileStallCount = 0;
+          contextRotations++;
+          summarizer.markRotation();
+          try { await llmEngine.resetSession(true); } catch (_) {}
+          sessionJustRotated = true;
+
+          // Read the file from disk for accurate state
+          let diskContent = lastFullContent;
+          try {
+            const _fs = require('fs'), _path = require('path');
+            const fp = _path.resolve(mcpToolServer.projectPath || '.', lastFile);
+            if (_fs.existsSync(fp)) diskContent = _fs.readFileSync(fp, 'utf-8');
+          } catch {}
+          const diskLines = diskContent.split('\n');
+          const tail50 = diskLines.slice(-50).join('\n');
+
+          currentPrompt = {
+            systemContext: buildStaticPrompt(),
+            userMessage: buildDynamicContext(Math.floor(maxPromptTokens * 0.10)) +
+              `\n\n## FILE COMPLETION TASK\nYou are continuing an incomplete file: "${lastFile}" (${diskLines.length} lines so far).\n` +
+              `The file is NOT complete — it is missing closing tags/content.\n` +
+              `Here are the last 50 lines:\n\`\`\`\n${tail50}\n\`\`\`\n\n` +
+              `Call append_to_file with filePath="${lastFile}" and provide the REMAINING content to complete this file. Start from exactly where the file left off.`,
+          };
+          rollingSummary.markRotation();
+          continue;
+        }
+
+        // Normal incomplete file continuation
+        let fileTail = '';
+        if (lastFullContent) {
+          const fileLines = lastFullContent.split('\n');
+          const tail15 = fileLines.slice(-15).join('\n');
+          fileTail = `\nThe file currently has ${fileLines.length} lines. Here are the last 15 lines — continue from here:\n\`\`\`\n${tail15}\n\`\`\`\n`;
+        }
+        continueInstruction = `\n\n**CRITICAL — FILE NOT COMPLETE:** The file "${lastFile}" is still missing content (no closing tags found). You MUST call append_to_file with filePath="${lastFile}" and provide actual code content to continue the file from where it left off. Do NOT summarize, do NOT declare completion. Do NOT send empty content.${fileTail}Call append_to_file NOW with the next section of code.`;
+        console.log(`[AI Chat] Incomplete file detected after tool execution: ${lastFile} — forcing continuation`);
+      } else {
+        _incompleteFileStallCount = 0; // Reset stall counter when no incomplete files
+        // Fix 38B: When todos are pending, tell model to continue instead of summarize
+        const _pendingForContinue = (mcpToolServer._todos || []).filter(t => t.status === 'pending' || t.status === 'in-progress');
+        if (_pendingForContinue.length > 0) {
+          continueInstruction = '\n\nStep completed. Continue executing your plan — call update_todo to mark completed steps as "done", then proceed to the next pending step immediately. Do NOT summarize until ALL plan steps are complete.';
+        } else {
+          continueInstruction = '\n\nSummarize what was accomplished. Only call another tool if the user\'s request clearly requires additional steps not yet started.';
+        }
+      }
 
       const iterContext = executionBlock + stepDirective + taskReminder;
       const allFeedback = toolFeedback + snapFeedback;
@@ -2549,13 +2796,30 @@ function guardFirstTurnOverflow(currentPrompt, totalCtx, estimateTokens, buildSt
 function preGenerationContextCheck(opts) {
   const { llmEngine, totalCtx, currentPrompt, fullResponseText, allToolResults,
     contextRotations, MAX_CONTEXT_ROTATIONS, summarizer, buildStaticPrompt,
-    buildDynamicContext, maxPromptTokens, message, continuationCount, _pendingPartialBlock, mcpToolServer } = opts;
+    buildDynamicContext, maxPromptTokens, maxResponseTokens, message, continuationCount, _pendingPartialBlock, mcpToolServer } = opts;
 
   let used = 0;
-  try { if (llmEngine.sequence?.nextTokenIndex) used = llmEngine.sequence.nextTokenIndex; } catch (_) {}
+  let usedFromSequence = false;
+  try {
+    if (llmEngine.sequence?.nextTokenIndex) {
+      used = llmEngine.sequence.nextTokenIndex;
+      usedFromSequence = true;
+    }
+  } catch (_) {}
   if (!used) {
     const pLen = typeof currentPrompt === 'string' ? currentPrompt.length : ((currentPrompt.systemContext || '').length + (currentPrompt.userMessage || '').length);
     used = Math.ceil((pLen + fullResponseText.length) / 4);
+  }
+
+  // Project forward: when usage comes from KV cache (sequence), it doesn't include
+  // the upcoming prompt for this iteration or the response budget. Estimate both
+  // to catch overflow BEFORE it happens — critical for small contexts (< 16K).
+  if (usedFromSequence) {
+    const newPromptChars = typeof currentPrompt === 'string'
+      ? currentPrompt.length
+      : (currentPrompt.userMessage || '').length;
+    const respBudget = maxResponseTokens || Math.min(Math.floor(totalCtx * 0.25), 4096);
+    used += Math.ceil(newPromptChars / 4) + respBudget;
   }
 
   const pct = used / totalCtx;
@@ -2682,7 +2946,7 @@ async function executeNativeToolCalls(opts) {
       // Cross-iteration write dedup (stricter during continuation)
       if (call.tool === 'write_file') {
         const filePath = call.params?.filePath || call.params?.path;
-        const writeLimit = (continuationCount || 0) > 0 ? 1 : 2;
+        const writeLimit = (continuationCount || 0) > 0 ? 3 : 4;
         if (filePath && writeFileHistory[filePath]?.count >= writeLimit) {
           // Auto-convert write_file → append_to_file: extract only new content
           const newContent = call.params?.content || '';
@@ -2824,7 +3088,10 @@ function salvagePartialToolCall(text, fenceIdx) {
   if (content.length < 20) return null;
 
   console.log(`[AI Chat] Salvaged ${content.length} chars for "${fpMatch[1]}"`);
-  const json = JSON.stringify({ tool: 'write_file', params: { filePath: fpMatch[1], content } });
+  // Fix 32C: Detect actual tool name instead of hardcoding write_file
+  const toolMatch = fenceContent.match(/"(write_file|append_to_file)"/);
+  const toolName = toolMatch ? toolMatch[1] : 'write_file';
+  const json = JSON.stringify({ tool: toolName, params: { filePath: fpMatch[1], content } });
   return '```json\n' + json + '\n```';
 }
 

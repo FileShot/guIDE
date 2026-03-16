@@ -235,6 +235,37 @@ function extractJsonObjects(text) {
         _truncated: true,
       });
     }
+
+    // Fix 40A: General recovery for ANY tool call with malformed JSON (e.g. missing closing braces).
+    // Close unclosed braces and attempt JSON.parse. This handles write_todos, update_todo, run_command,
+    // etc. that the write_file-specific recovery above doesn't cover.
+    if (objects.length === 0) {
+      const toolNameMatch = partial.match(/"(?:tool|name)"\s*:\s*"([^"]+)"/);
+      if (toolNameMatch) {
+        let repaired = partial;
+        // Close any unclosed brackets/braces
+        let bd = 0, ad = 0;
+        let inS = false, esc = false;
+        for (let i = 0; i < repaired.length; i++) {
+          const c = repaired[i];
+          if (esc) { esc = false; continue; }
+          if (c === '\\') { esc = true; continue; }
+          if (c === '"') { inS = !inS; continue; }
+          if (inS) continue;
+          if (c === '{') bd++;
+          else if (c === '}') bd--;
+          else if (c === '[') ad++;
+          else if (c === ']') ad--;
+        }
+        for (let i = 0; i < ad; i++) repaired += ']';
+        for (let i = 0; i < bd; i++) repaired += '}';
+        const parsed = tryParseJson(repaired);
+        if (parsed && typeof parsed === 'object') {
+          objects.push(parsed);
+          console.log(`[ToolParser] Recovered malformed tool call via brace-closing: ${toolNameMatch[1]}`);
+        }
+      }
+    }
   }
 
   return objects;

@@ -643,17 +643,30 @@ class LLMEngine extends EventEmitter {
 
     // Stall watchdog — two-phase: longer timeout for prompt eval (first token),
     // shorter timeout for generation stalls (between tokens)
-    const PROMPT_EVAL_TIMEOUT_MS = (this.modelInfo?.gpuMode === false) ? STALL_TIMEOUT_CPU_MS : STALL_TIMEOUT_CPU_MS; // prompt eval always gets the long timeout
+    const PROMPT_EVAL_TIMEOUT_MS = (this.modelInfo?.gpuMode === false) ? STALL_TIMEOUT_CPU_MS : STALL_TIMEOUT_GPU_MS;
     const stallTimeoutMs = (this.modelInfo?.gpuMode === false) ? STALL_TIMEOUT_CPU_MS : STALL_TIMEOUT_GPU_MS;
     let stallTimer = null;
+    let _forceAbortTimer = null;
     let _firstTokenReceived = false;
     const resetStallTimer = () => {
       if (stallTimer) clearTimeout(stallTimer);
+      if (_forceAbortTimer) { clearTimeout(_forceAbortTimer); _forceAbortTimer = null; }
       const timeout = _firstTokenReceived ? stallTimeoutMs : PROMPT_EVAL_TIMEOUT_MS;
       stallTimer = setTimeout(() => {
         if (_genCounter === genId && this.abortController) {
           console.log(`[LLM] Stall watchdog fired after ${timeout / 1000}s — aborting generation (phase=${_firstTokenReceived ? 'gen' : 'prompt-eval'})`);
           this.cancelGeneration('timeout');
+          // node-llama-cpp doesn't check AbortSignal during prompt evaluation.
+          // If stuck in prompt-eval, force-dispose the sequence after a grace period.
+          if (!_firstTokenReceived) {
+            _forceAbortTimer = setTimeout(() => {
+              if (_genCounter === genId && this.sequence) {
+                console.log('[LLM] Force-disposing sequence — prompt-eval did not respond to abort signal');
+                try { this.sequence.dispose?.(); } catch (e) { console.error('[LLM] Sequence dispose error:', e.message); }
+                this.sequence = null;
+              }
+            }, 10_000);
+          }
         }
       }, timeout);
     };
@@ -814,6 +827,7 @@ class LLMEngine extends EventEmitter {
       return this._handleGenerationError(err, fullResponse, detectedToolBlock);
     } finally {
       if (stallTimer) clearTimeout(stallTimer);
+      if (_forceAbortTimer) clearTimeout(_forceAbortTimer);
       if (genTimeoutTimer) clearTimeout(genTimeoutTimer);
       resolveGenDone();
       this._activeGenerationPromise = null;
@@ -882,17 +896,26 @@ class LLMEngine extends EventEmitter {
       };
     }
 
-    if (isAbort && this._abortReason === 'timeout') {
-      const partial = fullResponse.trim() || '[Generation timed out — retrying]';
-      this.chatHistory.push({ type: 'model', response: [partial] });
-      return {
-        text: partial,
-        rawText: fullResponse,
-        model: this.modelInfo?.name || 'unknown',
-        tokensUsed: this.sequence?.nextTokenIndex || 0,
-        contextUsed: this.context?.contextSize || 0,
-        stopReason: 'timeout',
-      };
+    // Treat any error during a timeout abort as a timeout — covers both AbortError
+    // and sequence-disposal errors from forced prompt-eval abort
+    if (this._abortReason === 'timeout') {
+      const msg = (err.message || '').toLowerCase();
+      const isForceDispose = msg.includes('disposed') || msg.includes('sequence') || !this.sequence;
+      if (isAbort || isForceDispose) {
+        if (isForceDispose) {
+          console.log('[LLM] Generation force-aborted via sequence disposal — treating as timeout');
+        }
+        const partial = fullResponse.trim() || '[Generation timed out — retrying]';
+        this.chatHistory.push({ type: 'model', response: [partial] });
+        return {
+          text: partial,
+          rawText: fullResponse,
+          model: this.modelInfo?.name || 'unknown',
+          tokensUsed: 0,
+          contextUsed: this.context?.contextSize || 0,
+          stopReason: 'timeout',
+        };
+      }
     }
 
     if (isAbort) {
@@ -1015,17 +1038,29 @@ class LLMEngine extends EventEmitter {
 
     // Stall watchdog — two-phase: longer timeout for prompt eval (first token),
     // shorter timeout for generation stalls (between tokens)
-    const PROMPT_EVAL_TIMEOUT_MS_FN = (this.modelInfo?.gpuMode === false) ? STALL_TIMEOUT_CPU_MS : STALL_TIMEOUT_CPU_MS;
+    const PROMPT_EVAL_TIMEOUT_MS_FN = (this.modelInfo?.gpuMode === false) ? STALL_TIMEOUT_CPU_MS : STALL_TIMEOUT_GPU_MS;
     const stallTimeoutMs = (this.modelInfo?.gpuMode === false) ? STALL_TIMEOUT_CPU_MS : STALL_TIMEOUT_GPU_MS;
     let stallTimer = null;
+    let _forceAbortTimer = null;
     let _firstTokenReceived = false;
     const resetStallTimer = () => {
       if (stallTimer) clearTimeout(stallTimer);
+      if (_forceAbortTimer) { clearTimeout(_forceAbortTimer); _forceAbortTimer = null; }
       const timeout = _firstTokenReceived ? stallTimeoutMs : PROMPT_EVAL_TIMEOUT_MS_FN;
       stallTimer = setTimeout(() => {
         if (_genCounter === genId && this.abortController) {
           console.log(`[LLM] Stall watchdog fired after ${timeout / 1000}s — aborting generation (functions mode, phase=${_firstTokenReceived ? 'gen' : 'prompt-eval'})`);
           this.cancelGeneration('timeout');
+          // Force-dispose sequence if prompt-eval doesn't respond to abort signal
+          if (!_firstTokenReceived) {
+            _forceAbortTimer = setTimeout(() => {
+              if (_genCounter === genId && this.sequence) {
+                console.log('[LLM] Force-disposing sequence — prompt-eval did not respond to abort signal (functions mode)');
+                try { this.sequence.dispose?.(); } catch (e) { console.error('[LLM] Sequence dispose error:', e.message); }
+                this.sequence = null;
+              }
+            }, 10_000);
+          }
         }
       }, timeout);
     };
@@ -1143,6 +1178,7 @@ class LLMEngine extends EventEmitter {
       throw err;
     } finally {
       if (stallTimer) clearTimeout(stallTimer);
+      if (_forceAbortTimer) clearTimeout(_forceAbortTimer);
     }
   }
 

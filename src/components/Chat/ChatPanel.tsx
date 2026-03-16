@@ -472,9 +472,11 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
         // Fix 30D: Update file content accumulator with completed write tool content
         const WRITE_ACC = new Set(['write_file', 'create_file', 'edit_file', 'append_to_file']);
         for (const ft of finished) {
-          if (WRITE_ACC.has(ft.tool) && ft.params?.content) {
+          if (WRITE_ACC.has(ft.tool) && (ft.params?.content || (ft as any).result?.fullContent)) {
             const fp = ft.params?.filePath || ft.params?.fileName || '';
-            if (fp) fileContentAccRef.current.set(fp, ft.params.content as string);
+            // For append_to_file, result.fullContent has the entire file after append;
+            // params.content only has the appended chunk. Use fullContent when available.
+            if (fp) fileContentAccRef.current.set(fp, ((ft as any).result?.fullContent || ft.params.content) as string);
           }
         }
         // Bug 1 fix: Dedup write tools by filePath only (not tool+filePath),
@@ -2807,6 +2809,8 @@ ${e.message}`,
                     })()}
                     {streamingText ? (
                       <div className="space-y-2">{renderStreamingContent(streamingText)}</div>
+                    ) : (generatingToolCalls.length > 0 || executingTools.length > 0 || completedStreamingTools.length > 0) ? (
+                      null
                     ) : (
                       <div className="flex items-center gap-2">
                         <Loader2 size={14} className="animate-spin text-[#007acc]" />
@@ -2878,8 +2882,11 @@ ${e.message}`,
                       completedStreamingTools.filter(td => WRITE_TOOLS_UNI.includes(td.tool)).forEach(td => {
                         const fp = (td.params?.filePath || td.params?.fileName || '') as string;
                         if (!fp) return;
+                        // For append_to_file, result.fullContent has the entire file after append;
+                        // params.content only has the appended chunk.
+                        const contentForBlock = ((td as any).result?.fullContent || td.params?.content || '') as string;
                         fileMap.set(fp, {
-                          baseContent: (td.params?.content as string) || '',
+                          baseContent: contentForBlock,
                           streamContent: '',
                           status: 'done',
                           result: (td as any).result,
@@ -2894,8 +2901,9 @@ ${e.message}`,
                         if (existing && td.tool === 'append_to_file') {
                           existing.status = 'executing';
                         } else {
+                          const execContent = ((td as any).result?.fullContent || td.params?.content || '') as string;
                           fileMap.set(fp, {
-                            baseContent: (td.params?.content as string) || '',
+                            baseContent: execContent,
                             streamContent: '',
                             status: 'executing',
                           });

@@ -1885,11 +1885,83 @@ class MCPToolServer {
     }
   }
 
+  /**
+   * Extract genuinely new content from a write_file call by comparing against existing file.
+   * Handles three cases:
+   * 1. Leading overlap — model regenerates from start + adds new lines at end
+   * 2. Trailing overlap — new content's beginning matches the end of existing file (continuation pattern)
+   * 3. No overlap but new content is longer — model rewrote the file with additions
+   * Returns { newContent, overlapLines } or null if nothing new to append.
+   */
+  _extractNewContentForAutoConvert(existingContent, newContent) {
+    const el = existingContent.split('\n');
+    const nl = newContent.split('\n');
+
+    // Case 1: Leading overlap — lines match from the start (model regenerated full file)
+    let leadingOverlap = 0;
+    for (let i = 0; i < Math.min(el.length, nl.length); i++) {
+      if (el[i].trimEnd() === nl[i].trimEnd()) leadingOverlap++;
+      else break;
+    }
+    if (leadingOverlap > 3 && nl.length > leadingOverlap) {
+      const suffix = nl.slice(leadingOverlap).join('\n');
+      if (suffix.trim().length > 20) {
+        return { newContent: suffix, overlapLines: leadingOverlap, method: 'leading' };
+      }
+    }
+
+    // Case 2: Trailing overlap — end of existing file matches start of new content
+    // The model may be continuing where it left off but wrapping it in write_file instead of append_to_file
+    const tailCheck = Math.min(el.length, 30); // Check last 30 lines of existing
+    for (let tailSize = tailCheck; tailSize >= 3; tailSize--) {
+      const existingTail = el.slice(el.length - tailSize);
+      // Check if new content starts with this tail
+      let match = true;
+      for (let j = 0; j < tailSize && j < nl.length; j++) {
+        if (existingTail[j].trimEnd() !== nl[j].trimEnd()) { match = false; break; }
+      }
+      if (match && tailSize <= nl.length) {
+        const suffix = nl.slice(tailSize).join('\n');
+        if (suffix.trim().length > 20) {
+          return { newContent: suffix, overlapLines: tailSize, method: 'trailing' };
+        }
+      }
+    }
+
+    // Case 3: No line-level overlap but content is substantially longer — likely a full rewrite
+    // with new sections appended. Use character-level comparison of the last chunk of existing content.
+    if (nl.length > el.length && leadingOverlap > el.length * 0.3) {
+      // Partial leading overlap (>30%) — the model mostly regenerated but diverged at some point
+      // Find the divergence point and take everything after it
+      const suffix = nl.slice(leadingOverlap).join('\n');
+      if (suffix.trim().length > 20) {
+        return { newContent: suffix, overlapLines: leadingOverlap, method: 'partial-leading' };
+      }
+    }
+
+    return null;
+  }
+
   async _appendToFile(filePath, content) {
     if (!this.projectPath) {
       return { success: false, error: 'No project folder is open. Please open a folder first.' };
     }
     const fullPath = path.isAbsolute(filePath) ? filePath : path.join(this.projectPath, filePath);
+
+    // Fix 33A: Reject empty content — the model called append but didn't provide code.
+    // Include the file's last lines so the model knows where to continue from.
+    if (!content || !content.trim()) {
+      let tailHint = '';
+      let existingFullContent = '';
+      try {
+        existingFullContent = await fs.readFile(fullPath, 'utf8');
+        const lines = existingFullContent.split('\n');
+        const last15 = lines.slice(-15).join('\n');
+        tailHint = ` The file currently has ${lines.length} lines. Here are the last 15 lines — continue from here:\n${last15}`;
+      } catch {}
+      return { success: false, error: `Content is empty. You must provide actual code content to append.${tailHint}`, fullContent: existingFullContent || undefined, path: fullPath };
+    }
+
     try {
       let isNew = true;
       try {
@@ -1906,7 +1978,33 @@ class MCPToolServer {
       if (typeof content === 'string' && !content.includes('\n') && content.includes('\\n')) {
         content = content.replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\r/g, '\r');
       }
-      await fs.appendFile(fullPath, content, 'utf8');
+
+      // Smart insert for HTML files: if file already ends with </html>, insert new content
+      // BEFORE the closing tag instead of appending after it (BUG 6 — content after </html>).
+      let didSmartInsert = false;
+      const ext = (path.extname(fullPath) || '').toLowerCase();
+      if (/\.html?$/.test(ext)) {
+        try {
+          const existingContent = await fs.readFile(fullPath, 'utf8');
+          const htmlCloseMatch = existingContent.match(/([\s\S]*?)(<\/html\s*>\s*)$/i);
+          if (htmlCloseMatch) {
+            // File ends with </html> — insert new content before the closing tag
+            const beforeClose = htmlCloseMatch[1];
+            const closeTag = htmlCloseMatch[2];
+            // Only do smart insert if the new content doesn't itself contain </html>
+            if (!/<\/html\s*>/i.test(content)) {
+              const merged = beforeClose + content + closeTag;
+              await fs.writeFile(fullPath, merged, 'utf8');
+              didSmartInsert = true;
+              console.log(`[MCP] Smart HTML insert: placed ${content.length} chars before </html> in ${path.basename(fullPath)}`);
+            }
+          }
+        } catch {}
+      }
+
+      if (!didSmartInsert) {
+        await fs.appendFile(fullPath, content, 'utf8');
+      }
 
       let fullContent = content;
       try { fullContent = await fs.readFile(fullPath, 'utf8'); } catch {}
@@ -2515,10 +2613,9 @@ class MCPToolServer {
           }
           if (options.writeFileHistory && call.tool === 'write_file') {
             const wfPath = call.params?.filePath || call.params?.path || call.params?.file_path;
-            const wfLimit = (options.continuationCount || 0) > 0 ? 1 : 2;
+            const wfLimit = (options.continuationCount || 0) > 0 ? 5 : 6;
             if (wfPath && options.writeFileHistory[wfPath] && options.writeFileHistory[wfPath].count >= wfLimit) {
               console.log(`[MCP] Write dedup: blocking ${call.tool} to "${wfPath}" (already written ${options.writeFileHistory[wfPath].count}x)`);
-              // Auto-convert: extract new content and append instead of blocking outright
               let autoConverted = false;
               const newContent = call.params?.content || '';
               if (newContent.length > 50) {
@@ -2527,27 +2624,34 @@ class MCPToolServer {
                   const fullPath = _path.resolve(this.projectPath || '.', wfPath);
                   const existing = _fs.existsSync(fullPath) ? _fs.readFileSync(fullPath, 'utf-8') : '';
                   if (existing.length > 0) {
-                    const el = existing.split('\n'), nl = newContent.split('\n');
-                    let m = 0;
-                    for (let i = 0; i < Math.min(el.length, nl.length); i++) { if (el[i].trimEnd() === nl[i].trimEnd()) m++; else break; }
-                    if (m > 5 && nl.length > el.length) {
-                      const suffix = nl.slice(m).join('\n');
-                      if (suffix.trim().length > 20) {
-                        console.log(`[MCP] Write dedup auto-convert: "${wfPath}" (${m}/${el.length} overlap, appending ${nl.length - m} new lines)`);
-                        const ar = await this.executeTool('append_to_file', { filePath: wfPath, content: suffix });
-                        results.push({ tool: 'append_to_file', params: { filePath: wfPath, content: '...(auto-converted)' }, result: ar });
-                        autoConverted = true;
-                      }
+                    const extracted = this._extractNewContentForAutoConvert(existing, newContent);
+                    if (extracted) {
+                      console.log(`[MCP] Write dedup auto-convert (${extracted.method}): "${wfPath}" (${extracted.overlapLines} overlap lines)`);
+                      const ar = await this.executeTool('append_to_file', { filePath: wfPath, content: extracted.newContent });
+                      results.push({ tool: 'append_to_file', params: { filePath: wfPath, content: '...(auto-converted)' }, result: ar });
+                      autoConverted = true;
                     }
-                    if (!autoConverted && m > el.length * 0.5) {
-                      results.push({ tool: call.tool, params: call.params, result: { success: true, message: `File "${wfPath}" already written (${el.length} lines). Move on to next task.` } });
+                    if (!autoConverted) {
+                      // No extractable new content — file content is a subset or duplicate
+                      results.push({ tool: call.tool, params: call.params, result: { success: true, message: `File "${wfPath}" already has this content (${existing.split('\n').length} lines). Use append_to_file to add new content, or move on to the next task.` } });
                       autoConverted = true;
                     }
                   }
                 } catch (e) { console.warn(`[MCP] Write dedup auto-convert failed: ${e.message}`); }
               }
               if (!autoConverted) {
-                results.push({ tool: call.tool, params: call.params, result: { success: false, error: `BLOCKED: "${wfPath}" already written ${options.writeFileHistory[wfPath].count} times. Use append_to_file or edit_file instead.` } });
+                // Include file tail so model knows where to append from
+                let fileTailHint = '';
+                try {
+                  const _fs2 = require('fs'), _path2 = require('path');
+                  const fp = _path2.resolve(this.projectPath || '.', wfPath);
+                  if (_fs2.existsSync(fp)) {
+                    const lines = _fs2.readFileSync(fp, 'utf-8').split('\n');
+                    const tail = lines.slice(-10).join('\n');
+                    fileTailHint = ` The file currently has ${lines.length} lines. Last 10 lines:\n${tail}\nUse append_to_file with filePath="${wfPath}" to continue from here.`;
+                  }
+                } catch (_) {}
+                results.push({ tool: call.tool, params: call.params, result: { success: false, error: `BLOCKED: "${wfPath}" already written ${options.writeFileHistory[wfPath].count} times.${fileTailHint || ' Use append_to_file or edit_file instead.'}` } });
               }
               continue;
             }
@@ -2618,10 +2722,9 @@ class MCPToolServer {
       }
       if (options.writeFileHistory && call.tool === 'write_file') {
         const wfPath = call.params?.filePath || call.params?.path || call.params?.file_path;
-        const wfLimit = (options.continuationCount || 0) > 0 ? 1 : 2;
+        const wfLimit = (options.continuationCount || 0) > 0 ? 5 : 6;
         if (wfPath && options.writeFileHistory[wfPath] && options.writeFileHistory[wfPath].count >= wfLimit) {
           console.log(`[MCP] Write dedup: blocking ${call.tool} to "${wfPath}" (already written ${options.writeFileHistory[wfPath].count}x)`);
-          // Auto-convert: extract new content and append instead of blocking outright
           let autoConverted = false;
           const newContent = call.params?.content || '';
           if (newContent.length > 50) {
@@ -2630,27 +2733,32 @@ class MCPToolServer {
               const fullPath = _path.resolve(this.projectPath || '.', wfPath);
               const existing = _fs.existsSync(fullPath) ? _fs.readFileSync(fullPath, 'utf-8') : '';
               if (existing.length > 0) {
-                const el = existing.split('\n'), nl = newContent.split('\n');
-                let m = 0;
-                for (let i = 0; i < Math.min(el.length, nl.length); i++) { if (el[i].trimEnd() === nl[i].trimEnd()) m++; else break; }
-                if (m > 5 && nl.length > el.length) {
-                  const suffix = nl.slice(m).join('\n');
-                  if (suffix.trim().length > 20) {
-                    console.log(`[MCP] Write dedup auto-convert: "${wfPath}" (${m}/${el.length} overlap, appending ${nl.length - m} new lines)`);
-                    const ar = await this.executeTool('append_to_file', { filePath: wfPath, content: suffix });
-                    results.push({ tool: 'append_to_file', params: { filePath: wfPath, content: '...(auto-converted)' }, result: ar });
-                    autoConverted = true;
-                  }
+                const extracted = this._extractNewContentForAutoConvert(existing, newContent);
+                if (extracted) {
+                  console.log(`[MCP] Write dedup auto-convert (${extracted.method}): "${wfPath}" (${extracted.overlapLines} overlap lines)`);
+                  const ar = await this.executeTool('append_to_file', { filePath: wfPath, content: extracted.newContent });
+                  results.push({ tool: 'append_to_file', params: { filePath: wfPath, content: '...(auto-converted)' }, result: ar });
+                  autoConverted = true;
                 }
-                if (!autoConverted && m > el.length * 0.5) {
-                  results.push({ tool: call.tool, params: call.params, result: { success: true, message: `File "${wfPath}" already written (${el.length} lines). Move on to next task.` } });
+                if (!autoConverted) {
+                  results.push({ tool: call.tool, params: call.params, result: { success: true, message: `File "${wfPath}" already has this content (${existing.split('\n').length} lines). Use append_to_file to add new content, or move on to the next task.` } });
                   autoConverted = true;
                 }
               }
             } catch (e) { console.warn(`[MCP] Write dedup auto-convert failed: ${e.message}`); }
           }
           if (!autoConverted) {
-            results.push({ tool: call.tool, params: call.params, result: { success: false, error: `BLOCKED: "${wfPath}" already written ${options.writeFileHistory[wfPath].count} times. Use append_to_file or edit_file instead.` } });
+            let fileTailHint = '';
+            try {
+              const _fs2 = require('fs'), _path2 = require('path');
+              const fp = _path2.resolve(this.projectPath || '.', wfPath);
+              if (_fs2.existsSync(fp)) {
+                const lines = _fs2.readFileSync(fp, 'utf-8').split('\n');
+                const tail = lines.slice(-10).join('\n');
+                fileTailHint = ` The file currently has ${lines.length} lines. Last 10 lines:\n${tail}\nUse append_to_file with filePath="${wfPath}" to continue from here.`;
+              }
+            } catch (_) {}
+            results.push({ tool: call.tool, params: call.params, result: { success: false, error: `BLOCKED: "${wfPath}" already written ${options.writeFileHistory[wfPath].count} times.${fileTailHint || ' Use append_to_file or edit_file instead.'}` } });
           }
           continue;
         }

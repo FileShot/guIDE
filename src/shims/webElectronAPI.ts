@@ -39,6 +39,8 @@ function setupWebElectronAPI() {
       sendQueue.length = 0;
     };
 
+    // Diagnostic counter for token events
+    let _tokenEventCount = 0;
     socket.onmessage = (e: MessageEvent) => {
       let msg: any;
       try { msg = JSON.parse(e.data); } catch { return; }
@@ -51,6 +53,14 @@ function setupWebElectronAPI() {
           pending.delete(msg.id);
         }
       } else if (msg.type === 'event') {
+        if (msg.channel === 'llm-token') {
+          _tokenEventCount++;
+          if (_tokenEventCount <= 3 || _tokenEventCount % 100 === 0) {
+            console.log('[WS-DIAG] llm-token #' + _tokenEventCount, 'listeners:', listeners.get(msg.channel)?.size || 0);
+          }
+        } else if (msg.channel === 'llm-replace-last' || msg.channel === 'llm-stream-reset' || msg.channel === 'llm-iteration-begin') {
+          console.log('[WS-DIAG]', msg.channel, 'listeners:', listeners.get(msg.channel)?.size || 0);
+        }
         const cbs = listeners.get(msg.channel);
         if (cbs) cbs.forEach(cb => { try { cb(msg.payload); } catch (_) {} });
       }

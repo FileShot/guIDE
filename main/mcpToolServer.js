@@ -1328,8 +1328,9 @@ class MCPToolServer {
     const fullPath = path.isAbsolute(filePath) ? filePath : path.join(this.projectPath, filePath);
     try {
       let isNew = true;
+      let existingContent = null;
       try {
-        const existingContent = await fs.readFile(fullPath, 'utf8');
+        existingContent = await fs.readFile(fullPath, 'utf8');
         this._setFileBackup(fullPath, { original: existingContent, timestamp: Date.now(), tool: 'write_file', isNew: false });
         isNew = false;
       } catch {
@@ -2370,13 +2371,31 @@ class MCPToolServer {
       this._todos.push(todo);
       created.push(todo);
     }
+    // Auto-mark the first todo as in-progress. When write_todos is called the model is always
+    // about to begin step 1. Small models (4B/7B) routinely skip the first update_todo call
+    // entirely — this ensures the plan shows activity immediately rather than sitting at 0/N.
+    // If the model also calls update_todo({status:'in-progress'}) for the first item, it's
+    // idempotent. If the item was explicitly created with status 'done', don't downgrade it.
+    if (created.length > 0 && created[0].status === 'pending') {
+      created[0].status = 'in-progress';
+      const stored = this._todos.find(t => t.id === created[0].id);
+      if (stored) stored.status = 'in-progress';
+    }
     if (this.onTodoUpdate) this.onTodoUpdate([...this._todos]);
     return { success: true, created, allTodos: [...this._todos] };
   }
 
   _updateTodo(params) {
     const { id, status, text } = params;
-    const todo = this._todos.find(t => t.id === id);
+    // Fix 56: Robust ID resolution — accept the todo's assigned ID (1-based) OR the
+    // array index (0-based). Small models (2-4B) routinely send id=0 for the first todo
+    // because they assume 0-indexed arrays. Instead of failing with "TODO #0 not found",
+    // fall back to treating the id as an array index. Also handle string IDs ("1" vs 1).
+    const numId = typeof id === 'string' ? parseInt(id, 10) : id;
+    let todo = this._todos.find(t => t.id === numId);
+    if (!todo && numId >= 0 && numId < this._todos.length) {
+      todo = this._todos[numId]; // Treat as 0-based array index
+    }
     if (!todo) return { success: false, error: `TODO #${id} not found` };
     if (status && ['pending', 'in-progress', 'done'].includes(status)) {
       todo.status = status;

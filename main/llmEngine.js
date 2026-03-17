@@ -1292,6 +1292,22 @@ class LLMEngine extends EventEmitter {
       throw new Error('Cannot reset session — no model loaded');
     }
 
+    // Fix 54: Await active generation settlement before disposing resources.
+    // Without this, cancelGeneration() sets the abort signal but generateResponse()
+    // hasn't actually stopped yet. Disposing the sequence while generation is still
+    // running causes a race: the old generation continues on a disposed sequence,
+    // producing tokens that the frontend discards (epoch mismatch). This is the root
+    // cause of "Clear chat doesn't stop backend generation" (Bug 2).
+    if (this._activeGenerationPromise) {
+      try {
+        await Promise.race([
+          this._activeGenerationPromise,
+          new Promise(r => setTimeout(r, 5000)), // 5s timeout — don't hang forever
+        ]);
+      } catch (_) {}
+      this._activeGenerationPromise = null;
+    }
+
     // Check if context is still usable
     if (!this.context || this.context._disposed) {
       const gpuIsActive = this.modelInfo && this.modelInfo.gpuMode !== false;

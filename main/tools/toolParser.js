@@ -186,22 +186,31 @@ function extractJsonObjects(text) {
             if (pathMatch) {
               const recovered = { tool: toolName, params: { filePath: pathMatch[1] }, _recovered: true };
               // Try to extract content field for write/create/edit/append tools
+              // Fix 78: Forward-scan approach — take everything after the content opening
+              // quote instead of scanning backward for a closing quote. Backward scanning
+              // fails on truncated tool calls (55K+ chars of HTML) because the last `"` in
+              // the slice may be an escaped `\"` inside content, yielding empty extraction.
               const contentIdx = slice.indexOf('"content"');
               if (contentIdx >= 0) {
                 const colonIdx = slice.indexOf(':', contentIdx + 9);
                 if (colonIdx >= 0) {
                   const quoteIdx = slice.indexOf('"', colonIdx + 1);
                   if (quoteIdx >= 0) {
-                    // Content runs from quoteIdx+1 to the last " before closing }}
-                    let endIdx = slice.length - 1;
-                    while (endIdx > quoteIdx && slice[endIdx] !== '"') endIdx--;
-                    if (endIdx > quoteIdx) {
-                      let rawContent = slice.slice(quoteIdx + 1, endIdx);
-                      try {
-                        rawContent = rawContent
-                          .replace(/\\n/g, '\n').replace(/\\t/g, '\t')
-                          .replace(/\\"/g, '"').replace(/\\\\/g, '\\');
-                      } catch (_) {}
+                    // Take everything after the opening quote
+                    let rawContent = slice.slice(quoteIdx + 1);
+                    // Strip trailing JSON structure: closing quote + braces/brackets
+                    // Pattern: optional `"` then `}` then optional `}` then optional `]`
+                    rawContent = rawContent.replace(/"\s*\}\s*\}\s*\]?\s*$/, '');
+                    rawContent = rawContent.replace(/"\s*\}\s*$/, '');
+                    // Trim to last complete line (avoid partial escape sequences)
+                    const lastNewline = rawContent.lastIndexOf('\\n');
+                    if (lastNewline > 50) rawContent = rawContent.substring(0, lastNewline);
+                    try {
+                      rawContent = rawContent
+                        .replace(/\\n/g, '\n').replace(/\\t/g, '\t')
+                        .replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+                    } catch (_) {}
+                    if (rawContent.trim().length > 20) {
                       recovered.params.content = rawContent;
                     }
                   }

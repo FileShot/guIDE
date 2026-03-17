@@ -1144,6 +1144,11 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   };
 
   const cancelGeneration = async () => {
+    // Fix 82: Increment stream epoch BEFORE calling llmCancel so any stale tokens
+    // arriving from the backend while cancel propagates are immediately discarded
+    // by the epoch check in the token listener. Without this, ghost tokens appear
+    // after clicking stop because the epoch wasn't invalidated.
+    streamEpochRef.current++;
     await window.electronAPI?.llmCancel();
     setIsGenerating(false);
     setAgenticProgress(null);
@@ -2167,8 +2172,14 @@ ${e.message}`,
       // when a prior `completeBlockRegex` match consumed the opening ``` of the next block,
       // leaving the language tag as the start of `remaining` with no backticks.
       remaining = remaining.replace(/^[ \t]*(json|html|css|javascript|typescript|python|bash|sh|xml|yaml|markdown|md|ts|js|py|jsx|tsx|sql|go|rust|cpp|c|java|ruby|php)\s*\n/, '');
-      // Strip any trailing partial tool-call JSON mid-stream before the regex can identify it
-      remaining = stripTrailingPartialToolCall(remaining);
+      // Strip any trailing partial tool-call JSON mid-stream before the regex can identify it.
+      // GUARD: do NOT strip when remaining starts with a code fence (```). In that case the
+      // fenced-block handling below (incompleteToolMatch / hasOpenFence) must see the full
+      // JSON body. stripTrailingPartialToolCall strips the body and leaves only the bare
+      // fence header (e.g. "```js"), causing partialCode to be empty and nothing to render.
+      if (!/^[ \t]*```/.test(remaining)) {
+        remaining = stripTrailingPartialToolCall(remaining);
+      }
 
       if (remaining.trim().startsWith('### Tool Execution Results')) {
         // Already merged — skip
@@ -2177,7 +2188,9 @@ ${e.message}`,
         // Matches as soon as the "tool" key appears in the block — the colon is not required so
         // the block is hidden 1-2 tokens earlier than before. Deliberately does NOT match generic
         // "name" keys to avoid false-positives on non-tool JSON (e.g. {"name": "John"}).
-        const incompleteToolMatch = remaining.match(/```(?:json|tool)?\s*\n?\s*\{[\s\S]*?"tool"/);
+        // Also matches ```js and ```javascript — Qwen3.5 and similar models often wrap tool call
+        // JSON in a ```js fence instead of ```json or ```tool.
+        const incompleteToolMatch = remaining.match(/```(?:json|tool|js|javascript)?\s*\n?\s*\{[\s\S]*?"tool"/);
         if (incompleteToolMatch) {
           // Suppress the incomplete tool JSON block mid-stream.
           // Render any text that appeared before the opening ```.
@@ -2877,6 +2890,18 @@ ${e.message}`,
 
                       // ── Build unified file map from all three sources ──
                       const fileMap = new Map<string, { baseContent: string; streamContent: string; status: 'streaming' | 'executing' | 'done'; lineCount?: number; result?: any }>();
+
+                      // 0. Seed from accumulated file content (Fix 68) — ensures code block
+                      // persists across iteration boundaries even when completedStreamingTools
+                      // is cleared. The accumulator always has the latest full file content.
+                      fileContentAccRef.current.forEach((content, fp) => {
+                        fileMap.set(fp, {
+                          baseContent: content,
+                          streamContent: '',
+                          status: 'done',
+                          result: { success: true },
+                        });
+                      });
 
                       // 1. Completed write tools (already finished + deduped)
                       completedStreamingTools.filter(td => WRITE_TOOLS_UNI.includes(td.tool)).forEach(td => {

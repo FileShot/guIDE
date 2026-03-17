@@ -131,6 +131,13 @@ class ConversationSummarizer {
     if (toolName === 'write_file' || toolName === 'read_file') {
       this.currentState.lastFile = params?.path || params?.filePath;
     }
+    if (toolName === 'list_directory') {
+      const dirPath = params?.path || params?.directory || '.';
+      this.currentState.directory = dirPath;
+      // Preserve result so after rotation the model knows what was found — prevents re-listing
+      const content = typeof result === 'string' ? result : (result?.content || '');
+      this.currentState.lastDirectoryListing = { path: dirPath, content: content.slice(0, 400) };
+    }
     if (toolName === 'run_terminal_cmd') {
       this.currentState.lastCommand = params?.command?.slice(0, 100);
     }
@@ -332,6 +339,9 @@ class ConversationSummarizer {
     if (this.currentState.pageTitle) stateLines.push(`Page title: ${this.currentState.pageTitle}`);
     if (this.currentState.lastFile) stateLines.push(`Last file: ${this.currentState.lastFile}`);
     if (this.currentState.directory) stateLines.push(`Directory: ${this.currentState.directory}`);
+    if (this.currentState.lastDirectoryListing) {
+      stateLines.push(`Directory listing (${this.currentState.lastDirectoryListing.path}) — already retrieved, do NOT list again:\n${this.currentState.lastDirectoryListing.content}`);
+    }
     if (this.currentState.lastCommand) stateLines.push(`Last command: ${this.currentState.lastCommand}`);
     if (stateLines.length > 0) {
       sections.push(`## CURRENT STATE\n${stateLines.join('\n')}`);
@@ -426,7 +436,10 @@ class ConversationSummarizer {
 
       const status = step.success ? '✓' : '✗';
       if (count > 1) {
-        lines.push(`${status} ${step.tool} (×${count})`);
+        // Preserve the last outcome so the model knows what was found, not just that calls happened
+        const lastStep = this.completedSteps[i + count - 1];
+        const outcome = lastStep.outcome ? `: ${lastStep.outcome}` : '';
+        lines.push(`${status} ${step.tool} (×${count})${outcome}`);
       } else {
         const outcome = step.outcome ? `: ${step.outcome}` : '';
         lines.push(`${status} ${step.tool}${outcome}`);

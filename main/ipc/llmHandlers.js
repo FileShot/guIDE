@@ -111,6 +111,15 @@ function register(ctx) {
   ipcMain.handle('llm-cancel', async () => {
     ctx.agenticCancelled = true;
     ctx.llmEngine.cancelGeneration();
+    // Fix 75: Wait for the agentic loop to actually exit before resetting session.
+    // Previously, resetSession() was called immediately, disposing the context while
+    // generateWithFunctions/generateStream was still running — causing race conditions
+    // and the "stop button doesn't work" behavior.
+    // The generation loop checks isStale() → agenticCancelled on every token callback,
+    // calls cancelGeneration('user'), and exits. We wait up to 5s for that to happen.
+    if (ctx._generationDonePromise) {
+      await Promise.race([ctx._generationDonePromise, new Promise(r => setTimeout(r, 5000))]);
+    }
     try { await ctx.llmEngine.resetSession(); } catch (_) {}
     return { success: true };
   });

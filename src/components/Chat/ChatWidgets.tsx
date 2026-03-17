@@ -389,10 +389,10 @@ export const CodeBlock: React.FC<{ code: string; language: string; onApply: () =
         </div>
       </div>
       <div className="relative">
-        <pre className={`p-3 overflow-x-auto text-[12px] font-mono bg-[#1e1e1e] leading-relaxed ${!expanded ? (defaultCollapsed ? 'hidden' : 'max-h-[120px] overflow-hidden') : ''}`}>
+        <pre className={`p-3 overflow-x-auto text-[12px] font-mono bg-[#1e1e1e] leading-relaxed ${!expanded ? 'max-h-[120px] overflow-hidden' : ''}`}>
           <code>{displayCode}</code>
         </pre>
-        {isLong && !expanded && !defaultCollapsed && (
+        {isLong && !expanded && (
           <div
             className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-[#1e1e1e] to-transparent flex items-end justify-center pb-1 cursor-pointer"
             onClick={() => setExpanded(true)}

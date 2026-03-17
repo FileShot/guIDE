@@ -379,10 +379,10 @@ function progressiveContextCompaction(options) {
   const offset = totalContextTokens <= 8192 ? 0.25
     : totalContextTokens <= 16384 ? 0.15
     : 0;
-  const phase1Threshold = 0.45 - offset;
-  const phase2Threshold = 0.60 - offset;
-  const phase3Threshold = 0.75 - offset;
-  const rotateThreshold = 0.85 - offset;
+  const phase1Threshold = 0.35 - offset;
+  const phase2Threshold = 0.50 - offset;
+  const phase3Threshold = 0.65 - offset;
+  const rotateThreshold = 0.80 - offset;
 
   // Phase 1: Compress old tool results
   if (pct > phase1Threshold && allToolResults.length > 4) {
@@ -636,6 +636,9 @@ class ExecutionState {
     if (toolName === 'write_file' && result?.success && params?.filePath) {
       this.filesCreated.push({ path: params.filePath, iteration });
     }
+    if (toolName === 'append_to_file' && result?.success && params?.filePath) {
+      this.filesCreated.push({ path: params.filePath, iteration, append: true });
+    }
     if (toolName === 'edit_file' && result?.success && params?.filePath) {
       this.filesEdited.push({ path: params.filePath, iteration });
     }
@@ -654,7 +657,22 @@ class ExecutionState {
       parts.push(`URLs visited: ${recent.map(v => `${v.success ? 'OK' : 'FAIL'} ${v.url}`).join(', ')}`);
     }
     if (this.filesCreated.length > 0) {
-      parts.push(`Files created: ${this.filesCreated.map(f => f.path).join(', ')}`);
+      // Fix 61: Show per-file write counts so the model can see when it's looping
+      const fileCounts = {};
+      for (const f of this.filesCreated) {
+        if (!fileCounts[f.path]) fileCounts[f.path] = { writes: 0, appends: 0 };
+        if (f.append) fileCounts[f.path].appends++;
+        else fileCounts[f.path].writes++;
+      }
+      const fileList = Object.entries(fileCounts).map(([p, c]) => {
+        const total = c.writes + c.appends;
+        if (total <= 1) return p;
+        const detail = [];
+        if (c.writes > 0) detail.push(`${c.writes}× written`);
+        if (c.appends > 0) detail.push(`${c.appends}× appended`);
+        return `${p} (${detail.join(', ')})`;
+      });
+      parts.push(`Files created/modified: ${fileList.join(', ')}`);
     }
     if (this.filesEdited.length > 0) {
       parts.push(`Files edited: ${this.filesEdited.map(f => f.path).join(', ')}`);

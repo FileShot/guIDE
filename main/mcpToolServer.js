@@ -20,8 +20,6 @@ const {
   parseToolCalls: standaloneParseToolCalls,
   repairToolCalls,
   _recoverWriteFileContent,
-  _detectProseCommands,
-  _detectFallbackFileOperations: standaloneFallbackDetect,
   TOOL_NAME_ALIASES,
   VALID_TOOLS,
 } = require('./tools/toolParser');
@@ -2615,83 +2613,11 @@ class MCPToolServer {
       console.log(`[MCP] Capped tool calls: executing ${maxToolsPerResponse}, skipping ${skippedCount}`);
     }
 
-    // Fallback detection if no formal tool calls
+    // No formal tool calls found — return without attempting fallback detection.
+    // The model should use proper tool call format (native functions or JSON fences).
+    // Removed: prose command detection and fallback file operation classification.
     if (toolCalls.length === 0) {
-      console.log('[MCP] No formal tool calls found, trying fallback detection...');
-
-      const proseCommands = _detectProseCommands(responseText);
-      if (proseCommands.length > 0) {
-        console.log('[MCP] Found prose command fallback:', proseCommands.length);
-        toolCalls.push(...proseCommands);
-      }
-
-      const fallbackCalls = this._detectFallbackFileOperations(responseText, options.userMessage, [..._repairDropped, ...(options.lastDroppedFilePaths || [])]);
-      if (fallbackCalls.length > 0) {
-        console.log('[MCP] Found fallback tool calls:', fallbackCalls.length);
-        let effectiveFallbackCalls = fallbackCalls;
-        let fbCapped = false;
-        let fbSkipped = 0;
-        if (maxToolsPerResponse > 0 && fallbackCalls.length > maxToolsPerResponse) {
-          fbSkipped = fallbackCalls.length - maxToolsPerResponse;
-          effectiveFallbackCalls = fallbackCalls.slice(0, maxToolsPerResponse);
-          fbCapped = true;
-        }
-        const results = [];
-        for (const call of effectiveFallbackCalls) {
-          if (toolPaceMs > 0 && results.length > 0) {
-            await new Promise(r => setTimeout(r, toolPaceMs));
-          }
-          if (options.writeFileHistory && call.tool === 'write_file') {
-            const wfPath = call.params?.filePath || call.params?.path || call.params?.file_path;
-            const wfLimit = (options.continuationCount || 0) > 0 ? 5 : 6;
-            if (wfPath && options.writeFileHistory[wfPath] && options.writeFileHistory[wfPath].count >= wfLimit) {
-              console.log(`[MCP] Write dedup: blocking ${call.tool} to "${wfPath}" (already written ${options.writeFileHistory[wfPath].count}x)`);
-              let autoConverted = false;
-              const newContent = call.params?.content || '';
-              if (newContent.length > 50) {
-                try {
-                  const _fs = require('fs'), _path = require('path');
-                  const fullPath = _path.resolve(this.projectPath || '.', wfPath);
-                  const existing = _fs.existsSync(fullPath) ? _fs.readFileSync(fullPath, 'utf-8') : '';
-                  if (existing.length > 0) {
-                    const extracted = this._extractNewContentForAutoConvert(existing, newContent);
-                    if (extracted) {
-                      console.log(`[MCP] Write dedup auto-convert (${extracted.method}): "${wfPath}" (${extracted.overlapLines} overlap lines)`);
-                      const ar = await this.executeTool('append_to_file', { filePath: wfPath, content: extracted.newContent });
-                      results.push({ tool: 'append_to_file', params: { filePath: wfPath, content: '...(auto-converted)' }, result: ar });
-                      autoConverted = true;
-                    }
-                    if (!autoConverted) {
-                      // No extractable new content — file content is a subset or duplicate
-                      results.push({ tool: call.tool, params: call.params, result: { success: true, message: `File "${wfPath}" already has this content (${existing.split('\n').length} lines). Use append_to_file to add new content, or move on to the next task.` } });
-                      autoConverted = true;
-                    }
-                  }
-                } catch (e) { console.warn(`[MCP] Write dedup auto-convert failed: ${e.message}`); }
-              }
-              if (!autoConverted) {
-                // Include file tail so model knows where to append from
-                let fileTailHint = '';
-                try {
-                  const _fs2 = require('fs'), _path2 = require('path');
-                  const fp = _path2.resolve(this.projectPath || '.', wfPath);
-                  if (_fs2.existsSync(fp)) {
-                    const lines = _fs2.readFileSync(fp, 'utf-8').split('\n');
-                    const tail = lines.slice(-10).join('\n');
-                    fileTailHint = ` The file currently has ${lines.length} lines. Last 10 lines:\n${tail}\nUse append_to_file with filePath="${wfPath}" to continue from here.`;
-                  }
-                } catch (_) {}
-                results.push({ tool: call.tool, params: call.params, result: { success: false, error: `BLOCKED: "${wfPath}" already written ${options.writeFileHistory[wfPath].count} times.${fileTailHint || ' Use append_to_file or edit_file instead.'}` } });
-              }
-              continue;
-            }
-          }
-          const result = await this.executeTool(call.tool, call.params || {});
-          results.push({ tool: call.tool, params: call.params, result });
-        }
-        return { hasToolCalls: true, results, capped: fbCapped, skippedToolCalls: fbSkipped, formalCallCount: 0, droppedFilePaths: [] };
-      }
-      console.log('[MCP] No fallback tool calls either');
+      console.log('[MCP] No formal tool calls found');
       return { hasToolCalls: false, results: [], formalCallCount: 0, droppedFilePaths: _repairDropped };
     }
 
@@ -2750,49 +2676,6 @@ class MCPToolServer {
         if (call.tool.startsWith('browser_')) call.params = this._normalizeBrowserParams(call.tool, call.params || {});
         else call.params = this._normalizeFsParams(call.tool, call.params || {});
       }
-      if (options.writeFileHistory && call.tool === 'write_file') {
-        const wfPath = call.params?.filePath || call.params?.path || call.params?.file_path;
-        const wfLimit = (options.continuationCount || 0) > 0 ? 5 : 6;
-        if (wfPath && options.writeFileHistory[wfPath] && options.writeFileHistory[wfPath].count >= wfLimit) {
-          console.log(`[MCP] Write dedup: blocking ${call.tool} to "${wfPath}" (already written ${options.writeFileHistory[wfPath].count}x)`);
-          let autoConverted = false;
-          const newContent = call.params?.content || '';
-          if (newContent.length > 50) {
-            try {
-              const _fs = require('fs'), _path = require('path');
-              const fullPath = _path.resolve(this.projectPath || '.', wfPath);
-              const existing = _fs.existsSync(fullPath) ? _fs.readFileSync(fullPath, 'utf-8') : '';
-              if (existing.length > 0) {
-                const extracted = this._extractNewContentForAutoConvert(existing, newContent);
-                if (extracted) {
-                  console.log(`[MCP] Write dedup auto-convert (${extracted.method}): "${wfPath}" (${extracted.overlapLines} overlap lines)`);
-                  const ar = await this.executeTool('append_to_file', { filePath: wfPath, content: extracted.newContent });
-                  results.push({ tool: 'append_to_file', params: { filePath: wfPath, content: '...(auto-converted)' }, result: ar });
-                  autoConverted = true;
-                }
-                if (!autoConverted) {
-                  results.push({ tool: call.tool, params: call.params, result: { success: true, message: `File "${wfPath}" already has this content (${existing.split('\n').length} lines). Use append_to_file to add new content, or move on to the next task.` } });
-                  autoConverted = true;
-                }
-              }
-            } catch (e) { console.warn(`[MCP] Write dedup auto-convert failed: ${e.message}`); }
-          }
-          if (!autoConverted) {
-            let fileTailHint = '';
-            try {
-              const _fs2 = require('fs'), _path2 = require('path');
-              const fp = _path2.resolve(this.projectPath || '.', wfPath);
-              if (_fs2.existsSync(fp)) {
-                const lines = _fs2.readFileSync(fp, 'utf-8').split('\n');
-                const tail = lines.slice(-10).join('\n');
-                fileTailHint = ` The file currently has ${lines.length} lines. Last 10 lines:\n${tail}\nUse append_to_file with filePath="${wfPath}" to continue from here.`;
-              }
-            } catch (_) {}
-            results.push({ tool: call.tool, params: call.params, result: { success: false, error: `BLOCKED: "${wfPath}" already written ${options.writeFileHistory[wfPath].count} times.${fileTailHint || ' Use append_to_file or edit_file instead.'}` } });
-          }
-          continue;
-        }
-      }
       const result = await this.executeTool(call.tool, call.params || {});
       console.log('[MCP] Executed tool:', call.tool, 'result:', result.success ? 'success' : 'failed');
       results.push({ tool: call.tool, params: call.params, result });
@@ -2807,10 +2690,6 @@ class MCPToolServer {
     }
 
     return { hasToolCalls: true, results, capped: capped || browserCapped, skippedToolCalls: skippedCount + browserSkipped, formalCallCount: toolCalls.length, droppedFilePaths: _repairDropped };
-  }
-
-  _detectFallbackFileOperations(responseText, userMessage, lastDroppedFilePaths = []) {
-    return standaloneFallbackDetect(responseText, userMessage, lastDroppedFilePaths);
   }
 
   // ─── Tool Prompt Building ────────────────────────────────────────────────

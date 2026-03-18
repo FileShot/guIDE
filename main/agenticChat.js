@@ -26,7 +26,6 @@ const {
   enrichErrorFeedback,
   pruneCloudHistory,
   evaluateResponse,
-  getProgressiveTools,
   classifyResponseFailure,
   progressiveContextCompaction,
   buildToolFeedback,
@@ -55,7 +54,6 @@ function getNodeLlamaCppPath() {
 // ─── Constants ──────────────────────────────────────────────
 const STUCK_THRESHOLD = 10;
 const CYCLE_MIN_REPEATS = 5;
-const BATCH_TOOLS = new Set(['create_directory', 'write_file', 'delete_file', 'find_and_replace', 'append_to_file']);
 const MAX_RESPONSE_SIZE = 2 * 1024 * 1024; // 2MB cap
 const WALL_CLOCK_DEADLINE_MS = 30 * 60 * 1000; // 30 minutes
 const BROWSER_STATE_CHANGERS = new Set([
@@ -68,10 +66,6 @@ const DATA_GATHER_TOOLS = new Set([
   'browser_evaluate', 'browser_get_content', 'web_search', 'fetch_webpage',
 ]);
 const DATA_WRITE_TOOLS = new Set(['write_file', 'edit_file']);
-// Exploration tools with moderate stuck threshold (NOT read_file — models must read files freely)
-const EXPLORATION_TOOLS = new Set([
-  'list_directory', 'get_project_structure', 'search_files',
-]);
 
 // Fix 58A: autoCreateLargeTaskTodos REMOVED — regex/keyword classifier that
 // created generic low-quality plans conflicting with model's task-specific plans.
@@ -413,7 +407,7 @@ function register(ctx) {
         // Check for repetition
         const failure = classifyResponseFailure(
           responseText, false, 'general', iteration, message, previousResponse,
-          { nudgesRemaining: 0, allToolResults: allCloudToolResults }
+          { allToolResults: allCloudToolResults }
         );
         if (failure?.severity === 'stop') {
           if (mainWindow) mainWindow.webContents.send('llm-token', `\n*[Stopped — ${failure.type}]*\n`);
@@ -771,21 +765,6 @@ function register(ctx) {
     };
 
     // ──────────────────────────────────────────────────────
-    // Build file progress hint with structural digests
-    // Replaces bare line-count hints with full structural awareness
-    // ──────────────────────────────────────────────────────
-    function buildFileProgressHint(fileProgress) {
-      const keys = Object.keys(fileProgress || {});
-      if (keys.length === 0) return '';
-      const parts = keys.map(fp => {
-        const p = fileProgress[fp];
-        if (p.structureDigest) return '\n' + p.structureDigest;
-        return `\n- ${fp}: ${p.writtenLines} lines (${p.writtenChars} chars)`;
-      });
-      return '\n**FILE STRUCTURE ON DISK:**' + parts.join('');
-    }
-
-    // ──────────────────────────────────────────────────────
     // Agentic Loop State
     // ──────────────────────────────────────────────────────
 
@@ -826,8 +805,6 @@ function register(ctx) {
     const writeFileHistory = {};
     let _pendingDroppedFilePaths = [];
     const toolFailCounts = {};
-    let nudgesRemaining = 3;
-    // todoNudgesRemaining removed (Rule 9 violation — Fix 38A reverted)
     let _emptyWriteRetries = 0;
     let contextRotations = 0;
     let lastConvSummary = '';
@@ -937,11 +914,6 @@ function register(ctx) {
       iteration++;
       console.log(`[AI Chat] Agentic iteration ${iteration}/${MAX_AGENTIC_ITERATIONS}`);
 
-      // ── First-turn overflow guard ──
-      if (iteration === 1) {
-        currentPrompt = guardFirstTurnOverflow(currentPrompt, totalCtx, estimateTokens, buildStaticPrompt, buildDynamicContext, maxPromptTokens, mcpToolServer, message);
-      }
-
       // ── Pre-generation context check ──
       // Run for ALL iterations, not just > 1, to catch critically high context on first turn
       // This prevents stalls when context is near full from conversation history
@@ -995,18 +967,8 @@ function register(ctx) {
       } else if (useNativeFunctions) {
         try {
           const toolDefs = mcpToolServer.getToolDefinitions();
-          // Context-aware tool filtering: reduce tool count when actual context is smaller than expected
-          let effectiveMaxTools = modelTier.maxToolsPerPrompt;
-          if (totalCtx < 16384 && effectiveMaxTools > 25) {
-            effectiveMaxTools = 25; // Reduce tools for smaller contexts
-          } else if (totalCtx < 8192 && effectiveMaxTools > 15) {
-            effectiveMaxTools = 15;
-          } else if (totalCtx < 4096 && effectiveMaxTools > 8) {
-            effectiveMaxTools = 8;
-          }
-          const filterNames = getProgressiveTools('general', iteration, (recentToolCalls || []).map(tc => tc.tool), effectiveMaxTools);
-          nativeFunctions = LLMEngine.convertToolsToFunctions(toolDefs, filterNames);
-          console.log(`[AI Chat] Native function calling with ${Object.keys(nativeFunctions).length} functions (ctx=${totalCtx}, maxTools=${effectiveMaxTools})`);
+          nativeFunctions = LLMEngine.convertToolsToFunctions(toolDefs, null);
+          console.log(`[AI Chat] Native function calling with ${Object.keys(nativeFunctions).length} functions (ctx=${totalCtx})`);
         } catch (e) {
           console.warn(`[AI Chat] Failed to build native functions: ${e.message}`);
           nativeFunctions = null;
@@ -2101,18 +2063,6 @@ function register(ctx) {
         _pendingDroppedFilePaths = toolResults.droppedFilePaths || [];
       }
 
-      // Cross-turn dedup
-      if (toolResults.hasToolCalls && toolResults.results.length > 0) {
-        const sigs = new Set();
-        for (const tr of toolResults.results) {
-          const sig = JSON.stringify({ t: tr.tool, p: tr.params });
-          if (sigs.has(sig)) {
-            tr.result = { success: false, error: `BLOCKED: Duplicate call to ${tr.tool} with same params.` };
-          }
-          sigs.add(sig);
-        }
-      }
-
       // Route planning text to thinking panel — ONLY for thinking models
       // Non-thinking models' intro text ("Let me create that...") is their response, not reasoning
       const _modelPath = llmEngine?.currentModelPath || '';
@@ -2204,75 +2154,10 @@ function register(ctx) {
           continue;
         }
 
-        // Code-dump nudge — detect large code blocks (fenced or raw) that should be files
-        const _allCodeBlocks = [...responseText.matchAll(/```(?:html?|css|javascript|js|typescript|ts|python|py|json)\s*\n([\s\S]*?)```/gi)];
-        const hasCodeBlocks = _allCodeBlocks.some(m => m[1].length > 500);
-        // Also detect unclosed code fences (model hit maxTokens before closing ```)
-        // Only match if the captured tail does NOT contain a closing ``` (truly unclosed)
-        const _unclosedFenceMatch = !hasCodeBlocks && responseText.match(/```(?:html?|css|javascript|js|typescript|ts|python|py|json)\s*\n([\s\S]{500,})$/i);
-        const hasUnclosedLargeBlock = !!_unclosedFenceMatch && !_unclosedFenceMatch[1].includes('```');
-        // Detect raw HTML/code dumped without fences (model obeyed "no code blocks" but didn't use write_file)
-        // STRICT detection: requires FULL document structure (<html> AND (<head> OR <body>)) with significant length
-        // to avoid false positives on partial explanations or snippets. Length threshold raised to 1500 chars.
-        const hasRawCodeDump = !hasCodeBlocks && !hasUnclosedLargeBlock && responseText.length > 1500 && (
-          // Full HTML document: must have <html> AND at least one of <head> or <body> with substantial content
-          (/<html[\s>]/i.test(responseText) && /<head[\s>]/i.test(responseText) && /<body[\s>]/i.test(responseText) && (responseText.match(/<\/\w+>/g) || []).length > 10) ||
-          // CSS block: must have multiple complete CSS rules (not just a few property mentions)
-          (/<style[\s>]/i.test(responseText) && (responseText.match(/\{[^}]+\}/g) || []).length > 8) ||
-          // JS block: must have multiple function/variable declarations (substantial code)
-          (/<script[\s>]/i.test(responseText) && (responseText.match(/(?:function\s+\w+|const\s+\w+\s*=|let\s+\w+\s*=|var\s+\w+\s*=)/g) || []).length > 5)
-        );
-
-        // Skip nudge when context is critically small — resetSession can hang on degraded KV cache
-        // and the model can't do better with even less context.
-        let contextTooSmallForNudge = false;
-        if (totalCtx <= 4096) {
-          let _nudgeUsed = 0;
-          try { if (llmEngine.sequence?.nextTokenIndex) _nudgeUsed = llmEngine.sequence.nextTokenIndex; } catch (_) {}
-          if (_nudgeUsed > 0 && _nudgeUsed / totalCtx > 0.50) contextTooSmallForNudge = true;
-        }
-
-        // Fix 40B: Skip code-dump nudge if any detected code block looks like a tool call attempt.
-        // Models sometimes emit write_todos/update_todo/run_command as ```json blocks that the
-        // formal parser couldn't parse (e.g. malformed JSON). Erasing these destroys the model's
-        // tool invocation intent. Instead, let the response flow through to normal no-tool handling.
-        let hasToolCallInCodeBlock = false;
-        if (hasCodeBlocks) {
-          hasToolCallInCodeBlock = _allCodeBlocks.some(m =>
-            m[1].length > 500 && /"(?:tool|name)"\s*:\s*"/.test(m[1])
-          );
-        }
-
-        if ((hasCodeBlocks || hasUnclosedLargeBlock || hasRawCodeDump) && nudgesRemaining > 0 && iteration < MAX_AGENTIC_ITERATIONS - 1 && !contextTooSmallForNudge && !hasToolCallInCodeBlock) {
-          nudgesRemaining--;
-          console.log(`[AI Chat] Code-dump nudge firing (codeBlocks=${hasCodeBlocks}, unclosed=${hasUnclosedLargeBlock}, rawDump=${hasRawCodeDump})`);
-          // Strip the raw code dump from accumulated response to free context budget.
-          // The model will regenerate the content properly via write_file.
-          fullResponseText = '';
-          // Clear the UI stream buffer so the pre-nudge code dump is not visible to the user
-          if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('llm-stream-reset');
-          // Preserve conversation summary before wiping chat history (same as normal rotation path)
-          summarizer.markRotation();
-          lastConvSummary = summarizer.generateQuickSummary(mcpToolServer?._todos);
-          // Timeout-guarded resetSession to prevent indefinite hang from degraded C++ KV cache
-          try {
-            await Promise.race([
-              llmEngine.resetSession(true),
-              new Promise((_, rej) => setTimeout(() => rej(new Error('resetSession timeout')), 8000)),
-            ]);
-          } catch (resetErr) {
-            console.warn(`[AI Chat] Code-dump nudge resetSession failed: ${resetErr.message}`);
-          }
-          sessionJustRotated = true;
-          currentPrompt = {
-            systemContext: buildStaticPrompt(),
-            userMessage: buildDynamicContext(Math.floor(maxPromptTokens * 0.10)) + '\n' + message + '\n\n[SYSTEM: You wrote code directly in chat. Use write_file tool to save it. Format: ```json\n{"tool":"write_file","params":{"filePath":"filename.ext","content":"..."}}\n```]',
-          };
-          continue;
-        }
-
         // Fix 38A REMOVED (Rule 9 violation — behavioral override in agenticChat.js)
         // Model continuation is guided by preamble (constants.js), not forced session resets
+        // Code-dump nudge REMOVED — model should use tools via system prompt instructions,
+        // not via post-generation detection and forced re-generation.
 
         console.log('[AI Chat] No tool calls, ending agentic loop');
         break;
@@ -2689,6 +2574,21 @@ function register(ctx) {
 // ─────────────────────────────────────────────────────────
 
 /**
+ * Build file progress hint with structural digests.
+ * Module-level so it's accessible from both performAgenticChat and preGenerationContextCheck.
+ */
+function buildFileProgressHint(fileProgress) {
+  const keys = Object.keys(fileProgress || {});
+  if (keys.length === 0) return '';
+  const parts = keys.map(fp => {
+    const p = fileProgress[fp];
+    if (p.structureDigest) return '\n' + p.structureDigest;
+    return `\n- ${fp}: ${p.writtenLines} lines (${p.writtenChars} chars)`;
+  });
+  return '\n**FILE STRUCTURE ON DISK:**' + parts.join('');
+}
+
+/**
  * Select the best cloud provider based on available providers and task.
  */
 function selectCloudProvider(cloudLLM, message, context) {
@@ -2710,43 +2610,6 @@ function selectCloudProvider(cloudLLM, message, context) {
   if (has('openai')) return pick('openai', 'gpt-4o');
 
   return null;
-}
-
-/**
- * Guard against first-turn prompt overflow.
- */
-function guardFirstTurnOverflow(currentPrompt, totalCtx, estimateTokens, buildStaticPrompt, buildDynamicContext, maxPromptTokens, mcpToolServer, message) {
-  const text = (currentPrompt.systemContext || '') + (currentPrompt.userMessage || '');
-  const tokens = estimateTokens(text);
-  const headroom = totalCtx - tokens;
-
-  if (headroom >= Math.floor(totalCtx * 0.25)) return currentPrompt;
-
-  console.log(`[AI Chat] First-turn overflow guard: ~${tokens} tokens, ctx=${totalCtx}, headroom=${headroom}`);
-
-  // Step 1: Minimal dynamic context
-  let prompt = {
-    systemContext: buildStaticPrompt(),
-    userMessage: buildDynamicContext(Math.floor(maxPromptTokens * 0.10)) + message,
-  };
-  let retryTokens = estimateTokens((prompt.systemContext || '') + (prompt.userMessage || ''));
-
-  if (totalCtx - retryTokens < Math.floor(totalCtx * 0.15)) {
-    // Step 2: No dynamic context
-    prompt = { systemContext: buildStaticPrompt(), userMessage: message };
-    retryTokens = estimateTokens((prompt.systemContext || '') + (prompt.userMessage || ''));
-  }
-
-  if (totalCtx - retryTokens < Math.floor(totalCtx * 0.15)) {
-    // Step 3: Minimal tool hint
-    const minHint = mcpToolServer.getCompactToolHint('general', { minimal: true });
-    const preambleOnly = buildStaticPrompt('chat');
-    prompt = { systemContext: preambleOnly + '\n' + minHint + '\n', userMessage: message };
-    retryTokens = estimateTokens((prompt.systemContext || '') + (prompt.userMessage || ''));
-    console.log(`[AI Chat] Overflow step 3: minimal tools, ~${retryTokens} tokens`);
-  }
-
-  return prompt;
 }
 
 /**
@@ -2950,50 +2813,6 @@ async function executeNativeToolCalls(opts) {
             // Disk check failed — fall through to normal execution
           }
         }
-
-        const writeLimit = (continuationCount || 0) > 0 ? 3 : 4;
-        if (filePath && writeFileHistory[filePath]?.count >= writeLimit) {
-          // Auto-convert write_file → append_to_file: extract only new content
-          const newContent = call.params?.content || '';
-          let autoConverted = false;
-          if (newContent.length > 50) {
-            try {
-              const fs = require('fs');
-              const path = require('path');
-              const fullPath = path.resolve(mcpToolServer.projectPath || '.', filePath);
-              const existingContent = fs.existsSync(fullPath) ? fs.readFileSync(fullPath, 'utf-8') : '';
-              if (existingContent.length > 0) {
-                const existingLines = existingContent.split('\n');
-                const newLines = newContent.split('\n');
-                let matchedLines = 0;
-                for (let i = 0; i < Math.min(existingLines.length, newLines.length); i++) {
-                  if (existingLines[i].trimEnd() === newLines[i].trimEnd()) matchedLines++;
-                  else break;
-                }
-                if (matchedLines > 5 && newLines.length > existingLines.length) {
-                  const newSuffix = newLines.slice(matchedLines).join('\n');
-                  if (newSuffix.trim().length > 20) {
-                    console.log(`[AI Chat] Auto-convert write_file→append_to_file: "${filePath}" (${matchedLines}/${existingLines.length} lines overlap, appending ${newLines.length - matchedLines} new lines)`);
-                    const appendResult = await mcpToolServer.executeTool('append_to_file', { filePath, content: newSuffix });
-                    results.push({ tool: 'append_to_file', params: { filePath, content: '...(auto-converted from write_file)' }, result: appendResult });
-                    autoConverted = true;
-                  }
-                }
-                if (!autoConverted && matchedLines > existingLines.length * 0.5) {
-                  console.log(`[AI Chat] Auto-convert: "${filePath}" already complete (${matchedLines}/${existingLines.length} lines match, no new content)`);
-                  results.push({ tool: call.tool, params: call.params, result: { success: true, message: `File "${filePath}" is already written (${existingLines.length} lines). Move on to the next task.` } });
-                  autoConverted = true;
-                }
-              }
-            } catch (autoErr) {
-              console.warn(`[AI Chat] Auto-convert failed: ${autoErr.message}`);
-            }
-          }
-          if (!autoConverted) {
-            results.push({ tool: call.tool, params: call.params, result: { success: false, error: `BLOCKED: "${filePath}" already written ${writeFileHistory[filePath].count} times. Use append_to_file or edit_file instead.` } });
-          }
-          continue;
-        }
       }
 
       // Write deferral
@@ -3031,39 +2850,36 @@ function detectStuckCycle(recentToolCalls, newResults, mainWindow, _readConfig) 
   }
   if (recentToolCalls.length > 20) recentToolCalls.splice(0, recentToolCalls.length - 20);
 
-  // Stuck detection with tool-specific thresholds
-  // High thresholds — models legitimately repeat tools (especially after context rotation)
+  // Stuck detection — single threshold for all tools
   const last = recentToolCalls[recentToolCalls.length - 1];
-  const effectiveThreshold = BATCH_TOOLS.has(last?.tool) ? 15
-    : EXPLORATION_TOOLS.has(last?.tool) ? 6
-    : STUCK_THRESHOLD;
 
-  if (recentToolCalls.length >= effectiveThreshold) {
-    const tail = recentToolCalls.slice(-effectiveThreshold);
+  if (recentToolCalls.length >= STUCK_THRESHOLD) {
+    const tail = recentToolCalls.slice(-STUCK_THRESHOLD);
     // Always match on paramsHash — different params means different intent
     const isStuck = tail.every(tc => tc.tool === last.tool && tc.paramsHash === last.paramsHash);
 
     if (isStuck) {
-      console.log(`[AI Chat] Stuck: ${last.tool} ${effectiveThreshold}+ times`);
+      console.log(`[AI Chat] Stuck: ${last.tool} ${STUCK_THRESHOLD}+ times with same params`);
       if (mainWindow) mainWindow.webContents.send('llm-token', `\n\n*Detected loop (${last.tool}). Stopped.*`);
       return true;
     }
   }
 
-  // Cycle detection
+  // Cycle detection — uses tool+paramsHash signatures, not just tool names.
+  // Different params = different intent (e.g. read_file lines 1-50 vs 260-275).
   if (recentToolCalls.length >= 8) {
     for (let cycleLen = 2; cycleLen <= 4; cycleLen++) {
       if (recentToolCalls.length < cycleLen * CYCLE_MIN_REPEATS) continue;
-      const names = recentToolCalls.map(tc => tc.tool);
-      const lastCycle = names.slice(-cycleLen);
+      const sigs = recentToolCalls.map(tc => `${tc.tool}:${tc.paramsHash}`);
+      const lastCycle = sigs.slice(-cycleLen);
       let repeats = 0;
-      for (let pos = names.length - cycleLen; pos >= 0; pos -= cycleLen) {
-        const segment = names.slice(pos, pos + cycleLen);
+      for (let pos = sigs.length - cycleLen; pos >= 0; pos -= cycleLen) {
+        const segment = sigs.slice(pos, pos + cycleLen);
         if (segment.join(',') === lastCycle.join(',')) repeats++;
         else break;
       }
       if (repeats >= CYCLE_MIN_REPEATS) {
-        const sig = lastCycle.join(' → ');
+        const sig = recentToolCalls.slice(-cycleLen).map(tc => tc.tool).join(' → ');
         console.log(`[AI Chat] Cycle: [${sig}] ×${repeats}`);
         if (mainWindow) mainWindow.webContents.send('llm-token', `\n\n*Detected cycle (${sig}). Stopped.*`);
         return true;

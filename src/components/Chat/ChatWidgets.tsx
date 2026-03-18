@@ -88,21 +88,22 @@ export const ThinkingBlock: React.FC<{ text: string; isLive?: boolean; segmentCo
   return (
     <div className="mb-0 overflow-hidden">
       <button
-        className="w-full flex items-center gap-0.5 py-0 text-[10px] text-[#d0d0d0] transition-colors leading-tight min-h-0"
+        className="w-full flex items-center gap-1 py-0.5 text-[10px] transition-colors leading-tight min-h-0"
+        style={{ color: 'var(--theme-foreground-muted)' }}
         onClick={() => setExpanded(!expanded)}
       >
-        <span className={`text-[8px] transition-transform duration-150 flex-shrink-0 ${expanded ? 'rotate-90' : ''}`}>▶</span>
-        <span className="text-white font-medium whitespace-nowrap flex-shrink-0">
+        <span className={`text-[8px] transition-transform duration-150 flex-shrink-0 ${expanded ? 'rotate-90' : ''}`} style={{ color: 'var(--theme-foreground-muted)' }}>▶</span>
+        <span className="font-medium whitespace-nowrap flex-shrink-0" style={{ color: 'var(--theme-foreground)' }}>
           <em>{label}</em>
         </span>
-        {count > 1 && <span className="text-[8px] bg-[#505050] text-[#d0d0d0] px-1 rounded-full flex-shrink-0">{count} steps</span>}
+        {count > 1 && <span className="text-[8px] px-1 rounded-full flex-shrink-0" style={{ backgroundColor: 'var(--theme-bg-tertiary)', color: 'var(--theme-foreground-muted)' }}>{count} steps</span>}
         {isLive
-          ? <Loader2 size={8} className="animate-spin text-white ml-auto flex-shrink-0" />
+          ? <Loader2 size={8} className="animate-spin ml-auto flex-shrink-0" style={{ color: 'var(--theme-foreground)' }} />
           : wasEverLiveRef.current && <Check size={9} className="text-[#4ec9b0] ml-auto flex-shrink-0" />
         }
       </button>
       {expanded && (
-        <div ref={contentRef} className="px-2 pb-1.5 text-[10px] text-[#b0b0b0] whitespace-pre-wrap leading-relaxed border-t border-[#3c3c3c] max-h-[180px] overflow-y-auto">
+        <div ref={contentRef} className="px-2 pb-1.5 text-[10px] whitespace-pre-wrap leading-relaxed max-h-[180px] overflow-y-auto" style={{ borderTop: '1px solid var(--theme-border)', color: 'var(--theme-foreground-muted)' }}>
           {text}
         </div>
       )}
@@ -196,27 +197,30 @@ export const MermaidDiagram: React.FC<{ code: string }> = ({ code }) => {
 
   if (error) {
     return (
-      <div className="bg-[#2d1515] border border-[#5a2020] rounded-md p-3 my-1.5">
-        <div className="text-[11px] text-[#f14c4c] mb-1">Mermaid diagram error</div>
-        <pre className="text-[11px] text-[#d4d4d4] font-mono whitespace-pre-wrap">{code}</pre>
-        <div className="text-[10px] text-[#858585] mt-1">{error}</div>
+      <div className="rounded-md p-3 my-1.5" style={{ backgroundColor: 'color-mix(in srgb, #f14c4c 8%, transparent)', border: '1px solid color-mix(in srgb, #f14c4c 25%, transparent)' }}>
+        <div className="text-[11px] text-[#f14c4c] mb-1 font-medium">Mermaid diagram error</div>
+        <pre className="text-[11px] font-mono whitespace-pre-wrap" style={{ color: 'var(--theme-foreground)' }}>{code}</pre>
+        <div className="text-[10px] mt-1" style={{ color: 'var(--theme-foreground-muted)' }}>{error}</div>
       </div>
     );
   }
 
   return (
-    <div className="bg-[#1e1e1e] border border-[#3c3c3c] rounded-md my-1.5 overflow-hidden">
-      <div className="flex items-center justify-between px-3 py-1 bg-[#252525] border-b border-[#3c3c3c]">
-        <span className="text-[11px] text-[#858585]">Mermaid Diagram</span>
+    <div className="rounded-md my-1.5 overflow-hidden" style={{ backgroundColor: 'var(--theme-bg)', border: '1px solid var(--theme-border)' }}>
+      <div className="flex items-center justify-between px-3 py-1.5" style={{ backgroundColor: 'var(--theme-bg-secondary)', borderBottom: '1px solid var(--theme-border)' }}>
+        <span className="text-[11px]" style={{ color: 'var(--theme-foreground-muted)' }}>Mermaid Diagram</span>
         <button
-          className="text-[10px] text-[#858585] hover:text-[#cccccc]"
+          className="text-[10px] px-2 py-0.5 rounded-md transition-colors"
+          style={{ color: 'var(--theme-foreground-muted)' }}
           onClick={() => setShowSource(!showSource)}
+          onMouseEnter={e => { e.currentTarget.style.color = 'var(--theme-foreground)'; e.currentTarget.style.backgroundColor = 'var(--theme-selection)'; }}
+          onMouseLeave={e => { e.currentTarget.style.color = 'var(--theme-foreground-muted)'; e.currentTarget.style.backgroundColor = 'transparent'; }}
         >
           {showSource ? 'Hide Source' : 'Show Source'}
         </button>
       </div>
       {showSource && (
-        <pre className="text-[11px] text-[#d4d4d4] font-mono p-3 border-b border-[#3c3c3c] whitespace-pre-wrap">{code}</pre>
+        <pre className="text-[11px] font-mono p-3 whitespace-pre-wrap" style={{ color: 'var(--theme-foreground)', borderBottom: '1px solid var(--theme-border)' }}>{code}</pre>
       )}
       {svg ? (
         <div
@@ -225,7 +229,7 @@ export const MermaidDiagram: React.FC<{ code: string }> = ({ code }) => {
           dangerouslySetInnerHTML={{ __html: sanitizeSVG(svg) }}
         />
       ) : (
-        <div className="p-3 text-center text-[12px] text-[#858585]">Rendering diagram...</div>
+        <div className="p-3 text-center text-[12px]" style={{ color: 'var(--theme-foreground-muted)' }}>Rendering diagram...</div>
       )}
     </div>
   );
@@ -237,28 +241,35 @@ export const CollapsibleToolBlock: React.FC<{ label: string; icon?: string; chil
   const isOk = icon === '✓';
   const isFail = icon === '✗';
   const isRunning = icon === '>' || icon === '▸' || (!isOk && !isFail);
-  const iconColor = isOk ? 'text-[#89d185]' : isFail ? 'text-[#f14c4c]' : 'text-[#dcdcaa]';
   return (
-    <div className={`overflow-hidden rounded-sm ${_isGrouped ? 'my-0' : 'my-0.5'}`} style={{ borderLeft: '2px solid var(--theme-accent)', paddingLeft: '4px', backgroundColor: 'color-mix(in srgb, var(--theme-accent) 5%, transparent)' }}>
+    <div className={`overflow-hidden rounded ${_isGrouped ? 'my-0' : 'my-0.5'}`}
+      style={{
+        borderLeft: `2px solid ${isOk ? '#89d185' : isFail ? '#f14c4c' : 'var(--theme-accent)'}`,
+        backgroundColor: 'color-mix(in srgb, var(--theme-bg-secondary) 80%, transparent)',
+      }}
+    >
       <button
-        className="w-full flex items-center gap-1 py-0.5 text-[11px] text-[#d0d0d0] transition-colors leading-snug min-h-0"
+        className="w-full flex items-center gap-1.5 px-2 py-[3px] text-[10px] transition-colors leading-snug min-h-0"
+        style={{ color: 'var(--theme-foreground)' }}
         onClick={() => setOpen(!open)}
+        onMouseEnter={e => { e.currentTarget.style.backgroundColor = 'var(--theme-selection)'; }}
+        onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; }}
       >
-        <span className={`text-[8px] transition-transform duration-150 flex-shrink-0 ${open ? 'rotate-90' : ''}`}>▶</span>
+        <span className={`text-[8px] transition-transform duration-150 flex-shrink-0 ${open ? 'rotate-90' : ''}`} style={{ color: 'var(--theme-foreground-muted)' }}>▶</span>
         {isOk ? (
-          <Check size={9} className="text-[#89d185] flex-shrink-0" />
+          <Check size={11} className="text-[#89d185] flex-shrink-0" />
         ) : isFail ? (
-          <XIcon size={9} className="text-[#f14c4c] flex-shrink-0" />
+          <XIcon size={11} className="text-[#f14c4c] flex-shrink-0" />
         ) : (
-          <Loader2 size={8} className="animate-spin text-[#dcdcaa] flex-shrink-0" />
+          <Loader2 size={10} className="animate-spin text-[#dcdcaa] flex-shrink-0" />
         )}
-        <span className="text-[#d4d4d4] font-medium italic truncate">{label}</span>
+        <span className="font-medium truncate" style={{ color: 'var(--theme-foreground)' }}>{label}</span>
         {isRunning && !isOk && !isFail && (
-          <span className="ml-auto text-[9px] text-[#dcdcaa] animate-pulse flex-shrink-0">running</span>
+          <span className="ml-auto text-[9px] text-[#dcdcaa] animate-pulse flex-shrink-0 font-medium">running</span>
         )}
       </button>
       {open && (
-        <div className="pl-3 py-1.5 border-t border-[#3c3c3c] text-[10px] text-[#b0b0b0]">
+        <div className="pl-3 pr-2 py-1.5 text-[10px]" style={{ borderTop: '1px solid var(--theme-border)', color: 'var(--theme-foreground-muted)' }}>
           {children}
         </div>
       )}
@@ -266,7 +277,50 @@ export const CollapsibleToolBlock: React.FC<{ label: string; icon?: string; chil
   );
 };
 
-// ── Tool Call Group — flat container showing individual tool blocks ──
+// ── Stacked Tool Group — collapses consecutive identical tool calls into "tool x3" ──
+const StackedToolGroup: React.FC<{ toolName: string; children: React.ReactNode[]; count: number }> = ({ toolName, children, count }) => {
+  const [expanded, setExpanded] = useState(false);
+  const okCount = children.filter((c: any) => c?.props?.icon === '✓').length;
+  const failCount = children.filter((c: any) => c?.props?.icon === '✗').length;
+  const isAllOk = failCount === 0 && okCount === count;
+  const hasFail = failCount > 0;
+  return (
+    <div className="my-0">
+      <button
+        className="w-full flex items-center gap-1.5 px-2 py-[3px] text-[10px] transition-colors leading-snug min-h-0"
+        style={{ color: 'var(--theme-foreground)', borderLeft: `2px solid ${hasFail ? '#f14c4c' : isAllOk ? '#89d185' : 'var(--theme-accent)'}`, backgroundColor: 'color-mix(in srgb, var(--theme-bg-secondary) 80%, transparent)' }}
+        onClick={() => setExpanded(!expanded)}
+        onMouseEnter={e => { e.currentTarget.style.backgroundColor = 'var(--theme-selection)'; }}
+        onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'color-mix(in srgb, var(--theme-bg-secondary) 80%, transparent)'; }}
+      >
+        <span className={`text-[8px] transition-transform duration-150 flex-shrink-0 ${expanded ? 'rotate-90' : ''}`} style={{ color: 'var(--theme-foreground-muted)' }}>▶</span>
+        {isAllOk ? (
+          <Check size={11} className="text-[#89d185] flex-shrink-0" />
+        ) : hasFail ? (
+          <XIcon size={11} className="text-[#f14c4c] flex-shrink-0" />
+        ) : (
+          <Loader2 size={10} className="animate-spin text-[#dcdcaa] flex-shrink-0" />
+        )}
+        <span className="font-medium truncate" style={{ color: 'var(--theme-foreground)' }}>{toolName}</span>
+        <span className="ml-1 text-[9px] font-medium px-1 py-0 rounded flex-shrink-0"
+          style={{ backgroundColor: 'color-mix(in srgb, var(--theme-accent) 20%, transparent)', color: 'var(--theme-accent)' }}
+        >x{count}</span>
+      </button>
+      {expanded && (
+        <div className="pl-2 flex flex-col gap-0">
+          {children.map((child: any) => {
+            if (child?.type === CollapsibleToolBlock) {
+              return React.cloneElement(child, { _isGrouped: true });
+            }
+            return child;
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ── Tool Call Group — flat container showing individual tool blocks, stacks consecutive identical calls ──
 export const ToolCallGroup: React.FC<{ children: React.ReactNode; count: number }> = ({ children, count }) => {
   const childArray = React.Children.toArray(children);
   const okCount = childArray.filter((c: any) => c?.props?.icon === '✓').length;
@@ -281,30 +335,67 @@ export const ToolCallGroup: React.FC<{ children: React.ReactNode; count: number 
   if (failCount > 0) summaryParts.push(`${failCount} failed`);
   const summary = summaryParts.join(', ') || `${count} tools`;
 
+  // Group consecutive children with the same tool name for stacking
+  const groupedChildren: React.ReactNode[] = [];
+  let i = 0;
+  while (i < childArray.length) {
+    const child = childArray[i] as any;
+    // Extract tool name from label (format: "tool_name: detail [OK]" or "tool_name [OK]")
+    const label = child?.props?.label || '';
+    const toolName = label.split(':')[0].replace(/\s*\[(OK|FAIL)\]\s*$/, '').trim();
+    
+    if (toolName) {
+      // Count consecutive children with same tool name
+      let j = i + 1;
+      while (j < childArray.length) {
+        const nextChild = childArray[j] as any;
+        const nextLabel = nextChild?.props?.label || '';
+        const nextToolName = nextLabel.split(':')[0].replace(/\s*\[(OK|FAIL)\]\s*$/, '').trim();
+        if (nextToolName === toolName) j++;
+        else break;
+      }
+      const groupSize = j - i;
+      if (groupSize >= 2) {
+        const groupChildren = childArray.slice(i, j) as React.ReactNode[];
+        groupedChildren.push(
+          <StackedToolGroup key={`stack-${i}`} toolName={toolName} count={groupSize}>
+            {groupChildren}
+          </StackedToolGroup>
+        );
+        i = j;
+        continue;
+      }
+    }
+    // Single item — render normally
+    if (child?.type === CollapsibleToolBlock) {
+      groupedChildren.push(React.cloneElement(child, { _isGrouped: true }));
+    } else {
+      groupedChildren.push(child);
+    }
+    i++;
+  }
+
   return (
-    <div className="my-0.5 overflow-hidden">
-      <div className="flex items-center gap-1 py-0.5 text-[11px] text-[#d0d0d0] leading-snug min-h-0">
+    <div className="my-1 overflow-hidden rounded" style={{ border: '1px solid var(--theme-border)', backgroundColor: 'color-mix(in srgb, var(--theme-bg-secondary) 50%, transparent)' }}>
+      <div className="flex items-center gap-1.5 px-2 py-1 text-[10px] leading-snug min-h-0" style={{ borderBottom: '1px solid var(--theme-border)' }}>
         {isRunning ? (
-          <Loader2 size={12} className="text-[#dcdcaa] flex-shrink-0 animate-spin" />
+          <Loader2 size={11} className="text-[#dcdcaa] flex-shrink-0 animate-spin" />
         ) : (
-          <Wrench size={12} className={`flex-shrink-0 ${allOk ? 'text-[#89d185]' : hasFail ? 'text-[#f14c4c]' : 'text-[#dcdcaa]'}`} />
+          <Wrench size={11} className={`flex-shrink-0 ${allOk ? 'text-[#89d185]' : hasFail ? 'text-[#f14c4c]' : 'text-[#dcdcaa]'}`} />
         )}
         {isRunning ? (
-          <span className="text-[#d4d4d4] font-medium italic">{count} tool call{count !== 1 ? 's' : ''}<AnimatedDots /></span>
+          <span className="font-medium" style={{ color: 'var(--theme-foreground)' }}>{count} tool call{count !== 1 ? 's' : ''}<AnimatedDots /></span>
         ) : (
-          <span className="text-[#d4d4d4] font-medium italic">{count} tool call{count !== 1 ? 's' : ''}</span>
+          <span className="font-medium" style={{ color: 'var(--theme-foreground)' }}>{count} tool call{count !== 1 ? 's' : ''}</span>
         )}
         {!isRunning && (
-          <span className={`ml-auto text-[9px] flex-shrink-0 ${hasFail ? 'text-[#f14c4c]' : allOk ? 'text-[#89d185]' : 'text-[#dcdcaa]'}`}>{summary}</span>
+          <span className={`ml-auto text-[10px] font-medium flex-shrink-0 px-1.5 py-0.5 rounded ${hasFail ? 'text-[#f14c4c]' : allOk ? 'text-[#89d185]' : 'text-[#dcdcaa]'}`}
+            style={{ backgroundColor: hasFail ? 'color-mix(in srgb, #f14c4c 10%, transparent)' : allOk ? 'color-mix(in srgb, #89d185 10%, transparent)' : 'transparent' }}
+          >{summary}</span>
         )}
       </div>
-      <div className="pl-3 py-1 flex flex-col gap-0">
-        {React.Children.map(children, (child: any) => {
-          if (child?.type === CollapsibleToolBlock) {
-            return React.cloneElement(child, { _isGrouped: true });
-          }
-          return child;
-        })}
+      <div className="px-1.5 py-1 flex flex-col gap-0">
+        {groupedChildren}
       </div>
     </div>
   );
@@ -331,33 +422,39 @@ export const CodeBlock: React.FC<{ code: string; language: string; onApply: () =
   const displayCode = expanded ? code : code.split('\n').slice(0, COLLAPSE_LINE_THRESHOLD).join('\n');
 
   return (
-    <div className="mt-2 mb-6 rounded-lg overflow-hidden border border-[#3c3c3c]">
-      <div className="flex items-center justify-between px-3 py-1.5 bg-[#262626] border-b border-[#3c3c3c]">
+    <div className="mt-1.5 mb-3 rounded-lg overflow-hidden" style={{ border: '1px solid var(--theme-border)' }}>
+      <div className="flex items-center justify-between px-2.5 py-1" style={{ backgroundColor: 'var(--theme-bg-secondary)', borderBottom: '1px solid var(--theme-border)' }}>
         <div className="flex items-center gap-2">
           <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded" style={{ backgroundColor: 'color-mix(in srgb, var(--theme-accent) 15%, transparent)', color: 'var(--theme-accent)' }}>{language || 'code'}</span>
           {(isLong || defaultCollapsed) && (
-            <span className="text-[9px] text-[#858585]">({lineCount} lines)</span>
+            <span className="text-[9px]" style={{ color: 'var(--theme-foreground-muted)' }}>({lineCount} lines)</span>
           )}
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-0.5">
           {(isLong || defaultCollapsed) && (
             <button
-              className="flex items-center gap-1 text-[10px] text-[#858585] hover:text-white px-1.5 py-0.5 rounded hover:bg-[#3c3c3c]"
+              className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-md transition-colors"
+              style={{ color: 'var(--theme-foreground-muted)' }}
               onClick={() => setExpanded(!expanded)}
+              onMouseEnter={e => { e.currentTarget.style.color = 'var(--theme-foreground)'; e.currentTarget.style.backgroundColor = 'var(--theme-selection)'; }}
+              onMouseLeave={e => { e.currentTarget.style.color = 'var(--theme-foreground-muted)'; e.currentTarget.style.backgroundColor = 'transparent'; }}
             >
               {expanded ? '▼ Collapse' : '▶ Expand'}
             </button>
           )}
           <button
-            className="flex items-center gap-1 text-[10px] text-[#858585] hover:text-white px-1.5 py-0.5 rounded hover:bg-[#3c3c3c]"
+            className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-md transition-colors"
+            style={{ color: 'var(--theme-foreground-muted)' }}
             onClick={handleCopy}
+            onMouseEnter={e => { e.currentTarget.style.color = 'var(--theme-foreground)'; e.currentTarget.style.backgroundColor = 'var(--theme-selection)'; }}
+            onMouseLeave={e => { e.currentTarget.style.color = 'var(--theme-foreground-muted)'; e.currentTarget.style.backgroundColor = 'transparent'; }}
           >
             {copied ? <Check size={10} /> : <Copy size={10} />}
             {copied ? 'Copied' : 'Copy'}
           </button>
           {!isStreaming && (
             isAlreadyWritten ? (
-              <span className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 text-[#89d185]">
+              <span className="flex items-center gap-1 text-[10px] px-2 py-1 text-[#89d185] font-medium">
                 <Check size={10} />
                 Written
               </span>
@@ -365,20 +462,22 @@ export const CodeBlock: React.FC<{ code: string; language: string; onApply: () =
               <>
                 {onSaveAsFile && (
                   <button
-                    className="flex items-center gap-1 text-[10px] text-[#c586c0] hover:text-white px-1.5 py-0.5 rounded hover:bg-[#c586c0]"
+                    className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-md transition-all font-medium"
+                    style={{ color: '#c586c0' }}
                     onClick={() => onSaveAsFile(code, language)}
+                    onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#c586c0'; e.currentTarget.style.color = 'white'; }}
+                    onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#c586c0'; }}
                   >
                     <Save size={10} />
                     Save as File
                   </button>
                 )}
                 <button
-                  className={`flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded ${
-                    isToolCall 
-                      ? 'text-[#89d185] hover:text-white hover:bg-[#89d185]' 
-                      : 'text-[#007acc] hover:text-white hover:bg-[#007acc]'
-                  }`}
+                  className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-md transition-all font-medium"
+                  style={{ color: isToolCall ? '#89d185' : 'var(--theme-accent)' }}
                   onClick={onApply}
+                  onMouseEnter={e => { e.currentTarget.style.backgroundColor = isToolCall ? '#89d185' : 'var(--theme-accent)'; e.currentTarget.style.color = isToolCall ? '#1e1e1e' : 'white'; }}
+                  onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = isToolCall ? '#89d185' : 'var(--theme-accent)'; }}
                 >
                   <Play size={10} />
                   {isToolCall ? 'Run' : 'Apply'}
@@ -389,15 +488,16 @@ export const CodeBlock: React.FC<{ code: string; language: string; onApply: () =
         </div>
       </div>
       <div className="relative">
-        <pre className={`p-3 overflow-x-auto text-[12px] font-mono bg-[#1e1e1e] leading-relaxed ${!expanded ? 'max-h-[120px] overflow-hidden' : ''}`}>
-          <code>{displayCode}</code>
+        <pre className={`px-2.5 py-2 overflow-x-auto text-[12px] font-mono leading-relaxed ${!expanded ? 'max-h-[100px] overflow-hidden' : ''}`} style={{ backgroundColor: 'var(--theme-bg)' }}>
+          <code style={{ color: 'var(--theme-foreground)' }}>{displayCode}</code>
         </pre>
         {isLong && !expanded && (
           <div
-            className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-[#1e1e1e] to-transparent flex items-end justify-center pb-1 cursor-pointer"
+            className="absolute bottom-0 left-0 right-0 h-8 flex items-end justify-center pb-1 cursor-pointer"
+            style={{ background: 'linear-gradient(to top, var(--theme-bg), transparent)' }}
             onClick={() => setExpanded(true)}
           >
-            <span className="text-[10px] text-[#858585] hover:text-white bg-[#2d2d2d] px-3 py-0.5 rounded border border-[#3c3c3c]">
+            <span className="text-[10px] px-3 py-1 rounded-md font-medium transition-colors" style={{ color: 'var(--theme-foreground-muted)', backgroundColor: 'var(--theme-bg-secondary)', border: '1px solid var(--theme-border)' }}>
               Show all {lineCount} lines
             </span>
           </div>

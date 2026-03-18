@@ -384,12 +384,16 @@ pre.whitespace-pre-wrap {
     background: var(--theme-accent);
     cursor: pointer;
     border: 2px solid var(--theme-bg);
-    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.4);
     transition: transform 150ms ease, box-shadow 150ms ease;
   }
   input[type="range"].slider-styled::-webkit-slider-thumb:hover {
     transform: scale(1.15);
-    box-shadow: 0 0 6px rgba(0,122,204,0.4);
+    box-shadow: 0 0 0 4px rgba(0,122,204,0.15), 0 1px 4px rgba(0,0,0,0.35);
+  }
+  input[type="range"].slider-styled::-webkit-slider-thumb:active {
+    transform: scale(1.1);
+    box-shadow: 0 0 0 6px rgba(0,122,204,0.2), 0 1px 4px rgba(0,0,0,0.35);
   }
   input[type="range"].slider-styled::-moz-range-thumb {
     width: 14px;
@@ -398,7 +402,17 @@ pre.whitespace-pre-wrap {
     background: var(--theme-accent);
     cursor: pointer;
     border: 2px solid var(--theme-bg);
-    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+  }
+  input[type="range"].slider-styled::-moz-range-track {
+    height: 4px;
+    border-radius: 2px;
+    background: var(--theme-bg-tertiary);
+  }
+  input[type="range"].slider-styled::-moz-range-progress {
+    height: 4px;
+    border-radius: 2px;
+    background: var(--theme-accent);
   }
 
   /* ── Custom Number Input ── */

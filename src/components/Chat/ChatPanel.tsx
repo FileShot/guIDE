@@ -118,7 +118,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   const [pendingFileChanges, setPendingFileChanges] = useState<{ filePath: string; fileName: string; timestamp: number; tool: string; isNew: boolean; linesAdded?: number; linesRemoved?: number }[]>([]);
   const [checkpoints, setCheckpoints] = useState<Map<string, CheckpointData>>(new Map());
   const [restoringCheckpoint, setRestoringCheckpoint] = useState<string | null>(null);
-  const [fileChangesExpanded, setFileChangesExpanded] = useState(true);
+  const [fileChangesExpanded, setFileChangesExpanded] = useState(false);
   const [attachedImages, setAttachedImages] = useState<AttachedImage[]>([]);
   const [attachedFiles, setAttachedFiles] = useState<{ name: string; path: string; content: string }[]>([]);
   const [contextUsage, setContextUsage] = useState<{ used: number; total: number; model: string } | null>(null);
@@ -2337,98 +2337,99 @@ ${e.message}`,
     <div className="h-full flex flex-col overflow-hidden relative" style={{ backgroundColor: 'var(--theme-bg)' }}>
       {/* Header — pr-[140px] reserves space for Electron window controls (min/max/close) */}
       <div
-        className="h-[35px] flex items-center px-3 pr-[140px] flex-shrink-0"
+        className="h-[38px] flex items-center px-3 pr-[140px] flex-shrink-0"
         style={{ backgroundColor: 'var(--theme-bg-secondary)', borderBottom: '1px solid var(--theme-border)' }}
       >
-        <Sparkles size={13} className="mr-2 flex-shrink-0" style={{ color: 'var(--theme-accent)' }} />
-        <span className="text-[12px] font-semibold whitespace-nowrap brand-font" style={{ color: 'var(--theme-foreground)' }}>gu<span style={{ color: 'var(--theme-accent)' }}>IDE</span> <span className="font-sans font-semibold">AI</span></span>
+        <Sparkles size={14} className="mr-2 flex-shrink-0" style={{ color: 'var(--theme-accent)' }} />
+        <span className="text-[12px] font-semibold whitespace-nowrap brand-font" style={{ color: 'var(--theme-foreground)' }}>gu<span style={{ color: 'var(--theme-accent)' }}>IDE</span> <span className="font-sans font-medium" style={{ color: 'var(--theme-foreground-muted)' }}>AI</span></span>
         <div className="flex-1 min-w-0" />
-        <div className="flex items-center gap-0.5 flex-shrink-0 chat-header-buttons">
+        {/* Action buttons — grouped with even spacing */}
+        <div className="flex items-center gap-1 flex-shrink-0 chat-header-buttons">
 
           <button
-            className="p-1 rounded transition-colors"
+            className="w-[26px] h-[26px] flex items-center justify-center rounded-md transition-colors"
             style={{ color: ttsEnabled ? 'var(--theme-accent)' : 'var(--theme-foreground-subtle)', backgroundColor: ttsEnabled ? 'color-mix(in srgb, var(--theme-accent) 12%, transparent)' : 'transparent' }}
             onClick={() => { setTtsEnabled(!ttsEnabled); if (isSpeaking) stopSpeaking(); }}
             title={ttsEnabled ? 'TTS On (click to disable)' : 'TTS Off (click to enable)'}
             aria-label={ttsEnabled ? 'Disable text-to-speech' : 'Enable text-to-speech'}
             aria-pressed={ttsEnabled}
-            onMouseEnter={e => { if (!ttsEnabled) e.currentTarget.style.color = 'var(--theme-foreground)'; e.currentTarget.style.backgroundColor = 'var(--theme-bg-tertiary)'; }}
+            onMouseEnter={e => { if (!ttsEnabled) e.currentTarget.style.color = 'var(--theme-foreground)'; e.currentTarget.style.backgroundColor = 'var(--theme-selection)'; }}
             onMouseLeave={e => { if (!ttsEnabled) e.currentTarget.style.color = 'var(--theme-foreground-subtle)'; e.currentTarget.style.backgroundColor = ttsEnabled ? 'color-mix(in srgb, var(--theme-accent) 12%, transparent)' : 'transparent'; }}
           >
-            {ttsEnabled ? <Volume2 size={13} /> : <VolumeX size={13} />}
+            {ttsEnabled ? <Volume2 size={14} /> : <VolumeX size={14} />}
           </button>
 
           <button
-            className="p-1 rounded transition-colors"
+            className="w-[26px] h-[26px] flex items-center justify-center rounded-md transition-colors"
             style={{ color: 'var(--theme-foreground-subtle)' }}
             onClick={() => setShowSettings(!showSettings)}
             title="API Keys &amp; License"
             aria-label="API Keys and License"
             aria-expanded={showSettings}
-            onMouseEnter={e => { e.currentTarget.style.color = 'var(--theme-foreground)'; e.currentTarget.style.backgroundColor = 'var(--theme-bg-tertiary)'; }}
+            onMouseEnter={e => { e.currentTarget.style.color = 'var(--theme-foreground)'; e.currentTarget.style.backgroundColor = 'var(--theme-selection)'; }}
             onMouseLeave={e => { e.currentTarget.style.color = 'var(--theme-foreground-subtle)'; e.currentTarget.style.backgroundColor = 'transparent'; }}
           >
-            <Key size={13} />
+            <Key size={14} />
           </button>
           <button
-            className="p-1 rounded transition-colors"
+            className="w-[26px] h-[26px] flex items-center justify-center rounded-md transition-colors"
             style={{ color: showDevConsole ? 'var(--theme-accent)' : 'var(--theme-foreground-subtle)', backgroundColor: showDevConsole ? 'color-mix(in srgb, var(--theme-accent) 12%, transparent)' : 'transparent' }}
             onClick={() => { const next = !showDevConsole; setShowDevConsole(next); showDevConsoleRef.current = next; if (next) setDevLogs([...devLogsRef.current]); }}
             title="Developer Console — view backend logs"
             aria-label="Developer console"
             aria-expanded={showDevConsole}
-            onMouseEnter={e => { if (!showDevConsole) e.currentTarget.style.color = 'var(--theme-foreground)'; e.currentTarget.style.backgroundColor = 'var(--theme-bg-tertiary)'; }}
+            onMouseEnter={e => { if (!showDevConsole) e.currentTarget.style.color = 'var(--theme-foreground)'; e.currentTarget.style.backgroundColor = 'var(--theme-selection)'; }}
             onMouseLeave={e => { if (!showDevConsole) e.currentTarget.style.color = 'var(--theme-foreground-subtle)'; e.currentTarget.style.backgroundColor = showDevConsole ? 'color-mix(in srgb, var(--theme-accent) 12%, transparent)' : 'transparent'; }}
           >
-            <Terminal size={13} />
+            <Terminal size={14} />
           </button>
           <button
-            className="p-1 rounded transition-colors"
+            className="w-[26px] h-[26px] flex items-center justify-center rounded-md transition-colors"
             style={{ color: 'var(--theme-foreground-subtle)' }}
             onClick={clearChat}
             title="New Conversation"
             aria-label="New conversation"
-            onMouseEnter={e => { e.currentTarget.style.color = 'var(--theme-foreground)'; e.currentTarget.style.backgroundColor = 'var(--theme-bg-tertiary)'; }}
+            onMouseEnter={e => { e.currentTarget.style.color = 'var(--theme-foreground)'; e.currentTarget.style.backgroundColor = 'var(--theme-selection)'; }}
             onMouseLeave={e => { e.currentTarget.style.color = 'var(--theme-foreground-subtle)'; e.currentTarget.style.backgroundColor = 'transparent'; }}
           >
-            <Plus size={13} />
+            <Plus size={14} />
           </button>
           <button
-            className="p-1 rounded transition-colors"
+            className="w-[26px] h-[26px] flex items-center justify-center rounded-md transition-colors"
             style={{ color: showHistory ? 'var(--theme-accent)' : 'var(--theme-foreground-subtle)', backgroundColor: showHistory ? 'color-mix(in srgb, var(--theme-accent) 12%, transparent)' : 'transparent' }}
             onClick={() => { setShowHistory(!showHistory); if (!showHistory) refreshSavedSessions(); }}
             title="Chat History"
             aria-label="Chat history"
             aria-expanded={showHistory}
-            onMouseEnter={e => { if (!showHistory) e.currentTarget.style.color = 'var(--theme-foreground)'; e.currentTarget.style.backgroundColor = 'var(--theme-bg-tertiary)'; }}
+            onMouseEnter={e => { if (!showHistory) e.currentTarget.style.color = 'var(--theme-foreground)'; e.currentTarget.style.backgroundColor = 'var(--theme-selection)'; }}
             onMouseLeave={e => { if (!showHistory) e.currentTarget.style.color = 'var(--theme-foreground-subtle)'; e.currentTarget.style.backgroundColor = showHistory ? 'color-mix(in srgb, var(--theme-accent) 12%, transparent)' : 'transparent'; }}
           >
-            <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M13.5 2H2.5C1.67 2 1 2.67 1 3.5v9C1 13.33 1.67 14 2.5 14h11c.83 0 1.5-.67 1.5-1.5v-9C15 2.67 14.33 2 13.5 2zM4 5h8v1H4V5zm0 3h8v1H4V8zm0 3h5v1H4v-1z"/></svg>
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M13.5 2H2.5C1.67 2 1 2.67 1 3.5v9C1 13.33 1.67 14 2.5 14h11c.83 0 1.5-.67 1.5-1.5v-9C15 2.67 14.33 2 13.5 2zM4 5h8v1H4V5zm0 3h8v1H4V8zm0 3h5v1H4v-1z"/></svg>
           </button>
           <button
-            className="p-1 rounded transition-colors"
+            className="w-[26px] h-[26px] flex items-center justify-center rounded-md transition-colors"
             style={{ color: 'var(--theme-foreground-subtle)' }}
             onClick={clearChat}
             title="Clear Chat History"
             aria-label="Clear chat"
-            onMouseEnter={e => { e.currentTarget.style.color = 'var(--theme-foreground)'; e.currentTarget.style.backgroundColor = 'var(--theme-bg-tertiary)'; }}
+            onMouseEnter={e => { e.currentTarget.style.color = 'var(--theme-foreground)'; e.currentTarget.style.backgroundColor = 'var(--theme-selection)'; }}
             onMouseLeave={e => { e.currentTarget.style.color = 'var(--theme-foreground-subtle)'; e.currentTarget.style.backgroundColor = 'transparent'; }}
           >
-            <Trash2 size={13} />
+            <Trash2 size={14} />
           </button>
 
-          <div style={{ width: 1, height: 14, backgroundColor: 'var(--theme-border)', margin: '0 2px' }} />
+          <div style={{ width: 1, height: 16, backgroundColor: 'var(--theme-border)', margin: '0 3px' }} />
 
           <button
-            className="p-1 rounded transition-colors"
+            className="w-[26px] h-[26px] flex items-center justify-center rounded-md transition-colors"
             style={{ color: 'var(--theme-foreground-subtle)' }}
             onClick={onClose}
             title="Close"
             aria-label="Close chat panel"
-            onMouseEnter={e => { e.currentTarget.style.color = 'var(--theme-foreground)'; e.currentTarget.style.backgroundColor = 'var(--theme-bg-tertiary)'; }}
+            onMouseEnter={e => { e.currentTarget.style.color = 'var(--theme-foreground)'; e.currentTarget.style.backgroundColor = 'var(--theme-selection)'; }}
             onMouseLeave={e => { e.currentTarget.style.color = 'var(--theme-foreground-subtle)'; e.currentTarget.style.backgroundColor = 'transparent'; }}
           >
-            <X size={13} />
+            <X size={14} />
           </button>
         </div>
       </div>
@@ -2465,30 +2466,36 @@ ${e.message}`,
       />
       {/* Session history panel */}
       {showHistory && (
-        <div className="px-3 py-2 border-b border-[#1e1e1e] flex-shrink-0 max-h-[200px] overflow-auto chat-dropdown-panel">
-          <p className="text-[10px] text-[#858585] mb-2 uppercase tracking-wider">Recent Sessions</p>
+        <div className="px-3 py-2.5 flex-shrink-0 max-h-[200px] overflow-auto chat-dropdown-panel" style={{ borderBottom: '1px solid var(--theme-border)', backgroundColor: 'var(--theme-bg-secondary)' }}>
+          <p className="text-[10px] mb-2 uppercase tracking-wider font-medium" style={{ color: 'var(--theme-foreground-muted)' }}>Recent Sessions</p>
           {savedSessions.length === 0 ? (
-            <p className="text-[11px] text-[#585858]">No saved sessions</p>
+            <p className="text-[11px]" style={{ color: 'var(--theme-foreground-muted)' }}>No saved sessions</p>
           ) : (
             savedSessions.map((session: any) => (
-              <div key={session.id} className="flex items-center gap-1 mb-0.5">
+              <div key={session.id} className="flex items-center gap-1 mb-1">
                 <button
-                  className="flex-1 text-left px-2 py-1.5 text-[11px] hover:bg-[#094771] rounded flex items-center gap-2"
+                  className="flex-1 text-left px-2.5 py-2 text-[11px] rounded-md flex items-center gap-2 transition-colors"
+                  style={{ backgroundColor: 'transparent' }}
                   onClick={() => loadSession(session)}
+                  onMouseEnter={e => { e.currentTarget.style.backgroundColor = 'var(--theme-selection)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; }}
                 >
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-[#cccccc]">{session.title}</div>
-                    <div className="text-[10px] text-[#858585]">
-                      {session.messages.length} messages • {new Date(session.timestamp).toLocaleDateString()}
+                    <div className="truncate" style={{ color: 'var(--theme-foreground)' }}>{session.title}</div>
+                    <div className="text-[10px] mt-0.5" style={{ color: 'var(--theme-foreground-muted)' }}>
+                      {session.messages.length} messages  {new Date(session.timestamp).toLocaleDateString()}
                     </div>
                   </div>
                 </button>
                 <button
-                  className="p-1 text-[#585858] hover:text-[#f44747] rounded flex-shrink-0"
+                  className="p-1.5 rounded-md flex-shrink-0 transition-colors"
                   title="Delete session"
+                  style={{ color: 'var(--theme-foreground-muted)' }}
                   onClick={(e) => { e.stopPropagation(); deleteSession(session.id); }}
+                  onMouseEnter={e => { e.currentTarget.style.color = '#f44747'; e.currentTarget.style.backgroundColor = 'color-mix(in srgb, #f44747 10%, transparent)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.color = 'var(--theme-foreground-muted)'; e.currentTarget.style.backgroundColor = 'transparent'; }}
                 >
-                  <X size={10} />
+                  <X size={12} />
                 </button>
               </div>
             ))
@@ -2835,8 +2842,8 @@ ${e.message}`,
             // Last virtual item is the streaming indicator when generating
             if (index === messages.length && isGenerating) {
               return (
-                <div className="px-3 py-1.5">
-                  <div className="text-[13px] text-[#cccccc]">
+                <div className="px-3 py-2">
+                  <div className="text-[13px]" style={{ color: 'var(--theme-foreground)' }}>
                     {thinkingSegments.filter(s => s.trim()).length > 0 && (() => {
                       const segs = thinkingSegments.filter(s => s.trim());
                       const combined = segs.join('\n\n');
@@ -2848,8 +2855,8 @@ ${e.message}`,
                       null
                     ) : (
                       <div className="flex items-center gap-2">
-                        <Loader2 size={14} className="animate-spin text-[#007acc]" />
-                        <span className="text-[#858585]">
+                        <Loader2 size={14} className="animate-spin" style={{ color: 'var(--theme-accent)' }} />
+                        <span style={{ color: 'var(--theme-foreground-muted)' }}>
                           {generationStuck ? 'Generation may be stuck...' : thinkingSegments.some(s => s.trim()) ? 'Reasoning...' : 'Waiting for response...'}
                         </span>
                         {generationStuck && (
@@ -2863,7 +2870,8 @@ ${e.message}`,
                               setAgenticPhases([]);
                               setGenerationStuck(false);
                             }}
-                            className="ml-2 px-2 py-0.5 bg-red-600/30 hover:bg-red-600/50 text-red-300 rounded text-[10px]"
+                            className="ml-2 px-2.5 py-1 rounded-md text-[10px] font-medium transition-all"
+                            style={{ backgroundColor: 'color-mix(in srgb, #f44747 15%, transparent)', color: '#f44747', border: '1px solid color-mix(in srgb, #f44747 30%, transparent)' }}
                           >
                             Cancel
                           </button>
@@ -2871,15 +2879,15 @@ ${e.message}`,
                       </div>
                     )}
                     {agenticPhases.filter(p => p.phase !== 'generating-summary').length > 0 && (
-                      <div className="mt-2 space-y-0.5">
+                      <div className="mt-2 space-y-1">
                         {agenticPhases.filter(p => p.phase !== 'generating-summary').map((p) => (
                           <div key={p.phase} className="flex items-center gap-1.5">
                             {p.status === 'done' ? (
                               <Check size={11} className="text-[#4ec9b0] shrink-0" />
                             ) : (
-                              <Loader2 size={11} className="animate-spin text-[#007acc] shrink-0" />
+                              <Loader2 size={11} className="animate-spin shrink-0" style={{ color: 'var(--theme-accent)' }} />
                             )}
-                            <span className={`text-[10px] font-mono ${p.status === 'done' ? 'text-[#555]' : 'text-[#858585]'}`}>
+                            <span className={`text-[10px] font-mono`} style={{ color: p.status === 'done' ? 'var(--theme-foreground-muted)' : 'var(--theme-foreground)' }}>
                               {p.label}
                             </span>
                           </div>
@@ -2887,17 +2895,17 @@ ${e.message}`,
                       </div>
                     )}
                     {agenticProgress && agenticProgress.iteration > 1 && (
-                      <div className="mt-1 text-[10px] text-[#555] text-right">
+                      <div className="mt-1 text-[10px] text-right" style={{ color: 'var(--theme-foreground-muted)' }}>
                         Step {agenticProgress.iteration}
                       </div>
                     )}
                     {imageGenProgress && (
                       <div className="mt-2">
-                        <div className="text-[11px] text-[#858585] mb-1 flex items-center gap-2">
+                        <div className="text-[11px] mb-1 flex items-center gap-2" style={{ color: 'var(--theme-foreground-muted)' }}>
                           <ImageIcon size={11} className="text-[#c586c0]" />
-                          Generating image… step {imageGenProgress.current}/{imageGenProgress.total}
+                          Generating image... step {imageGenProgress.current}/{imageGenProgress.total}
                         </div>
-                        <div className="h-1 bg-[#3c3c3c] rounded-full overflow-hidden">
+                        <div className="h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--theme-bg-secondary)' }}>
                           <div
                             className="h-full bg-[#c586c0] rounded-full transition-all duration-300"
                             style={{ width: `${Math.round((imageGenProgress.current / imageGenProgress.total) * 100)}%` }}
@@ -2997,8 +3005,8 @@ ${e.message}`,
                         }
 
                         return (
-                          <div key={`file-${fp}`} className="mt-2">
-                            <div className="flex items-center gap-1.5 mb-1 px-0.5">
+                          <div key={`file-${fp}`} className="mt-1">
+                            <div className="flex items-center gap-1 mb-0.5 px-0.5">
                               {isDone ? (
                                 isOk ? <Check size={11} className="text-[#89d185] flex-shrink-0" /> : <X size={11} className="text-[#f14c4c] flex-shrink-0" />
                               ) : (
@@ -3012,9 +3020,9 @@ ${e.message}`,
                             {fullContent ? (
                               <CodeBlock code={fullContent} language={lang} onApply={isDone ? () => onApplyCode(currentFile, fullContent) : () => {}} isToolCall={true} defaultCollapsed={!isDone} />
                             ) : (
-                              <div className="flex items-center gap-2 px-2 py-1.5 bg-[#1e1e1e] rounded-md">
-                                <Loader2 size={10} className="animate-spin text-[#007acc]" />
-                                <span className="text-[11px] text-[#858585]">Creating {fname}<span className="animate-pulse">...</span></span>
+                              <div className="flex items-center gap-1.5 px-2 py-1 rounded" style={{ backgroundColor: 'var(--theme-bg-secondary)' }}>
+                                <Loader2 size={9} className="animate-spin" style={{ color: 'var(--theme-accent)' }} />
+                                <span className="text-[10px]" style={{ color: 'var(--theme-foreground-muted)' }}>Creating {fname}<span className="animate-pulse">...</span></span>
                               </div>
                             )}
                           </div>
@@ -3032,7 +3040,7 @@ ${e.message}`,
                         <>
                           {fileBlocks}
                           {nonWriteGenTools.length > 0 && (
-                            <div className="mt-2">
+                            <div className="mt-1">
                               <ToolCallGroup count={nonWriteGenTools.length}>
                                 {nonWriteGenTools.map((tc) => {
                                   let partialDetail = '';
@@ -3053,9 +3061,9 @@ ${e.message}`,
                                   return (
                                     <CollapsibleToolBlock key={`gen-${tc.callIndex}`} label={genLabel} icon="⧗">
                                       <div>
-                                        <div className="flex items-center gap-2 mb-2">
-                                          <Loader2 size={12} className="animate-spin text-[#007acc]" />
-                                          <span className="text-[11px] text-[#858585]">Generating tool call...</span>
+                                        <div className="flex items-center gap-1.5 mb-1">
+                                          <Loader2 size={10} className="animate-spin" style={{ color: 'var(--theme-accent)' }} />
+                                          <span className="text-[10px]" style={{ color: 'var(--theme-foreground-muted)' }}>Generating tool call...</span>
                                         </div>
                                         {tc.paramsText && (
                                           <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2 max-h-[180px] overflow-y-auto">{tc.paramsText}</pre>
@@ -3068,7 +3076,7 @@ ${e.message}`,
                             </div>
                           )}
                           {(nonWriteDone.length > 0 || nonWriteExec.length > 0) && (
-                            <div className="mt-2">
+                            <div className="mt-1">
                               <ToolCallGroup count={nonWriteDone.length + nonWriteExec.length}>
                                 {nonWriteDone.map((toolData, i) => {
                                   const rdResult = (toolData as any).result;
@@ -3095,13 +3103,13 @@ ${e.message}`,
                                   <CollapsibleToolBlock key={`exec-${i}`} label={getToolLabel(toolData, 'running')} icon="⟳">
                                     <div>
                                       <div className="flex items-center gap-2 mb-2">
-                                        <Loader2 size={12} className="animate-spin text-[#007acc]" />
-                                        <span className="text-[11px] text-[#858585]">Executing...</span>
+                                        <Loader2 size={12} className="animate-spin" style={{ color: 'var(--theme-accent)' }} />
+                                        <span className="text-[11px]" style={{ color: 'var(--theme-foreground-muted)' }}>Executing...</span>
                                       </div>
                                       {toolData.params && Object.keys(toolData.params).length > 0 ? (
                                         <>
-                                          <div className="text-[10px] text-[#858585] mb-1 font-medium tracking-wide">PARAMETERS</div>
-                                          <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2">{JSON.stringify(toolData.params, null, 2)}</pre>
+                                          <div className="text-[10px] mb-1 font-medium tracking-wide" style={{ color: 'var(--theme-foreground-muted)' }}>PARAMETERS</div>
+                                          <pre className="whitespace-pre-wrap text-[11px] font-mono rounded-md p-2" style={{ color: 'var(--theme-foreground)', backgroundColor: 'var(--theme-bg)' }}>{JSON.stringify(toolData.params, null, 2)}</pre>
                                         </>
                                       ) : null}
                                     </div>
@@ -3126,12 +3134,12 @@ ${e.message}`,
                 <div
                   className={`text-[13px] leading-relaxed overflow-hidden break-words ${
                     msg.role === 'user'
-                      ? 'max-w-[85%] rounded-2xl rounded-br-sm px-3.5 py-2.5'
+                      ? 'max-w-[85%] rounded-2xl rounded-br-sm px-3 py-2'
                       : msg.role === 'system' && msg.isError
-                      ? 'w-full rounded-lg px-3 py-2.5'
+                      ? 'w-full rounded-lg px-2.5 py-1.5'
                       : msg.role === 'system'
-                      ? 'w-full text-center rounded-lg px-3 py-2'
-                      : 'w-full py-1'
+                      ? 'w-full text-center rounded-lg px-2.5 py-1.5'
+                      : 'w-full px-1'
                   }`}
                   style={
                     msg.role === 'user'
@@ -3246,9 +3254,9 @@ ${e.message}`,
                     </>
                   )}
                   {msg.role === 'assistant' && (
-                    <div className="flex items-center gap-2 mt-2 pt-1.5 border-t border-[#3c3c3c]">
-                      {msg.model && <span className="text-[10px] text-[#858585]">{msg.model}</span>}
-                      {msg.webSearchUsed && <Globe size={10} className="text-[#007acc]" />}
+                    <div className="flex items-center gap-2 mt-2 pt-1.5" style={{ borderTop: '1px solid var(--theme-border)' }}>
+                      {msg.model && <span className="text-[10px]" style={{ color: 'var(--theme-foreground-muted)' }}>{msg.model}</span>}
+                      {msg.webSearchUsed && <Globe size={10} className="text-[#3794ff]" />}
                       {msg.ragUsed && <Brain size={10} className="text-[#89d185]" />}
                     </div>
                   )}
@@ -3290,21 +3298,30 @@ ${e.message}`,
 
       {/* Context indicator */}
       {(currentFile || selectedText) && (
-        <div className="px-3 py-1 border-t border-[#1e1e1e] flex items-center gap-2 flex-shrink-0">
+        <div className="px-2.5 py-1 flex items-center gap-1.5 flex-shrink-0" style={{ borderTop: '1px solid var(--theme-border)' }}>
           {currentFile && (
-            <span className="text-[10px] text-[#858585] bg-[#3c3c3c] px-1.5 py-0.5 rounded truncate max-w-[200px] inline-flex items-center gap-1 group">
+            <span className="text-[10px] px-2 py-1 rounded-md truncate max-w-[200px] inline-flex items-center gap-1.5 group font-medium"
+              style={{ color: 'var(--theme-foreground-muted)', backgroundColor: 'var(--theme-bg-secondary)', border: '1px solid var(--theme-border)' }}
+            >
               {currentFile.split(/[/\\]/).pop()}
               {onClearCurrentFile && (
                 <button
-                  className="text-[#858585] hover:text-[#f44747] text-[10px] opacity-0 group-hover:opacity-100 transition-opacity leading-none"
+                  className="text-[10px] opacity-0 group-hover:opacity-100 transition-opacity leading-none"
+                  style={{ color: 'var(--theme-foreground-muted)' }}
                   onClick={onClearCurrentFile}
                   title="Remove file context"
-                >✕</button>
+                  onMouseEnter={e => { e.currentTarget.style.color = '#f44747'; }}
+                  onMouseLeave={e => { e.currentTarget.style.color = 'var(--theme-foreground-muted)'; }}
+                >
+                  <X size={10} />
+                </button>
               )}
             </span>
           )}
           {selectedText && (
-            <span className="text-[10px] text-[#858585] bg-[#3c3c3c] px-1.5 py-0.5 rounded">
+            <span className="text-[10px] px-2 py-1 rounded-md font-medium"
+              style={{ color: 'var(--theme-foreground-muted)', backgroundColor: 'var(--theme-bg-secondary)', border: '1px solid var(--theme-border)' }}
+            >
               Selection ({selectedText.length} chars)
             </span>
           )}
@@ -3313,22 +3330,25 @@ ${e.message}`,
 
       {/* Pending file changes — Keep / Undo bar */}
       {pendingFileChanges.length > 0 && (
-        <div className="px-3 py-1.5 border-t border-[#1e1e1e] flex-shrink-0 bg-[#2d2d30]">
-          <div className="flex items-center gap-2 mb-1">
+        <div className="px-2.5 py-1 flex-shrink-0" style={{ borderTop: '1px solid var(--theme-border)', backgroundColor: 'var(--theme-bg-secondary)' }}>
+          <div className="flex items-center gap-1.5 mb-0.5">
             <button
-              className="flex items-center gap-1.5 text-[10px] text-[#dcdcaa] font-semibold hover:text-white"
+              className="flex items-center gap-1.5 text-[11px] font-medium transition-colors"
+              style={{ color: 'var(--theme-foreground)' }}
               onClick={() => setFileChangesExpanded(!fileChangesExpanded)}
               title={fileChangesExpanded ? 'Collapse file list' : 'Expand file list'}
+              onMouseEnter={e => { e.currentTarget.style.color = 'var(--theme-accent)'; }}
+              onMouseLeave={e => { e.currentTarget.style.color = 'var(--theme-foreground)'; }}
             >
-              <span style={{ display: 'inline-block', transform: fileChangesExpanded ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.15s', fontSize: '8px' }}>▶</span>
+              <span style={{ display: 'inline-block', transform: fileChangesExpanded ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.15s', fontSize: '9px', color: 'var(--theme-foreground-muted)' }}>▶</span>
               {pendingFileChanges.length} file{pendingFileChanges.length > 1 ? 's' : ''} changed
               {(() => {
                 const totalAdded = pendingFileChanges.reduce((sum, f) => sum + (f.linesAdded || 0), 0);
                 const totalRemoved = pendingFileChanges.reduce((sum, f) => sum + (f.linesRemoved || 0), 0);
                 return (totalAdded > 0 || totalRemoved > 0) ? (
-                  <span className="ml-1">
+                  <span className="ml-1.5 text-[10px] font-mono">
                     {totalAdded > 0 && <span className="text-[#89d185]">+{totalAdded}</span>}
-                    {totalAdded > 0 && totalRemoved > 0 && <span className="text-[#858585] mx-0.5">/</span>}
+                    {totalAdded > 0 && totalRemoved > 0 && <span style={{ color: 'var(--theme-foreground-muted)' }} className="mx-0.5">/</span>}
                     {totalRemoved > 0 && <span className="text-[#f44747]">-{totalRemoved}</span>}
                   </span>
                 ) : null;
@@ -3336,57 +3356,75 @@ ${e.message}`,
             </button>
             <div className="flex-1" />
             <button
-              className="text-[10px] px-2 py-0.5 rounded bg-[#89d185] text-[#1e1e1e] hover:bg-[#7bc275] font-medium"
+              className="text-[10px] px-2 py-0.5 rounded font-medium transition-all"
+              style={{ backgroundColor: 'color-mix(in srgb, #89d185 15%, transparent)', color: '#89d185', border: '1px solid color-mix(in srgb, #89d185 30%, transparent)' }}
               onClick={async () => {
                 await window.electronAPI?.fileAcceptChanges?.();
                 setPendingFileChanges([]);
               }}
               title="Accept all changes"
+              onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#89d185'; e.currentTarget.style.color = '#1e1e1e'; }}
+              onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'color-mix(in srgb, #89d185 15%, transparent)'; e.currentTarget.style.color = '#89d185'; }}
             >
               Keep
             </button>
             <button
-              className="text-[10px] px-2 py-0.5 rounded bg-[#f44747] text-white hover:bg-[#d43c3c] font-medium"
+              className="text-[10px] px-2 py-0.5 rounded font-medium transition-all"
+              style={{ backgroundColor: 'color-mix(in srgb, #f44747 15%, transparent)', color: '#f44747', border: '1px solid color-mix(in srgb, #f44747 30%, transparent)' }}
               onClick={async () => {
                 await window.electronAPI?.fileUndoAll?.();
                 setPendingFileChanges([]);
               }}
               title="Undo all changes"
+              onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#f44747'; e.currentTarget.style.color = 'white'; }}
+              onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'color-mix(in srgb, #f44747 15%, transparent)'; e.currentTarget.style.color = '#f44747'; }}
             >
               Undo
             </button>
           </div>
           {fileChangesExpanded && (
-            <div className="space-y-0.5 max-h-[120px] overflow-y-auto">
+            <div className="max-h-[100px] overflow-y-auto rounded p-1" style={{ backgroundColor: 'var(--theme-bg)' }}>
               {pendingFileChanges.map((f) => (
-                <div key={f.filePath} className="flex items-center gap-1.5 text-[10px] text-[#cccccc]">
-                  <span className={`${f.isNew ? 'text-[#89d185]' : 'text-[#dcdcaa]'} w-3 text-center`}>
+                <div key={f.filePath} className="flex items-center gap-1.5 text-[10px] px-1.5 py-[3px] rounded transition-colors" style={{ color: 'var(--theme-foreground)' }}
+                  onMouseEnter={e => { e.currentTarget.style.backgroundColor = 'var(--theme-selection)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+                >
+                  <span className={`${f.isNew ? 'text-[#89d185]' : 'text-[#dcdcaa]'} w-3 text-center font-mono text-[10px]`}>
                     {f.isNew ? '+' : '~'}
                   </span>
-                  <span className="truncate flex-1 cursor-pointer hover:underline hover:text-[#4fc1ff]" title={`Click to open ${f.filePath}`} onClick={() => onOpenFile?.(f.filePath)}>{f.fileName}</span>
+                  <span className="truncate flex-1 cursor-pointer" title={`Click to open ${f.filePath}`} onClick={() => onOpenFile?.(f.filePath)}
+                    onMouseEnter={e => { e.currentTarget.style.color = 'var(--theme-accent)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.color = 'var(--theme-foreground)'; }}
+                  >{f.fileName}</span>
                   {((f.linesAdded || 0) > 0 || (f.linesRemoved || 0) > 0) && (
-                    <span className="text-[9px] font-mono whitespace-nowrap">
+                    <span className="text-[9px] font-mono whitespace-nowrap opacity-70">
                       {(f.linesAdded || 0) > 0 && <span className="text-[#89d185]">+{f.linesAdded}</span>}
-                      {(f.linesAdded || 0) > 0 && (f.linesRemoved || 0) > 0 && <span className="text-[#858585] mx-0.5">/</span>}
+                      {(f.linesAdded || 0) > 0 && (f.linesRemoved || 0) > 0 && <span style={{ color: 'var(--theme-foreground-muted)' }} className="mx-0.5">/</span>}
                       {(f.linesRemoved || 0) > 0 && <span className="text-[#f44747]">-{f.linesRemoved}</span>}
                     </span>
                   )}
                   <button
-                    className="text-[#858585] hover:text-[#89d185] px-1"
+                    className="p-1 rounded transition-colors flex-shrink-0"
+                    style={{ color: 'var(--theme-foreground-muted)' }}
                     onClick={async () => {
                       await window.electronAPI?.fileAcceptChanges?.([f.filePath]);
                       refreshPendingChanges();
                     }}
                     title="Keep this change"
-                  ><Check size={11} /></button>
+                    onMouseEnter={e => { e.currentTarget.style.color = '#89d185'; }}
+                    onMouseLeave={e => { e.currentTarget.style.color = 'var(--theme-foreground-muted)'; }}
+                  ><Check size={12} /></button>
                   <button
-                    className="text-[#858585] hover:text-[#f44747] px-1"
+                    className="p-1 rounded transition-colors flex-shrink-0"
+                    style={{ color: 'var(--theme-foreground-muted)' }}
                     onClick={async () => {
                       await window.electronAPI?.fileUndo?.(f.filePath);
                       refreshPendingChanges();
                     }}
                     title="Undo this change"
-                  ><X size={11} /></button>
+                    onMouseEnter={e => { e.currentTarget.style.color = '#f44747'; }}
+                    onMouseLeave={e => { e.currentTarget.style.color = 'var(--theme-foreground-muted)'; }}
+                  ><X size={12} /></button>
                 </div>
               ))}
             </div>
@@ -3395,7 +3433,7 @@ ${e.message}`,
       )}
 
       {/* Input */}
-      <div className="px-3 py-2 flex-shrink-0" style={{ borderTop: '1px solid var(--theme-border)' }}>
+      <div className="px-2.5 py-1.5 flex-shrink-0" style={{ borderTop: '1px solid var(--theme-border)' }}>
         {/* Hidden file input for image selection */}
         <input
           ref={fileInputRef}
@@ -3414,48 +3452,57 @@ ${e.message}`,
         >
           {/* Attached image previews — inside the container */}
           {attachedImages.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 px-2.5 pt-2">
+            <div className="flex flex-wrap gap-2 px-2.5 pt-2.5">
               {attachedImages.map((img, i) => (
                 <div key={i} className="relative group">
                   <img
                     src={img.data}
                     alt={img.name}
-                    className="h-[40px] w-[40px] object-cover rounded border border-[#555]"
+                    className="h-[44px] w-[44px] object-cover rounded-md"
+                    style={{ border: '1px solid var(--theme-border)' }}
                   />
                   <button
-                    className="absolute -top-1 -right-1 bg-[#f44747] text-white rounded-full w-3.5 h-3.5 flex items-center justify-center text-[9px] opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="absolute -top-1.5 -right-1.5 bg-[#f44747] text-white rounded-full w-4 h-4 flex items-center justify-center text-[9px] opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
                     onClick={() => removeAttachedImage(i)}
                     title="Remove"
-                  >✕</button>
+                  >
+                    <X size={9} />
+                  </button>
                 </div>
               ))}
             </div>
           )}
           {/* Attached file context previews */}
           {attachedFiles.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 px-2.5 pt-2">
+            <div className="flex flex-wrap gap-1.5 px-2.5 pt-2.5">
               {attachedFiles.map((file, i) => (
-                <div key={i} className="relative group flex items-center gap-1 rounded px-2 py-1 border border-[#555]" style={{ backgroundColor: 'var(--theme-input-bg)' }}>
-                  <span className="text-[11px] text-[#cccccc] max-w-[120px] truncate">{file.name}</span>
+                <div key={i} className="relative group flex items-center gap-1.5 rounded-md px-2.5 py-1.5" style={{ backgroundColor: 'var(--theme-bg-secondary)', border: '1px solid var(--theme-border)' }}>
+                  <span className="text-[11px] max-w-[120px] truncate" style={{ color: 'var(--theme-foreground)' }}>{file.name}</span>
                   <button
-                    className="text-[#858585] hover:text-[#f44747] text-[10px] ml-0.5"
+                    className="text-[10px] ml-0.5 transition-colors"
+                    style={{ color: 'var(--theme-foreground-muted)' }}
                     onClick={() => setAttachedFiles(prev => prev.filter((_, j) => j !== i))}
                     title="Remove"
-                  >✕</button>
+                    onMouseEnter={e => { e.currentTarget.style.color = '#f44747'; }}
+                    onMouseLeave={e => { e.currentTarget.style.color = 'var(--theme-foreground-muted)'; }}
+                  >
+                    <X size={10} />
+                  </button>
                 </div>
               ))}
             </div>
           )}
           {/* Queued messages display */}
           {messageQueue.length > 0 && (
-            <div className="px-2.5 pt-1.5 flex flex-col gap-1">
+            <div className="px-2 pt-1.5 flex flex-col gap-0.5">
               {messageQueue.map((qMsg, i) => (
-                <div key={i} className="flex items-center gap-1.5 rounded px-2 py-1 text-[11px] group" style={{ backgroundColor: 'var(--theme-input-bg)' }}>
-                  <Clock size={10} className="text-[#dcdcaa] flex-shrink-0" />
-                  <span className="text-[#858585] flex-shrink-0">#{i + 1}</span>
+                <div key={i} className="flex items-center gap-1 rounded px-2 py-1 text-[10px] group" style={{ backgroundColor: 'var(--theme-bg-secondary)', border: '1px solid var(--theme-border)' }}>
+                  <Clock size={9} className="text-[#dcdcaa] flex-shrink-0" />
+                  <span className="flex-shrink-0" style={{ color: 'var(--theme-foreground-muted)' }}>#{i + 1}</span>
                   {editingQueueIndex === i ? (
                     <input
-                      className="flex-1 bg-[#1e1e1e] text-[#cccccc] text-[11px] px-1.5 py-0.5 rounded outline-none border border-[#007acc]"
+                      className="flex-1 text-[11px] px-2 py-0.5 rounded-md outline-none"
+                      style={{ backgroundColor: 'var(--theme-input-bg)', color: 'var(--theme-foreground)', border: '1px solid var(--theme-accent)' }}
                       value={editingQueueText}
                       onChange={e => setEditingQueueText(e.target.value)}
                       onKeyDown={e => {
@@ -3480,30 +3527,35 @@ ${e.message}`,
                     />
                   ) : (
                     <span
-                      className="flex-1 text-[#cccccc] truncate cursor-pointer hover:text-white"
+                      className="flex-1 truncate cursor-pointer transition-colors"
+                      style={{ color: 'var(--theme-foreground)' }}
                       onClick={() => { setEditingQueueIndex(i); setEditingQueueText(qMsg); }}
                       title="Click to edit"
+                      onMouseEnter={e => { e.currentTarget.style.color = 'var(--theme-accent)'; }}
+                      onMouseLeave={e => { e.currentTarget.style.color = 'var(--theme-foreground)'; }}
                     >{qMsg}</span>
                   )}
                   <button
-                    className="text-[#858585] hover:text-[#007acc] opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                    className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 p-1 rounded transition-colors"
+                    style={{ color: 'var(--theme-foreground-muted)' }}
                     onClick={() => {
-                      // Force-send: interrupt current generation and send this queued message immediately
                       const msg = messageQueue[i];
                       const updated = messageQueue.filter((_, idx) => idx !== i);
                       messageQueueRef.current = updated;
                       setMessageQueue(updated);
                       if (editingQueueIndex === i) setEditingQueueIndex(null);
-                      // Stop current generation and send immediately
                       window.electronAPI?.llmCancel?.();
                       setTimeout(() => sendMessageDirect(msg), 500);
                     }}
                     title="Force send now (interrupts current response)"
+                    onMouseEnter={e => { e.currentTarget.style.color = 'var(--theme-accent)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.color = 'var(--theme-foreground-muted)'; }}
                   >
-                    <Zap size={10} />
+                    <Zap size={11} />
                   </button>
                   <button
-                    className="text-[#858585] hover:text-[#f44747] opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                    className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 p-1 rounded transition-colors"
+                    style={{ color: 'var(--theme-foreground-muted)' }}
                     onClick={() => {
                       const updated = messageQueue.filter((_, idx) => idx !== i);
                       messageQueueRef.current = updated;
@@ -3511,8 +3563,10 @@ ${e.message}`,
                       if (editingQueueIndex === i) setEditingQueueIndex(null);
                     }}
                     title="Remove from queue"
+                    onMouseEnter={e => { e.currentTarget.style.color = '#f44747'; }}
+                    onMouseLeave={e => { e.currentTarget.style.color = 'var(--theme-foreground-muted)'; }}
                   >
-                    <X size={10} />
+                    <X size={11} />
                   </button>
                 </div>
               ))}
@@ -3520,7 +3574,7 @@ ${e.message}`,
           )}
           {/* Image mode indicator — shown when an image model is active */}
           {activeImageModel && (
-            <div className="flex items-center gap-2 px-3 py-1.5 border-t border-[#3c3c3c] bg-[#1e1e1e]">
+            <div className="flex items-center gap-1.5 px-2.5 py-1" style={{ borderTop: '1px solid var(--theme-border)', backgroundColor: 'color-mix(in srgb, #c586c0 8%, transparent)' }}>
               <svg width="12" height="12" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" className="flex-shrink-0 text-[#c586c0]">
                 <rect x="1" y="3" width="14" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.5"/>
                 <circle cx="5.5" cy="6.5" r="1" fill="currentColor"/>
@@ -3530,9 +3584,12 @@ ${e.message}`,
                 Image mode &mdash; {activeImageModel.name}
               </span>
               <button
-                className="flex-shrink-0 text-[#555] hover:text-[#cccccc] transition-colors"
+                className="flex-shrink-0 rounded-md p-1 transition-colors"
+                style={{ color: 'var(--theme-foreground-muted)' }}
                 onClick={() => setActiveImageModel(null)}
                 title="Exit image mode"
+                onMouseEnter={e => { e.currentTarget.style.color = 'var(--theme-foreground)'; e.currentTarget.style.backgroundColor = 'var(--theme-selection)'; }}
+                onMouseLeave={e => { e.currentTarget.style.color = 'var(--theme-foreground-muted)'; e.currentTarget.style.backgroundColor = 'transparent'; }}
               >
                 <X size={12} />
               </button>
@@ -3576,38 +3633,38 @@ ${e.message}`,
             }}
           />
           {/* Bottom toolbar row — icons left, send right */}
-          <div className="flex items-center justify-between px-2 pb-1.5 min-w-0 gap-1 overflow-hidden">
+          <div className="flex items-center justify-between px-2 pb-1.5 pt-0.5 min-w-0 gap-1 overflow-hidden">
             <div className="flex items-center gap-0.5 min-w-0 overflow-hidden flex-shrink flex-nowrap">
               <button
-                className="p-1 rounded transition-colors"
+                className="w-[24px] h-[24px] flex items-center justify-center rounded transition-colors"
                 style={{ color: 'var(--theme-foreground-subtle)' }}
                 onClick={() => fileInputRef.current?.click()}
                 title="Attach image"
-                onMouseEnter={e => { e.currentTarget.style.color = 'var(--theme-foreground)'; e.currentTarget.style.backgroundColor = 'var(--theme-bg-tertiary)'; }}
+                onMouseEnter={e => { e.currentTarget.style.color = 'var(--theme-foreground)'; e.currentTarget.style.backgroundColor = 'var(--theme-selection)'; }}
                 onMouseLeave={e => { e.currentTarget.style.color = 'var(--theme-foreground-subtle)'; e.currentTarget.style.backgroundColor = 'transparent'; }}
               >
-                <Paperclip size={14} />
+                <Paperclip size={13} />
               </button>
               {/* AI Improve button removed */}
               <button
-                className="p-1 rounded transition-colors"
+                className="w-[24px] h-[24px] flex items-center justify-center rounded transition-colors"
                 style={{ color: isListening ? '#f44747' : isTranscribing ? 'var(--theme-accent)' : 'var(--theme-foreground-subtle)' }}
                 onClick={toggleListening}
                 disabled={isTranscribing}
                 title={isListening ? 'Stop & transcribe' : isTranscribing ? 'Transcribing...' : 'Voice input'}
                 aria-label={isListening ? 'Stop recording' : 'Voice input'}
-                onMouseEnter={e => { if (!isListening && !isTranscribing) { e.currentTarget.style.color = 'var(--theme-foreground)'; e.currentTarget.style.backgroundColor = 'var(--theme-bg-tertiary)'; } }}
+                onMouseEnter={e => { if (!isListening && !isTranscribing) { e.currentTarget.style.color = 'var(--theme-foreground)'; e.currentTarget.style.backgroundColor = 'var(--theme-selection)'; } }}
                 onMouseLeave={e => { if (!isListening && !isTranscribing) { e.currentTarget.style.color = 'var(--theme-foreground-subtle)'; e.currentTarget.style.backgroundColor = 'transparent'; } }}
               >
-                {isTranscribing ? <Loader2 size={14} className="animate-spin" /> : isListening ? <MicOff size={14} /> : <Mic size={14} />}
+                {isTranscribing ? <Loader2 size={15} className="animate-spin" /> : isListening ? <MicOff size={15} /> : <Mic size={15} />}
               </button>
               {/* Audio wave animation when recording */}
               <AudioWaveAnimation isActive={isListening} />
               {/* Separator */}
-              <div className="w-px h-4 mx-0.5" style={{ backgroundColor: 'var(--theme-border)' }} />
-              {/* Auto Mode toggle — inline */}
+              <div className="w-px h-[14px] mx-0.5" style={{ backgroundColor: 'var(--theme-border)' }} />
+              {/* Auto Mode toggle — inline pill */}
               <button
-                className="flex items-center gap-0.5 text-[11px] px-1.5 py-0.5 rounded transition-colors"
+                className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded transition-all font-medium"
                 style={{
                   backgroundColor: autoMode ? 'var(--theme-accent)' : 'transparent',
                   color: autoMode ? 'var(--theme-bg)' : 'var(--theme-foreground-subtle)',
@@ -3616,17 +3673,15 @@ ${e.message}`,
                 title={autoMode ? 'Auto Mode ON — guIDE picks the best model per task' : 'Auto Mode OFF — Click to enable'}
                 aria-label={autoMode ? 'Disable auto mode' : 'Enable auto mode'}
                 aria-pressed={autoMode}
-                onMouseEnter={e => { if (!autoMode) { e.currentTarget.style.color = 'var(--theme-foreground)'; e.currentTarget.style.backgroundColor = 'var(--theme-bg-tertiary)'; } }}
+                onMouseEnter={e => { if (!autoMode) { e.currentTarget.style.color = 'var(--theme-foreground)'; e.currentTarget.style.backgroundColor = 'var(--theme-selection)'; } }}
                 onMouseLeave={e => { if (!autoMode) { e.currentTarget.style.color = 'var(--theme-foreground-subtle)'; e.currentTarget.style.backgroundColor = 'transparent'; } }}
               >
-                <Zap size={10} className={autoMode ? 'text-[#ffd700]' : ''} />
+                <Zap size={11} className={autoMode ? 'text-[#ffd700]' : ''} />
                 <span className="hidden sm:inline">Auto</span>
               </button>
-              {/* Auto/Plan separator */}
-              <div className="w-px h-3.5 flex-shrink-0 mx-0.5" style={{ backgroundColor: 'var(--theme-border)' }} />
-              {/* Plan Mode toggle — inline */}
+              {/* Plan Mode toggle — inline pill */}
               <button
-                className="flex items-center gap-0.5 text-[11px] px-1.5 py-0.5 rounded transition-colors"
+                className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded transition-all font-medium"
                 style={{
                   backgroundColor: planMode ? '#c586c0' : 'transparent',
                   color: planMode ? 'white' : 'var(--theme-foreground-subtle)',
@@ -3635,28 +3690,28 @@ ${e.message}`,
                 title={planMode ? 'Plan Mode ON — AI creates a plan before executing' : 'Plan Mode OFF — AI executes directly'}
                 aria-label={planMode ? 'Disable plan mode' : 'Enable plan mode'}
                 aria-pressed={planMode}
-                onMouseEnter={e => { if (!planMode) { e.currentTarget.style.color = 'var(--theme-foreground)'; e.currentTarget.style.backgroundColor = 'var(--theme-bg-tertiary)'; } }}
+                onMouseEnter={e => { if (!planMode) { e.currentTarget.style.color = 'var(--theme-foreground)'; e.currentTarget.style.backgroundColor = 'var(--theme-selection)'; } }}
                 onMouseLeave={e => { if (!planMode) { e.currentTarget.style.color = 'var(--theme-foreground-subtle)'; e.currentTarget.style.backgroundColor = 'transparent'; } }}
               >
-                <FileCode size={10} className={planMode ? 'text-white' : ''} />
+                <FileCode size={11} className={planMode ? 'text-white' : ''} />
                 <span className="hidden sm:inline">Plan</span>
               </button>
-              {/* Plan/Model separator */}
-              <div className="w-px h-3.5 flex-shrink-0 mx-0.5" style={{ backgroundColor: 'var(--theme-border)' }} />
+              {/* Separator */}
+              <div className="w-px h-[14px] mx-0.5" style={{ backgroundColor: 'var(--theme-border)' }} />
               {/* Model picker — inline */}
               <button
-                className="flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded transition-colors chat-dropdown-panel max-w-[120px]"
+                className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded transition-all chat-dropdown-panel max-w-[130px] font-medium"
                 style={{ color: 'var(--theme-foreground-subtle)' }}
                 onClick={() => setShowModelPicker(!showModelPicker)}
                 title="Change model"
                 aria-label="Change model"
                 aria-expanded={showModelPicker}
-                onMouseEnter={e => { e.currentTarget.style.color = 'var(--theme-foreground)'; e.currentTarget.style.backgroundColor = 'var(--theme-bg-tertiary)'; }}
+                onMouseEnter={e => { e.currentTarget.style.color = 'var(--theme-foreground)'; e.currentTarget.style.backgroundColor = 'var(--theme-selection)'; }}
                 onMouseLeave={e => { e.currentTarget.style.color = 'var(--theme-foreground-subtle)'; e.currentTarget.style.backgroundColor = 'transparent'; }}
               >
                 {autoMode ? (
-                  <Zap size={10} className="text-[#ffd700] flex-shrink-0" />
-                ) : isUsingCloud ? <Cloud size={10} className="text-[#3794ff] flex-shrink-0" /> : <Cpu size={10} className="flex-shrink-0" />}
+                  <Zap size={11} className="text-[#ffd700] flex-shrink-0" />
+                ) : isUsingCloud ? <Cloud size={11} className="text-[#3794ff] flex-shrink-0" /> : <Cpu size={11} className="flex-shrink-0" />}
                 {!autoMode && (
                   <span className="truncate">
                     {isUsingCloud
@@ -3671,23 +3726,14 @@ ${e.message}`,
                     }
                   </span>
                 )}
-                <ChevronDown size={8} className="flex-shrink-0" />
+                <ChevronDown size={9} className="flex-shrink-0" />
               </button>
             </div>
             <div className="flex items-center gap-1 flex-shrink-0">
-              {/* Queue counter badge */}
-              {messageQueue.length > 0 && (
-                <div className="flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded"
-                     style={{ color: 'var(--theme-accent)', backgroundColor: 'var(--theme-bg-tertiary)' }}
-                     title={`${messageQueue.length} message${messageQueue.length > 1 ? 's' : ''} queued`}>
-                  <Clock size={9} />
-                  <span>{messageQueue.length}</span>
-                </div>
-              )}
               {isGenerating && (
                 <button
-                  className="p-1 text-white rounded-md transition-colors"
-                  style={{ backgroundColor: '#f44747' }}
+                  className="w-[24px] h-[24px] flex items-center justify-center rounded-md transition-all"
+                  style={{ backgroundColor: 'color-mix(in srgb, #f44747 15%, transparent)', color: '#f44747', border: '1px solid color-mix(in srgb, #f44747 30%, transparent)' }}
                   onClick={() => {
                     messageQueueRef.current = [];
                     setMessageQueue([]);
@@ -3695,25 +3741,27 @@ ${e.message}`,
                   }}
                   title="Stop generating and clear queue"
                   aria-label="Stop generating"
-                  onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#d43c3c'; }}
-                  onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#f44747'; }}
+                  onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#f44747'; e.currentTarget.style.color = 'white'; }}
+                  onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'color-mix(in srgb, #f44747 15%, transparent)'; e.currentTarget.style.color = '#f44747'; }}
                 >
-                  <Square size={14} fill="currentColor" />
+                  <Square size={11} fill="currentColor" />
                 </button>
               )}
+              {!isGenerating && (
               <button
-                className="p-1 rounded-md transition-colors disabled:opacity-30"
+                className="w-[24px] h-[24px] flex items-center justify-center rounded-full transition-all disabled:opacity-30"
                 style={{
-                  backgroundColor: isGenerating ? 'var(--theme-accent)' : 'var(--theme-accent)',
+                  backgroundColor: 'var(--theme-accent)',
                   color: 'var(--theme-bg)',
                 }}
                 onClick={sendMessage}
                 disabled={!input.trim() && attachedImages.length === 0 && attachedFiles.length === 0}
-                title={isGenerating ? 'Queue message (Enter)' : 'Send (Enter)'}
-                aria-label={isGenerating ? 'Queue message' : 'Send message'}
+                title="Send (Enter)"
+                aria-label="Send message"
               >
-                {isGenerating ? <Clock size={14} /> : <ArrowUp size={14} strokeWidth={2.5} />}
+                <ArrowUp size={13} strokeWidth={2.5} />
               </button>
+              )}
             </div>
           </div>
         </div>

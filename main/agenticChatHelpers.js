@@ -327,34 +327,13 @@ function evaluateResponse(responseText, functionCalls, taskType, iteration) {
 }
 
 /**
- * Progressive tool disclosure — returns a filtered list of tool names
- * based on model tier limits.
- */
-function getProgressiveTools(taskType, iteration, recentTools, maxTools) {
-  if (!maxTools) return null;
-
-  const priorityTools = [
-    'read_file', 'write_file', 'append_to_file', 'edit_file', 'list_directory', 'run_command',
-    'web_search', 'search_codebase', 'grep_search', 'find_files',
-    'browser_navigate', 'browser_snapshot', 'browser_click', 'browser_type',
-    'browser_scroll', 'browser_press_key', 'browser_select_option',
-    'browser_evaluate', 'browser_get_content', 'browser_screenshot',
-    'browser_back', 'browser_hover', 'browser_tabs', 'fetch_webpage',
-    'write_todos', 'update_todo', 'save_memory', 'get_memory',
-    'git_status', 'git_diff', 'git_commit',
-    'delete_file', 'rename_file', 'get_file_info', 'analyze_error',
-  ];
-  return priorityTools.slice(0, maxTools);
-}
-
-/**
  * Failure classification — only stops loop on genuine infinite repetition.
  */
 function classifyResponseFailure(responseText, hasToolCalls, taskType, iteration, originalMessage, lastResponse, options = {}) {
   if (hasToolCalls) return null;
 
   const text = (responseText || '').trim();
-  if (lastResponse && text.length > 100 && iteration > 2) {
+  if (lastResponse && text.length > 100) {
     if (isNearDuplicate(lastResponse, text, 0.80)) {
       return { type: 'repetition', severity: 'stop', recovery: { action: 'stop', prompt: '' } };
     }
@@ -403,13 +382,15 @@ function progressiveContextCompaction(options) {
     pruned += pruneVerboseHistory(chatHistory, 6);
   }
 
-  // Phase 3: Aggressive compaction
+  // Phase 3: Aggressive compaction — protect last 4 results so model can see recent tool output
   if (pct > phase3Threshold) {
-    for (let i = 0; i < allToolResults.length - 2; i++) {
+    const protectCount = Math.min(4, allToolResults.length);
+    for (let i = 0; i < allToolResults.length - protectCount; i++) {
       const tr = allToolResults[i];
       if (!tr.result?._pruned) {
-        const status = tr.result?.success ? 'ok' : 'fail';
-        tr.result = { _pruned: true, tool: tr.tool, status };
+        const resultStr = typeof tr.result === 'string' ? tr.result : JSON.stringify(tr.result || '');
+        const status = tr.result?.success !== false ? 'ok' : 'fail';
+        tr.result = { _pruned: true, tool: tr.tool, status, snippet: resultStr.substring(0, 300) };
         pruned++;
       }
     }
@@ -831,7 +812,6 @@ module.exports = {
   pruneVerboseHistory,
   pruneCloudHistory,
   evaluateResponse,
-  getProgressiveTools,
   classifyResponseFailure,
   progressiveContextCompaction,
   buildToolFeedback,

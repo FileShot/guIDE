@@ -598,7 +598,7 @@ export const WelcomeScreen: React.FC = () => {
             })}
             {recentFolders.length > 3 && (
               <button
-                className="w-full text-left px-3 py-1 text-[10px] text-[#858585] hover:text-[#cccccc] transition-colors"
+                className="w-full text-center px-3 py-1 text-[10px] text-[#858585] hover:text-[#cccccc] transition-colors"
                 onClick={() => setShowAllRecent(!showAllRecent)}
               >
                 {showAllRecent ? 'See less' : `See ${recentFolders.length - 3} more…`}

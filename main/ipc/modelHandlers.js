@@ -50,18 +50,16 @@ function register(ctx) {
     const maxModelGB = vramGB > 2 ? Math.max(vramGB - 1.5, 1) : totalRAM * 0.6;
 
     const allModels = [
+      { name: 'Qwen3.5-0.6B', file: 'Qwen3.5-0.6B-Q8_0.gguf', size: 0.6, hfRepo: 'unsloth/Qwen3.5-0.6B-GGUF', desc: 'Ultra-lightweight chat model', category: 'general', vision: false },
       { name: 'Qwen2.5-Coder-1.5B-Instruct', file: 'Qwen2.5-Coder-1.5B-Instruct-Q4_K_M.gguf', size: 1.0, hfRepo: 'lmstudio-community/Qwen2.5-Coder-1.5B-Instruct-GGUF', desc: 'Fast coding model, great for autocomplete', category: 'coding', vision: false },
-      { name: 'Qwen3-0.6B', file: 'Qwen3-0.6B-Q8_0.gguf', size: 0.6, hfRepo: 'unsloth/Qwen3-0.6B-GGUF', desc: 'Ultra-lightweight general chat model', category: 'general', vision: false },
-      { name: 'Qwen3-4B', file: 'Qwen3-4B-Q4_K_M.gguf', size: 2.5, hfRepo: 'lmstudio-community/Qwen3-4B-GGUF', desc: 'Fast reasoning model with thinking mode', category: 'general', vision: false },
+      { name: 'Qwen3.5-2B', file: 'Qwen3.5-2B-Q8_0.gguf', size: 1.9, hfRepo: 'unsloth/Qwen3.5-2B-GGUF', desc: 'Compact general model, excellent for its size', category: 'general', vision: false },
+      { name: 'Qwen3.5-4B', file: 'Qwen3.5-4B-Q4_K_M.gguf', size: 2.5, hfRepo: 'unsloth/Qwen3.5-4B-GGUF', desc: 'Fast reasoning model with thinking mode', category: 'general', vision: false },
       { name: 'Qwen2.5-Coder-7B-Instruct', file: 'Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf', size: 4.7, hfRepo: 'lmstudio-community/Qwen2.5-Coder-7B-Instruct-GGUF', desc: 'Strong coding model, Q4 quantized', category: 'coding', vision: false },
-      { name: 'Llama-3.1-8B-Instruct', file: 'Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf', size: 4.9, hfRepo: 'bartowski/Meta-Llama-3.1-8B-Instruct-GGUF', desc: 'Excellent general-purpose model by Meta', category: 'general', vision: false },
-      { name: 'Qwen3-8B', file: 'Qwen3-8B-Q4_K_M.gguf', size: 5.0, hfRepo: 'lmstudio-community/Qwen3-8B-GGUF', desc: 'Strong reasoning model with thinking', category: 'general', vision: false },
-      { name: 'DeepSeek-R1-Distill-Qwen-14B', file: 'DeepSeek-R1-Distill-Qwen-14B-Q4_K_M.gguf', size: 8.7, hfRepo: 'bartowski/DeepSeek-R1-Distill-Qwen-14B-GGUF', desc: 'DeepSeek R1 reasoning distilled into 14B', category: 'reasoning', vision: false },
-      { name: 'Qwen3-14B', file: 'Qwen3-14B-Q4_K_M.gguf', size: 9.0, hfRepo: 'lmstudio-community/Qwen3-14B-GGUF', desc: 'High-quality reasoning model', category: 'general', vision: false },
+      { name: 'Qwen3.5-9B', file: 'Qwen3.5-9B-Q4_K_M.gguf', size: 5.2, hfRepo: 'unsloth/Qwen3.5-9B-GGUF', desc: 'Best quality-to-size ratio, strong reasoning', category: 'general', vision: false },
+      { name: 'Qwen3.5-14B', file: 'Qwen3.5-14B-Q4_K_M.gguf', size: 8.7, hfRepo: 'unsloth/Qwen3.5-14B-GGUF', desc: 'High-quality reasoning model', category: 'general', vision: false },
       { name: 'Mistral-Small-3.1-24B', file: 'Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf', size: 14.3, hfRepo: 'lmstudio-community/Mistral-Small-3.1-24B-Instruct-2503-GGUF', desc: 'Powerful multi-language coding + reasoning', category: 'general', vision: false },
       { name: 'Qwen3-Coder-30B-A3B (MoE)', file: 'Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf', size: 18.6, hfRepo: 'lmstudio-community/Qwen3-Coder-30B-A3B-Instruct-GGUF', desc: 'Best coding model — only uses 3B active params (fast!)', category: 'coding', vision: false },
-      { name: 'Qwen3-30B-A3B (MoE)', file: 'Qwen3-30B-A3B-Q4_K_M.gguf', size: 18.6, hfRepo: 'lmstudio-community/Qwen3-30B-A3B-GGUF', desc: 'Best general model — MoE, fast + smart', category: 'general', vision: false },
-      { name: 'Qwen3-32B', file: 'Qwen3-32B-Q4_K_M.gguf', size: 19.8, hfRepo: 'lmstudio-community/Qwen3-32B-GGUF', desc: 'Top-tier reasoning, dense 32B', category: 'general', vision: false },
+      { name: 'Qwen3.5-32B', file: 'Qwen3.5-32B-Q4_K_M.gguf', size: 19.8, hfRepo: 'unsloth/Qwen3.5-32B-GGUF', desc: 'Top-tier reasoning, dense 32B', category: 'general', vision: false },
     ];
 
     const recommended = [];

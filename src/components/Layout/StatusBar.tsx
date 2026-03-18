@@ -208,7 +208,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({
       </div>
 
       {/* Right */}
-      <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
+      <div className="flex items-center gap-1.5 min-w-0 overflow-hidden flex-nowrap">
         {/* RAG indexing */}
         {ragStatus.isIndexing && (
           <div className="flex items-center gap-1 animate-pulse text-[#dcdcaa]">

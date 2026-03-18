@@ -844,7 +844,25 @@ class LLMEngine extends EventEmitter {
     if (!useKvCache && this.sequence && this.sequence.nextTokenIndex > 0) {
       try { this.chat?.dispose?.(); } catch {}
       try { this.sequence.dispose?.(); } catch {}
-      this.sequence = this.context.getSequence();
+      this.sequence = null;
+      try {
+        this.sequence = this.context.getSequence();
+      } catch (seqErr) {
+        const log = require('./logger');
+        log.warn(`[_runGeneration] getSequence failed: ${seqErr.message} — recreating context`);
+        try { this.context.dispose?.(); } catch {}
+        const gpuIsActive = this.modelInfo && this.modelInfo.gpuMode !== false;
+        const ctxSize = gpuIsActive
+          ? this._computeGpuContextSize({ vramGB: this._cachedVramGB || 0, modelSizeGB: this.modelInfo?.modelSizeGB || 0 })
+          : this._computeMaxContext(this.modelInfo?.modelSizeGB || 0);
+        this.context = await this.model.createContext({
+          contextSize: ctxSize,
+          flashAttention: gpuIsActive,
+          ignoreMemorySafetyChecks: true,
+          failedCreationRemedy: { retries: 8, autoContextSizeShrink: 0.5 },
+        });
+        this.sequence = this.context.getSequence();
+      }
       const llamaCppPath = this._getNodeLlamaCppPath();
       const { LlamaChat } = await import(pathToFileURL(llamaCppPath).href);
       this.chat = new LlamaChat({ contextSequence: this.sequence });

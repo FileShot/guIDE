@@ -690,13 +690,13 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({
                   const dlProgress = downloadProgress.get(m.file);
                   return (
                     <div key={m.file} className="px-2 py-1.5 text-[11px] flex items-center gap-2 border-b border-[#3c3c3c]/30 hover:bg-[#ffffff06]">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1 flex-wrap">
-                          <span className="text-[#cccccc] font-medium">{m.name}</span>
-                          <span className={`text-[8px] px-1 rounded leading-tight ${m.category === 'coding' ? 'bg-[#2d4a2d] text-[#89d185]' : m.category === 'reasoning' ? 'bg-[#4a3d2d] text-[#dcdcaa]' : 'bg-[#2d3a4a] text-[#9cdcfe]'}`}>{m.category}</span>
-                          <span className="text-[9px] text-[#606060]">{m.size}GB</span>
+                      <div className="min-w-0 flex-1 overflow-hidden">
+                        <div className="flex items-center gap-1.5 overflow-hidden">
+                          <span className="text-[#cccccc] font-medium truncate flex-shrink min-w-0">{m.name}</span>
+                          <span className={`text-[8px] px-1 rounded leading-tight flex-shrink-0 ${m.category === 'coding' ? 'bg-[#2d4a2d] text-[#89d185]' : m.category === 'reasoning' ? 'bg-[#4a3d2d] text-[#dcdcaa]' : 'bg-[#2d3a4a] text-[#9cdcfe]'}`}>{m.category}</span>
+                          <span className="text-[9px] text-[#606060] flex-shrink-0">{m.size}GB</span>
                         </div>
-                        <div className="text-[10px] text-[#858585] leading-tight">{m.desc}</div>
+                        <div className="text-[10px] text-[#858585] leading-tight truncate">{m.desc}</div>
                         {/* Download progress bar */}
                         {dlProgress && (
                           <div className="mt-1 flex items-center gap-1.5">

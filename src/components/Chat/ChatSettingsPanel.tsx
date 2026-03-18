@@ -65,7 +65,8 @@ export const ChatSettingsPanel: React.FC<SettingsPanelProps> = ({
     <div>
       <label className="text-[10px] text-[#858585]">Temperature: {temperature}</label>
       <input type="range" min="0" max="2" step="0.1" value={temperature}
-        onChange={e => setTemperature(parseFloat(e.target.value))} className="w-full h-1 accent-[#007acc]" />
+        onChange={e => setTemperature(parseFloat(e.target.value))} className="slider-styled w-full"
+        style={{ background: `linear-gradient(to right, var(--theme-accent) 0%, var(--theme-accent) ${(temperature/2)*100}%, var(--theme-bg-tertiary) ${(temperature/2)*100}%, var(--theme-bg-tertiary) 100%)` }} />
       <div className="flex justify-between text-[9px] text-[#585858]"><span>Precise</span><span>Creative</span></div>
     </div>
     <div>
@@ -108,7 +109,8 @@ export const ChatSettingsPanel: React.FC<SettingsPanelProps> = ({
           (window as any).electronAPI?.llmSetThinkingBudget?.(val);
           confirm('budget');
         }}
-        className="w-full h-1 accent-[#007acc]"
+        className="slider-styled w-full"
+        style={{ background: `linear-gradient(to right, var(--theme-accent) 0%, var(--theme-accent) ${((thinkingBudget === -1 ? 32768 : thinkingBudget)/32768)*100}%, var(--theme-bg-tertiary) ${((thinkingBudget === -1 ? 32768 : thinkingBudget)/32768)*100}%, var(--theme-bg-tertiary) 100%)` }}
       />
       <div className="flex items-center justify-between mt-0.5">
         <div className="flex justify-between text-[9px] text-[#585858] flex-1"><span>Auto</span><span>8K</span><span>16K</span><span>32K</span></div>
@@ -127,7 +129,8 @@ export const ChatSettingsPanel: React.FC<SettingsPanelProps> = ({
     <div>
       <label className="text-[10px] text-[#858585]">Max Tokens: {maxTokens}</label>
       <input type="range" min="256" max="131072" step="256" value={maxTokens}
-        onChange={e => setMaxTokens(parseInt(e.target.value))} className="w-full h-1 accent-[#007acc]" />
+        onChange={e => setMaxTokens(parseInt(e.target.value))} className="slider-styled w-full"
+        style={{ background: `linear-gradient(to right, var(--theme-accent) 0%, var(--theme-accent) ${((maxTokens-256)/(131072-256))*100}%, var(--theme-bg-tertiary) ${((maxTokens-256)/(131072-256))*100}%, var(--theme-bg-tertiary) 100%)` }} />
       <div className="flex justify-between text-[9px] text-[#585858]"><span>256</span><span>131K</span></div>
     </div>
     <div>
@@ -138,26 +141,30 @@ export const ChatSettingsPanel: React.FC<SettingsPanelProps> = ({
           setContextSize(val);
           (window as any).electronAPI?.llmSetContextSize?.(val);
           confirm('context');
-        }} className="w-full h-1 accent-[#007acc]" />
+        }} className="slider-styled w-full"
+        style={{ background: `linear-gradient(to right, var(--theme-accent) 0%, var(--theme-accent) ${(contextSize/262144)*100}%, var(--theme-bg-tertiary) ${(contextSize/262144)*100}%, var(--theme-bg-tertiary) 100%)` }} />
       <div className="flex justify-between text-[9px] text-[#585858]"><span>Auto</span><span>32K</span><span>64K</span><span>128K</span><span>256K</span></div>
       <p className="text-[9px] text-[#585858] mt-0.5">Auto = fast (8-16K). Higher needs more VRAM/RAM. Reloads model.</p>
     </div>
     <div>
       <label className="text-[10px] text-[#858585]">Top-P (Nucleus): {topP}</label>
       <input type="range" min="0" max="1" step="0.05" value={topP}
-        onChange={e => setTopP(parseFloat(e.target.value))} className="w-full h-1 accent-[#007acc]" />
+        onChange={e => setTopP(parseFloat(e.target.value))} className="slider-styled w-full"
+        style={{ background: `linear-gradient(to right, var(--theme-accent) 0%, var(--theme-accent) ${topP*100}%, var(--theme-bg-tertiary) ${topP*100}%, var(--theme-bg-tertiary) 100%)` }} />
       <div className="flex justify-between text-[9px] text-[#585858]"><span>Narrow</span><span>Wide</span></div>
     </div>
     <div>
       <label className="text-[10px] text-[#858585]">Top-K: {topK}</label>
       <input type="range" min="1" max="100" step="1" value={topK}
-        onChange={e => setTopK(parseInt(e.target.value))} className="w-full h-1 accent-[#007acc]" />
+        onChange={e => setTopK(parseInt(e.target.value))} className="slider-styled w-full"
+        style={{ background: `linear-gradient(to right, var(--theme-accent) 0%, var(--theme-accent) ${((topK-1)/99)*100}%, var(--theme-bg-tertiary) ${((topK-1)/99)*100}%, var(--theme-bg-tertiary) 100%)` }} />
       <div className="flex justify-between text-[9px] text-[#585858]"><span>1</span><span>100</span></div>
     </div>
     <div>
       <label className="text-[10px] text-[#858585]">Repeat Penalty: {repeatPenalty}</label>
       <input type="range" min="1.0" max="2.0" step="0.05" value={repeatPenalty}
-        onChange={e => setRepeatPenalty(parseFloat(e.target.value))} className="w-full h-1 accent-[#007acc]" />
+        onChange={e => setRepeatPenalty(parseFloat(e.target.value))} className="slider-styled w-full"
+        style={{ background: `linear-gradient(to right, var(--theme-accent) 0%, var(--theme-accent) ${((repeatPenalty-1)/1)*100}%, var(--theme-bg-tertiary) ${((repeatPenalty-1)/1)*100}%, var(--theme-bg-tertiary) 100%)` }} />
       <div className="flex justify-between text-[9px] text-[#585858]"><span>Off</span><span>Strong</span></div>
     </div>
     <div>
@@ -177,7 +184,8 @@ export const ChatSettingsPanel: React.FC<SettingsPanelProps> = ({
       <div>
         <label className="text-[10px] text-[#858585]">Max Iterations: {maxIterations}</label>
         <input type="range" min="5" max="500" step="5" value={maxIterations}
-          onChange={e => setMaxIterations(parseInt(e.target.value))} className="w-full h-1 accent-[#007acc]" />
+          onChange={e => setMaxIterations(parseInt(e.target.value))} className="slider-styled w-full"
+          style={{ background: `linear-gradient(to right, var(--theme-accent) 0%, var(--theme-accent) ${((maxIterations-5)/495)*100}%, var(--theme-bg-tertiary) ${((maxIterations-5)/495)*100}%, var(--theme-bg-tertiary) 100%)` }} />
         <div className="flex justify-between text-[9px] text-[#585858]"><span>5 (quick)</span><span>500 (marathon)</span></div>
         <p className="text-[9px] text-[#585858] mt-1">How many tool cycles the AI runs before stopping. Higher = longer autonomous tasks.</p>
       </div>

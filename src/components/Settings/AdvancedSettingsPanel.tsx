@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Save, RotateCcw, ChevronDown, ChevronRight, Zap, Scale, Brain } from 'lucide-react';
+import { Save, RotateCcw, ChevronDown, Zap, Scale, Brain } from 'lucide-react';
 
 interface SettingsState {
   // LLM / Inference
@@ -98,16 +98,20 @@ const CLOUD_PROVIDERS = [
 const Section: React.FC<{ title: string; defaultOpen?: boolean; children: React.ReactNode }> = ({ title, defaultOpen = true, children }) => {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="mb-1">
+    <div className="mb-1.5">
       <button
-        className="accordion-trigger w-full flex items-center gap-1.5 py-2 px-3 text-[11px] font-semibold uppercase tracking-wider transition-colors"
-        style={{ color: 'var(--theme-foreground-muted)', backgroundColor: 'var(--theme-sidebar)', borderBottom: '1px solid var(--theme-sidebar-border)' }}
+        className="w-full flex items-center gap-2 py-2.5 px-3 text-[11px] font-semibold uppercase tracking-wider transition-colors rounded-md"
+        style={{ color: 'var(--theme-foreground-muted)', backgroundColor: 'var(--theme-bg-secondary)' }}
         onClick={() => setOpen(v => !v)}
+        onMouseEnter={e => { e.currentTarget.style.backgroundColor = 'var(--theme-selection)'; }}
+        onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'var(--theme-bg-secondary)'; }}
       >
-        {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+        <span style={{ transition: 'transform 0.15s', display: 'inline-block', transform: open ? 'rotate(0deg)' : 'rotate(-90deg)' }}>
+          <ChevronDown size={13} />
+        </span>
         {title}
       </button>
-      {open && <div className="accordion-content px-3 py-3 space-y-3.5">{children}</div>}
+      {open && <div className="px-3 py-3 space-y-4">{children}</div>}
     </div>
   );
 };
@@ -116,26 +120,33 @@ const Section: React.FC<{ title: string; defaultOpen?: boolean; children: React.
 const SliderField: React.FC<{
   label: string; value: number; min: number; max: number; step: number;
   onChange: (v: number) => void; hint?: string;
-}> = ({ label, value, min, max, step, onChange, hint }) => (
-  <div>
-    <div className="flex justify-between items-center mb-1.5">
-      <label className="text-[11px] font-medium" style={{ color: 'var(--theme-foreground-muted)' }}>{label}</label>
+}> = ({ label, value, min, max, step, onChange, hint }) => {
+  const pct = ((value - min) / (max - min)) * 100;
+  return (
+    <div className="py-0.5">
+      <div className="flex justify-between items-center mb-1.5">
+        <label className="text-[11px] font-medium" style={{ color: 'var(--theme-foreground)' }}>{label}</label>
+        <input
+          type="number"
+          value={value}
+          min={min} max={max} step={step}
+          onChange={e => onChange(Number(e.target.value))}
+          className="w-[72px] text-right text-[11px] px-2 py-0.5 rounded outline-none transition-colors"
+          style={{ backgroundColor: 'var(--theme-input-bg)', color: 'var(--theme-foreground)', border: '1px solid var(--theme-input-border)' }}
+          onFocus={e => { e.currentTarget.style.borderColor = 'var(--theme-accent)'; }}
+          onBlur={e => { e.currentTarget.style.borderColor = 'var(--theme-input-border)'; }}
+        />
+      </div>
       <input
-        type="number"
-        value={value}
-        min={min} max={max} step={step}
+        type="range" value={value} min={min} max={max} step={step}
         onChange={e => onChange(Number(e.target.value))}
-        className="input-styled w-[70px] text-right text-[11px] px-1.5 py-0.5 rounded-ui"
+        className="slider-styled w-full"
+        style={{ background: `linear-gradient(to right, var(--theme-accent) 0%, var(--theme-accent) ${pct}%, var(--theme-bg-tertiary) ${pct}%, var(--theme-bg-tertiary) 100%)` }}
       />
+      {hint && <div className="text-[10px] mt-0.5" style={{ color: 'var(--theme-foreground-muted)', opacity: 0.7 }}>{hint}</div>}
     </div>
-    <input
-      type="range" value={value} min={min} max={max} step={step}
-      onChange={e => onChange(Number(e.target.value))}
-      className="slider-styled w-full"
-    />
-    {hint && <div className="text-[10px] mt-1" style={{ color: 'var(--theme-foreground-muted)', opacity: 0.6 }}>{hint}</div>}
-  </div>
-);
+  );
+};
 
 const SelectField: React.FC<{
   label: string; value: string; options: { value: string; label: string }[];
@@ -465,8 +476,8 @@ export const AdvancedSettingsPanel: React.FC = () => {
                 type="range" min={0} max={32768} step={128}
                 value={settings.thinkingBudget === -1 ? 32768 : settings.thinkingBudget}
                 onChange={e => update('thinkingBudget', parseInt(e.target.value))}
-                className="w-full h-1 rounded-lg appearance-none cursor-pointer accent-[var(--theme-accent)]"
-                style={{ backgroundColor: 'var(--theme-sidebar-border)' }}
+                className="slider-styled w-full"
+                style={{ background: `linear-gradient(to right, var(--theme-accent) 0%, var(--theme-accent) ${((settings.thinkingBudget === -1 ? 32768 : settings.thinkingBudget)/32768)*100}%, var(--theme-bg-tertiary) ${((settings.thinkingBudget === -1 ? 32768 : settings.thinkingBudget)/32768)*100}%, var(--theme-bg-tertiary) 100%)` }}
               />
               <div className="flex justify-between text-[10px] mt-0.5" style={{ color: 'var(--theme-foreground-muted)', opacity: 0.6 }}>
                 <span>0 = Auto</span><span>8K</span><span>16K</span><span>32K</span>

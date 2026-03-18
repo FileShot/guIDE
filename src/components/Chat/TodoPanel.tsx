@@ -16,7 +16,7 @@ interface TodoPanelProps {
   todos: TodoItem[];
 }
 
-const StatusIcon: React.FC<{ status: string; size?: number }> = ({ status, size = 13 }) => {
+const StatusIcon: React.FC<{ status: string; size?: number }> = ({ status, size = 11 }) => {
   switch (status) {
     case 'done':
       return <CheckCircle2 size={size} className="flex-shrink-0" style={{ color: 'var(--theme-success, #89d185)' }} />;
@@ -44,11 +44,11 @@ export const TodoPanel: React.FC<TodoPanelProps> = ({ todos }) => {
     : null;
 
   return (
-    <div className="mx-2 mb-1 rounded overflow-hidden flex-shrink-0" style={{ border: '1px solid var(--theme-border)', backgroundColor: 'var(--theme-bg-secondary)' }}>
+    <div className="mx-2 mb-0.5 rounded overflow-hidden flex-shrink-0" style={{ border: '1px solid var(--theme-border)', backgroundColor: 'var(--theme-bg-secondary)' }}>
       {/* Header row - VS Code style: chevron + icon + active task + progress */}
       <button
         onClick={() => setExpanded(e => !e)}
-        className="w-full flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] transition-colors"
+        className="w-full flex items-center gap-1.5 px-2 py-1 text-[10px] transition-colors"
         style={{ color: 'var(--theme-foreground)' }}
         onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = 'var(--theme-selection)'; }}
         onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent'; }}
@@ -56,7 +56,7 @@ export const TodoPanel: React.FC<TodoPanelProps> = ({ todos }) => {
         <span className="flex-shrink-0" style={{ color: 'var(--theme-foreground-muted)' }}>
           {expanded ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
         </span>
-        <ListTodo size={12} className="flex-shrink-0" style={{ color: allDone ? 'var(--theme-success, #89d185)' : 'var(--theme-accent)' }} />
+        <ListTodo size={10} className="flex-shrink-0" style={{ color: allDone ? 'var(--theme-success, #89d185)' : 'var(--theme-accent)' }} />
         {activeText && !expanded ? (
           <>
             <span className="truncate min-w-0" style={{ color: '#dcdcaa' }}>{activeText}</span>
@@ -80,11 +80,11 @@ export const TodoPanel: React.FC<TodoPanelProps> = ({ todos }) => {
 
       {/* Expanded item list — scrollable after ~8 items */}
       {expanded && (
-        <div className="px-2.5 pb-1.5 pt-1 space-y-0.5 overflow-y-auto" style={{ borderTop: '1px solid var(--theme-border)', maxHeight: '180px' }}>
+        <div className="px-2 pb-1 pt-0.5 space-y-0 overflow-y-auto" style={{ borderTop: '1px solid var(--theme-border)', maxHeight: '150px' }}>
           {todos.map(todo => (
             <div
               key={todo.id}
-              className="flex items-start gap-1.5 py-[2px] text-[11px] transition-all duration-200"
+              className="flex items-start gap-1.5 py-[1px] text-[10px] transition-all duration-200"
               style={{
                 color: todo.status === 'done'
                   ? 'var(--theme-foreground-muted)'

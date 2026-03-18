@@ -98,16 +98,16 @@ const CLOUD_PROVIDERS = [
 const Section: React.FC<{ title: string; defaultOpen?: boolean; children: React.ReactNode }> = ({ title, defaultOpen = true, children }) => {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="mb-2">
+    <div className="mb-1">
       <button
-        className="w-full flex items-center gap-1 py-2 px-3 text-[11px] font-semibold uppercase tracking-wider transition-colors hover:opacity-80"
+        className="accordion-trigger w-full flex items-center gap-1.5 py-2 px-3 text-[11px] font-semibold uppercase tracking-wider transition-colors"
         style={{ color: 'var(--theme-foreground-muted)', backgroundColor: 'var(--theme-sidebar)', borderBottom: '1px solid var(--theme-sidebar-border)' }}
         onClick={() => setOpen(v => !v)}
       >
-        {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+        {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
         {title}
       </button>
-      {open && <div className="px-3 py-2 space-y-3">{children}</div>}
+      {open && <div className="accordion-content px-3 py-3 space-y-3.5">{children}</div>}
     </div>
   );
 };
@@ -118,24 +118,22 @@ const SliderField: React.FC<{
   onChange: (v: number) => void; hint?: string;
 }> = ({ label, value, min, max, step, onChange, hint }) => (
   <div>
-    <div className="flex justify-between items-center mb-1">
-      <label className="text-[11px]" style={{ color: 'var(--theme-foreground-muted)' }}>{label}</label>
+    <div className="flex justify-between items-center mb-1.5">
+      <label className="text-[11px] font-medium" style={{ color: 'var(--theme-foreground-muted)' }}>{label}</label>
       <input
         type="number"
         value={value}
         min={min} max={max} step={step}
         onChange={e => onChange(Number(e.target.value))}
-        className="w-[70px] text-right text-[11px] px-1 py-0.5 rounded"
-        style={{ backgroundColor: 'var(--theme-input-bg)', color: 'var(--theme-foreground)', border: '1px solid var(--theme-sidebar-border)' }}
+        className="input-styled w-[70px] text-right text-[11px] px-1.5 py-0.5 rounded-ui"
       />
     </div>
     <input
       type="range" value={value} min={min} max={max} step={step}
       onChange={e => onChange(Number(e.target.value))}
-      className="w-full h-1 rounded-lg appearance-none cursor-pointer accent-[var(--theme-accent)]"
-      style={{ backgroundColor: 'var(--theme-sidebar-border)' }}
+      className="slider-styled w-full"
     />
-    {hint && <div className="text-[10px] mt-0.5" style={{ color: 'var(--theme-foreground-muted)', opacity: 0.6 }}>{hint}</div>}
+    {hint && <div className="text-[10px] mt-1" style={{ color: 'var(--theme-foreground-muted)', opacity: 0.6 }}>{hint}</div>}
   </div>
 );
 

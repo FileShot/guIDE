@@ -26,6 +26,13 @@ class ConversationSummarizer {
     this.incrementalTask = null;  // {type, target, current} — tracks progress on large tasks
   }
 
+  // ─── Digest builder injection ───
+  // Called once from agenticChat.js to inject the buildFileStructureDigest function
+  // without creating a circular dependency
+  setDigestBuilder(fn) {
+    this._digestBuilder = fn;
+  }
+
   // ─── Goal ───
   setGoal(message) {
     if (!message) return;
@@ -155,16 +162,27 @@ class ConversationSummarizer {
       const chars = content.length;
       if (filePath) {
         if (!this.fileProgress[filePath]) {
-          this.fileProgress[filePath] = { writtenLines: 0, writtenChars: 0, writes: 0 };
+          this.fileProgress[filePath] = { writtenLines: 0, writtenChars: 0, writes: 0, structureDigest: '' };
         }
         if (toolName === 'write_file') {
           // write_file replaces — reset count
-          this.fileProgress[filePath] = { writtenLines: lines, writtenChars: chars, writes: 1 };
+          this.fileProgress[filePath] = { writtenLines: lines, writtenChars: chars, writes: 1, structureDigest: '' };
         } else {
           // append_to_file adds
           this.fileProgress[filePath].writtenLines += lines;
           this.fileProgress[filePath].writtenChars += chars;
           this.fileProgress[filePath].writes++;
+        }
+
+        // Build structural digest from full file content
+        // For write_file, params.content IS the full content
+        // For append_to_file, result.fullContent is the full file after append
+        const fullContent = (toolName === 'append_to_file' && result?.fullContent)
+          ? result.fullContent : content;
+        if (this._digestBuilder) {
+          try {
+            this.fileProgress[filePath].structureDigest = this._digestBuilder(filePath, fullContent);
+          } catch (_) {}
         }
 
         // Update incremental task progress if tracking lines
@@ -363,14 +381,16 @@ class ConversationSummarizer {
       sections.push(`## RECENT RESULTS (pre-rotation)\n${this._warmTierResults.join('\n')}`);
     }
 
-    // 5d. File progress for incremental tasks
+    // 5d. File progress for incremental tasks — includes structural digest
     const fileProgressKeys = Object.keys(this.fileProgress);
     if (fileProgressKeys.length > 0) {
       const progressLines = fileProgressKeys.map(fp => {
         const p = this.fileProgress[fp];
+        // If a structural digest exists, use it (it includes line/char counts)
+        if (p.structureDigest) return p.structureDigest;
         return `- ${fp}: ${p.writtenLines} lines (${p.writtenChars} chars) written in ${p.writes} operation(s)`;
       });
-      sections.push(`## FILE PROGRESS\n${progressLines.join('\n')}\n**Use append_to_file to continue adding content to existing files.**`);
+      sections.push(`## FILE PROGRESS\n${progressLines.join('\n')}\n**Use append_to_file to continue adding content to existing files. Do NOT redefine any selectors or functions listed above.**`);
     }
 
     // 5e. Incremental task tracking

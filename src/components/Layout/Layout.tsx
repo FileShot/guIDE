@@ -110,7 +110,7 @@ export const Layout: React.FC = () => {
     cleanups.push(api.onFolderOpened?.((_: any, folderPath: string) => setRootPath(folderPath)));
     cleanups.push(api.onMenuOpenProject?.((_: any, folderPath: string) => setRootPath(folderPath)));
     cleanups.push(api.onLlmStatus?.((status: LLMStatusEvent) => setLlmStatus(status)));
-    cleanups.push(api.onModelsAvailable?.((models: AvailableModel[]) => setAvailableModels(models)));
+    cleanups.push(api.onModelsAvailable?.((models: AvailableModel[]) => setAvailableModels(models.filter(m => !/mmproj/i.test(m.name || m.path || '')))));
     cleanups.push(api.onRagProgress?.((data: { progress: number; done: number; total: number }) => {
       setRagStatus({ isIndexing: true, progress: data.progress, totalFiles: data.total });
       if (data.progress >= 100) {
@@ -449,11 +449,10 @@ export const Layout: React.FC = () => {
           {primaryBarItems.map(item => (
             <button
               key={item.id}
-              className="w-[48px] h-[48px] flex items-center justify-center transition-colors flex-shrink-0"
+              className="w-[48px] h-[48px] flex items-center justify-center transition-all duration-150 flex-shrink-0 relative"
               style={{
-                color: sidebarView === item.id && sidebarVisible ? 'var(--theme-accent)' : 'var(--theme-foreground-muted)',
-                backgroundColor: sidebarView === item.id && sidebarVisible ? 'color-mix(in srgb, var(--theme-accent) 12%, transparent)' : 'transparent',
-                borderRadius: '8px',
+                color: sidebarView === item.id && sidebarVisible ? 'var(--theme-foreground)' : 'var(--theme-foreground-muted)',
+                backgroundColor: 'transparent',
               }}
               onClick={() => {
                 if (sidebarView === item.id && sidebarVisible) setSidebarVisible(false);
@@ -462,23 +461,25 @@ export const Layout: React.FC = () => {
               title={`${item.label}${item.shortcut ? ` (${item.shortcut})` : ''}`}
               aria-label={item.label}
             >
-              <item.icon size={24} />
+              {sidebarView === item.id && sidebarVisible && (
+                <div className="absolute left-0 top-[25%] w-[2px] h-[50%] rounded-r" style={{ backgroundColor: 'var(--theme-accent)' }} />
+              )}
+              <item.icon size={22} />
             </button>
           ))}
           {/* More Tools button */}
           <div className="relative flex-shrink-0">
             <button
-              className="w-[48px] h-[48px] flex items-center justify-center transition-colors"
+              className="w-[48px] h-[48px] flex items-center justify-center transition-all duration-150 relative"
               style={{
-                color: isMoreToolActive || moreToolsOpen ? 'var(--theme-accent)' : 'var(--theme-foreground-muted)',
-                backgroundColor: isMoreToolActive || moreToolsOpen ? 'color-mix(in srgb, var(--theme-accent) 12%, transparent)' : 'transparent',
-                borderRadius: '8px',
+                color: isMoreToolActive || moreToolsOpen ? 'var(--theme-foreground)' : 'var(--theme-foreground-muted)',
               }}
               onClick={() => { setMoreToolsOpen(v => !v); notifyBrowserOverlay(true); }}
               title="More Tools"
               aria-label="More Tools"
             >
-              <MoreHorizontal size={24} />
+              {(isMoreToolActive || moreToolsOpen) && <div className="absolute left-0 top-[25%] w-[2px] h-[50%] rounded-r" style={{ backgroundColor: 'var(--theme-accent)' }} />}
+              <MoreHorizontal size={22} />
             </button>
             {/* More Tools popover */}
             {moreToolsOpen && (
@@ -522,24 +523,21 @@ export const Layout: React.FC = () => {
             <Globe size={24} />
           </button>
           <button
-            className="w-[48px] h-[48px] flex items-center justify-center transition-colors"
+            className="w-[48px] h-[48px] flex items-center justify-center transition-all duration-150 relative"
             style={{
-              color: chatVisible ? 'var(--theme-accent)' : 'var(--theme-foreground-muted)',
-              backgroundColor: chatVisible ? 'color-mix(in srgb, var(--theme-accent) 12%, transparent)' : 'transparent',
-              borderRadius: '8px',
+              color: chatVisible ? 'var(--theme-foreground)' : 'var(--theme-foreground-muted)',
             }}
             onClick={() => setChatVisible(v => !v)}
             title="AI Chat"
             aria-label="AI Chat"
           >
-            <MessageSquare size={24} />
+            {chatVisible && <div className="absolute left-0 top-[25%] w-[2px] h-[50%] rounded-r" style={{ backgroundColor: 'var(--theme-accent)' }} />}
+            <MessageSquare size={22} />
           </button>
           <button
-            className="w-[48px] h-[48px] flex items-center justify-center transition-colors"
+            className="w-[48px] h-[48px] flex items-center justify-center transition-all duration-150 relative"
             style={{
-              color: sidebarView === 'benchmark' && sidebarVisible ? 'var(--theme-accent)' : 'var(--theme-foreground-muted)',
-              backgroundColor: sidebarView === 'benchmark' && sidebarVisible ? 'color-mix(in srgb, var(--theme-accent) 12%, transparent)' : 'transparent',
-              borderRadius: '8px',
+              color: sidebarView === 'benchmark' && sidebarVisible ? 'var(--theme-foreground)' : 'var(--theme-foreground-muted)',
             }}
             onClick={() => {
               if (sidebarView === 'benchmark' && sidebarVisible) setSidebarVisible(false);
@@ -548,6 +546,7 @@ export const Layout: React.FC = () => {
             title="Model Benchmark"
             aria-label="Model Benchmark"
           >
+            {sidebarView === 'benchmark' && sidebarVisible && <div className="absolute left-0 top-[25%] w-[2px] h-[50%] rounded-r" style={{ backgroundColor: 'var(--theme-accent)' }} />}
             <BarChart3 size={22} />
           </button>
           <button
@@ -560,11 +559,9 @@ export const Layout: React.FC = () => {
             <Palette size={22} />
           </button>
           <button
-            className="w-[48px] h-[48px] flex items-center justify-center transition-colors relative group"
+            className="w-[48px] h-[48px] flex items-center justify-center transition-all duration-150 relative group"
             style={{
-              color: sidebarView === 'account' && sidebarVisible ? 'var(--theme-accent)' : 'var(--theme-foreground-muted)',
-              backgroundColor: sidebarView === 'account' && sidebarVisible ? 'color-mix(in srgb, var(--theme-accent) 12%, transparent)' : 'transparent',
-              borderRadius: '8px',
+              color: sidebarView === 'account' && sidebarVisible ? 'var(--theme-foreground)' : 'var(--theme-foreground-muted)',
             }}
             onClick={() => {
               if (sidebarView === 'account' && sidebarVisible) setSidebarVisible(false);
@@ -573,6 +570,7 @@ export const Layout: React.FC = () => {
             title="Account &amp; Sign In"
             aria-label="Account &amp; Sign In"
           >
+            {sidebarView === 'account' && sidebarVisible && <div className="absolute left-0 top-[25%] w-[2px] h-[50%] rounded-r" style={{ backgroundColor: 'var(--theme-accent)' }} />}
             <div className="relative">
               <UserCircle size={24} />
               <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full animate-pulse" style={{ backgroundColor: 'var(--theme-accent)', boxShadow: '0 0 8px var(--theme-accent)' }} />

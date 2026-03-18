@@ -476,7 +476,19 @@ function formatSuccessfulToolResult(tr, opts = {}) {
   switch (tr.tool) {
     case 'read_file':
       text += `**File:** ${tr.params?.filePath}${tr.result.readRange ? ` (lines ${tr.result.readRange})` : ''}\n`;
-      text += `\`\`\`\n${(tr.result.content || '').substring(0, 2000)}\n\`\`\`\n`;
+      {
+        // Fix 58B: Show head+tail for large files so the model can see both
+        // the file structure AND where it left off (critical for append workflows)
+        const content = tr.result.content || '';
+        if (content.length > 4000) {
+          const lines = content.split('\n');
+          const head = lines.slice(0, 15).join('\n');
+          const tail = lines.slice(-40).join('\n');
+          text += `\`\`\`\n${head}\n... (${lines.length} lines total, middle omitted) ...\n${tail}\n\`\`\`\n`;
+        } else {
+          text += `\`\`\`\n${content.substring(0, 3000)}\n\`\`\`\n`;
+        }
+      }
       break;
 
     case 'write_file':
@@ -514,6 +526,28 @@ function formatSuccessfulToolResult(tr, opts = {}) {
           text += `**WARNING: File "${appendFilePath}" is still NOT complete after this append (${appendLines.length} lines total).** The file is missing closing tags or content. You MUST call append_to_file again with actual code content. Do NOT send empty content. Here are the last 10 lines of the file:\n\`\`\`\n${appendTail}\n\`\`\`\nContinue from here.\n`;
         } else {
           text += `*Content appended successfully.*\n`;
+        }
+      }
+
+      // Fix 59C: Post-write structural validation — immediate feedback loop
+      // Provides IDE-level diagnostics (like LSP Problems panel) so the model
+      // knows the structural state of the file RIGHT AFTER writing, not just at rotation.
+      const writtenFilePath = tr.result?.path || tr.params?.filePath || '';
+      const fullWrittenContent = (tr.tool === 'append_to_file' && tr.result?.fullContent)
+        ? tr.result.fullContent : (tr.params?.content || '');
+      if (writtenFilePath && fullWrittenContent.length > 100) {
+        const digest = buildFileStructureDigest(writtenFilePath, fullWrittenContent);
+        if (digest) {
+          // Extract only the structural warnings — skip LAST 3 LINES and full header to stay compact
+          const digestLines = digest.split('\n');
+          const structuralNotes = digestLines.filter(l =>
+            l.startsWith('HTML TAGS MISSING') ||
+            l.startsWith('CSS SELECTORS ALREADY DEFINED') ||
+            l.startsWith('STATUS:')
+          );
+          if (structuralNotes.length > 0) {
+            text += `**Structure:** ${structuralNotes.join(' | ')}\n`;
+          }
         }
       }
       break;
@@ -636,9 +670,6 @@ class ExecutionState {
     if (toolName === 'write_file' && result?.success && params?.filePath) {
       this.filesCreated.push({ path: params.filePath, iteration });
     }
-    if (toolName === 'append_to_file' && result?.success && params?.filePath) {
-      this.filesCreated.push({ path: params.filePath, iteration, append: true });
-    }
     if (toolName === 'edit_file' && result?.success && params?.filePath) {
       this.filesEdited.push({ path: params.filePath, iteration });
     }
@@ -657,22 +688,7 @@ class ExecutionState {
       parts.push(`URLs visited: ${recent.map(v => `${v.success ? 'OK' : 'FAIL'} ${v.url}`).join(', ')}`);
     }
     if (this.filesCreated.length > 0) {
-      // Fix 61: Show per-file write counts so the model can see when it's looping
-      const fileCounts = {};
-      for (const f of this.filesCreated) {
-        if (!fileCounts[f.path]) fileCounts[f.path] = { writes: 0, appends: 0 };
-        if (f.append) fileCounts[f.path].appends++;
-        else fileCounts[f.path].writes++;
-      }
-      const fileList = Object.entries(fileCounts).map(([p, c]) => {
-        const total = c.writes + c.appends;
-        if (total <= 1) return p;
-        const detail = [];
-        if (c.writes > 0) detail.push(`${c.writes}× written`);
-        if (c.appends > 0) detail.push(`${c.appends}× appended`);
-        return `${p} (${detail.join(', ')})`;
-      });
-      parts.push(`Files created/modified: ${fileList.join(', ')}`);
+      parts.push(`Files created: ${this.filesCreated.map(f => f.path).join(', ')}`);
     }
     if (this.filesEdited.length > 0) {
       parts.push(`Files edited: ${this.filesEdited.map(f => f.path).join(', ')}`);
@@ -698,6 +714,112 @@ class ExecutionState {
   }
 }
 
+/**
+ * Build a compact structural digest of a file's content.
+ * This digest survives context rotation and tells the model what's already
+ * on disk — preventing duplicate CSS selectors, reopened tags, etc.
+ *
+ * @param {string} filePath - File path (used for extension detection)
+ * @param {string} content  - Full file content
+ * @returns {string} Compact multi-line digest for injection into prompts
+ */
+function buildFileStructureDigest(filePath, content) {
+  if (!content || content.length < 10) return '';
+  const ext = (filePath || '').split('.').pop().toLowerCase();
+  const lines = content.split('\n');
+  const totalLines = lines.length;
+  const sections = [];
+
+  // --- HTML / CSS structure ---
+  if (ext === 'html' || ext === 'htm' || ext === 'css' || ext === 'svelte' || ext === 'vue') {
+    // Detect HTML structural tags present
+    const htmlTags = [];
+    const htmlMissing = [];
+    const structChecks = [
+      ['<!DOCTYPE', '<!DOCTYPE>'],
+      ['<html', '<html>'],
+      ['<head', '<head>'],
+      ['</head>', '</head>'],
+      ['<style', '<style>'],
+      ['</style>', '</style>'],
+      ['<body', '<body>'],
+      ['</body>', '</body>'],
+      ['<header', '<header>'],
+      ['</header>', '</header>'],
+      ['<main', '<main>'],
+      ['<footer', '<footer>'],
+      ['</footer>', '</footer>'],
+      ['</html>', '</html>'],
+    ];
+    for (const [search, label] of structChecks) {
+      if (content.includes(search)) htmlTags.push(label);
+      else htmlMissing.push(label);
+    }
+    if (htmlTags.length > 0) sections.push(`HTML TAGS PRESENT: ${htmlTags.join(', ')}`);
+    if (htmlMissing.length > 0 && ext === 'html') sections.push(`HTML TAGS MISSING (still needed): ${htmlMissing.join(', ')}`);
+
+    // Extract CSS selectors (anything before { that is a valid selector)
+    const selectorSet = new Set();
+    const selectorRegex = /^[ \t]*([^{}@/\n*][^{]*?)\s*\{/gm;
+    let m;
+    while ((m = selectorRegex.exec(content)) !== null) {
+      let sel = m[1].trim();
+      // Skip CSS property lines that leaked through (contain : before {)
+      if (sel.includes(':') && !sel.includes('::') && !sel.includes(':hover') &&
+          !sel.includes(':focus') && !sel.includes(':active') && !sel.includes(':first') &&
+          !sel.includes(':last') && !sel.includes(':nth') && !sel.includes(':not') &&
+          !sel.includes(':root')) continue;
+      if (sel.length > 0 && sel.length < 80) selectorSet.add(sel);
+    }
+    if (selectorSet.size > 0) {
+      const selList = [...selectorSet];
+      // Cap to 60 selectors to stay compact
+      const display = selList.length > 60 ? selList.slice(0, 60).join(', ') + ` ... (${selList.length} total)` : selList.join(', ');
+      sections.push(`CSS SELECTORS ALREADY DEFINED (do NOT redefine): ${display}`);
+    }
+
+    // Detect if <style> is open but not closed
+    const styleOpens = (content.match(/<style[\s>]/gi) || []).length;
+    const styleCloses = (content.match(/<\/style>/gi) || []).length;
+    if (styleOpens > styleCloses) {
+      sections.push(`STATUS: <style> tag is OPEN (not closed). Close </style> before starting <body>.`);
+    }
+  }
+
+  // --- JavaScript / TypeScript structure ---
+  if (ext === 'js' || ext === 'ts' || ext === 'jsx' || ext === 'tsx' || ext === 'mjs' || ext === 'cjs') {
+    const funcs = new Set();
+    const funcRegex = /(?:function\s+(\w+)|(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s*)?(?:\([^)]*\)|[^=])\s*=>|class\s+(\w+))/g;
+    let fm;
+    while ((fm = funcRegex.exec(content)) !== null) {
+      const name = fm[1] || fm[2] || fm[3];
+      if (name) funcs.add(name);
+    }
+    if (funcs.size > 0) {
+      const display = [...funcs].slice(0, 40).join(', ');
+      sections.push(`DEFINED: ${display}`);
+    }
+    // Detect exports
+    const expMatch = content.match(/module\.exports\s*=|export\s+(?:default|{)/g);
+    if (expMatch) sections.push(`EXPORTS: ${expMatch.length} export statement(s)`);
+  }
+
+  // --- Python structure ---
+  if (ext === 'py') {
+    const pyDefs = new Set();
+    const pyRegex = /^(?:class|def)\s+(\w+)/gm;
+    let pm;
+    while ((pm = pyRegex.exec(content)) !== null) pyDefs.add(pm[1]);
+    if (pyDefs.size > 0) sections.push(`DEFINED: ${[...pyDefs].join(', ')}`);
+  }
+
+  // --- Universal: last 3 lines for continuation context ---
+  const lastLines = lines.slice(-3).map(l => l.trimEnd()).join('\n');
+  sections.push(`LAST 3 LINES:\n${lastLines}`);
+
+  return `FILE: ${filePath} (${totalLines} lines, ${content.length} chars)\n${sections.join('\n')}`;
+}
+
 module.exports = {
   isNearDuplicate,
   checkFileCompleteness,
@@ -713,5 +835,6 @@ module.exports = {
   classifyResponseFailure,
   progressiveContextCompaction,
   buildToolFeedback,
+  buildFileStructureDigest,
   ExecutionState,
 };

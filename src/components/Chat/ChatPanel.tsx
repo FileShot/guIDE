@@ -1144,11 +1144,6 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   };
 
   const cancelGeneration = async () => {
-    // Fix 82: Increment stream epoch BEFORE calling llmCancel so any stale tokens
-    // arriving from the backend while cancel propagates are immediately discarded
-    // by the epoch check in the token listener. Without this, ghost tokens appear
-    // after clicking stop because the epoch wasn't invalidated.
-    streamEpochRef.current++;
     await window.electronAPI?.llmCancel();
     setIsGenerating(false);
     setAgenticProgress(null);
@@ -2339,74 +2334,101 @@ ${e.message}`,
   };
 
   return (
-    <div className="h-full flex flex-col bg-[#252526] overflow-hidden relative">
+    <div className="h-full flex flex-col overflow-hidden relative" style={{ backgroundColor: 'var(--theme-bg)' }}>
       {/* Header — pr-[140px] reserves space for Electron window controls (min/max/close) */}
-      <div className="h-[30px] flex items-center px-3 pr-[140px] border-b border-[#1e1e1e] flex-shrink-0">
-        <Sparkles size={14} className="text-[#007acc] mr-2 flex-shrink-0" />
-        <span className="text-[12px] font-semibold text-[#cccccc] whitespace-nowrap brand-font">gu<span className="text-[#007acc]">IDE</span> <span className="font-sans font-semibold">AI</span></span>
+      <div
+        className="h-[35px] flex items-center px-3 pr-[140px] flex-shrink-0"
+        style={{ backgroundColor: 'var(--theme-bg-secondary)', borderBottom: '1px solid var(--theme-border)' }}
+      >
+        <Sparkles size={13} className="mr-2 flex-shrink-0" style={{ color: 'var(--theme-accent)' }} />
+        <span className="text-[12px] font-semibold whitespace-nowrap brand-font" style={{ color: 'var(--theme-foreground)' }}>gu<span style={{ color: 'var(--theme-accent)' }}>IDE</span> <span className="font-sans font-semibold">AI</span></span>
         <div className="flex-1 min-w-0" />
-        <div className="flex items-center gap-1 flex-shrink-0">
+        <div className="flex items-center gap-0.5 flex-shrink-0 chat-header-buttons">
 
           <button
-            className={`p-1 rounded text-[11px] flex items-center gap-1 ${ttsEnabled ? 'text-[#dcdcaa] bg-[#dcdcaa20]' : 'text-[#858585] hover:text-white'}`}
+            className="p-1 rounded transition-colors"
+            style={{ color: ttsEnabled ? 'var(--theme-accent)' : 'var(--theme-foreground-subtle)', backgroundColor: ttsEnabled ? 'color-mix(in srgb, var(--theme-accent) 12%, transparent)' : 'transparent' }}
             onClick={() => { setTtsEnabled(!ttsEnabled); if (isSpeaking) stopSpeaking(); }}
             title={ttsEnabled ? 'TTS On (click to disable)' : 'TTS Off (click to enable)'}
             aria-label={ttsEnabled ? 'Disable text-to-speech' : 'Enable text-to-speech'}
             aria-pressed={ttsEnabled}
+            onMouseEnter={e => { if (!ttsEnabled) e.currentTarget.style.color = 'var(--theme-foreground)'; e.currentTarget.style.backgroundColor = 'var(--theme-bg-tertiary)'; }}
+            onMouseLeave={e => { if (!ttsEnabled) e.currentTarget.style.color = 'var(--theme-foreground-subtle)'; e.currentTarget.style.backgroundColor = ttsEnabled ? 'color-mix(in srgb, var(--theme-accent) 12%, transparent)' : 'transparent'; }}
           >
-            {ttsEnabled ? <Volume2 size={12} /> : <VolumeX size={12} />}
+            {ttsEnabled ? <Volume2 size={13} /> : <VolumeX size={13} />}
           </button>
 
           <button
-            className="p-1 text-[#858585] hover:text-white rounded hover:bg-[#3c3c3c]"
+            className="p-1 rounded transition-colors"
+            style={{ color: 'var(--theme-foreground-subtle)' }}
             onClick={() => setShowSettings(!showSettings)}
             title="API Keys &amp; License"
             aria-label="API Keys and License"
             aria-expanded={showSettings}
+            onMouseEnter={e => { e.currentTarget.style.color = 'var(--theme-foreground)'; e.currentTarget.style.backgroundColor = 'var(--theme-bg-tertiary)'; }}
+            onMouseLeave={e => { e.currentTarget.style.color = 'var(--theme-foreground-subtle)'; e.currentTarget.style.backgroundColor = 'transparent'; }}
           >
-            <Key size={12} />
+            <Key size={13} />
           </button>
           <button
-            className={`p-1 rounded hover:bg-[#3c3c3c] ${showDevConsole ? 'text-[#dcdcaa]' : 'text-[#858585] hover:text-white'}`}
+            className="p-1 rounded transition-colors"
+            style={{ color: showDevConsole ? 'var(--theme-accent)' : 'var(--theme-foreground-subtle)', backgroundColor: showDevConsole ? 'color-mix(in srgb, var(--theme-accent) 12%, transparent)' : 'transparent' }}
             onClick={() => { const next = !showDevConsole; setShowDevConsole(next); showDevConsoleRef.current = next; if (next) setDevLogs([...devLogsRef.current]); }}
             title="Developer Console — view backend logs"
             aria-label="Developer console"
             aria-expanded={showDevConsole}
+            onMouseEnter={e => { if (!showDevConsole) e.currentTarget.style.color = 'var(--theme-foreground)'; e.currentTarget.style.backgroundColor = 'var(--theme-bg-tertiary)'; }}
+            onMouseLeave={e => { if (!showDevConsole) e.currentTarget.style.color = 'var(--theme-foreground-subtle)'; e.currentTarget.style.backgroundColor = showDevConsole ? 'color-mix(in srgb, var(--theme-accent) 12%, transparent)' : 'transparent'; }}
           >
-            <Terminal size={12} />
+            <Terminal size={13} />
           </button>
           <button
-            className="p-1 text-[#858585] hover:text-white rounded hover:bg-[#3c3c3c]"
+            className="p-1 rounded transition-colors"
+            style={{ color: 'var(--theme-foreground-subtle)' }}
             onClick={clearChat}
             title="New Conversation"
             aria-label="New conversation"
+            onMouseEnter={e => { e.currentTarget.style.color = 'var(--theme-foreground)'; e.currentTarget.style.backgroundColor = 'var(--theme-bg-tertiary)'; }}
+            onMouseLeave={e => { e.currentTarget.style.color = 'var(--theme-foreground-subtle)'; e.currentTarget.style.backgroundColor = 'transparent'; }}
           >
-            <Plus size={12} />
+            <Plus size={13} />
           </button>
           <button
-            className={`p-1 rounded hover:bg-[#3c3c3c] ${showHistory ? 'text-[#007acc]' : 'text-[#858585] hover:text-white'}`}
+            className="p-1 rounded transition-colors"
+            style={{ color: showHistory ? 'var(--theme-accent)' : 'var(--theme-foreground-subtle)', backgroundColor: showHistory ? 'color-mix(in srgb, var(--theme-accent) 12%, transparent)' : 'transparent' }}
             onClick={() => { setShowHistory(!showHistory); if (!showHistory) refreshSavedSessions(); }}
             title="Chat History"
             aria-label="Chat history"
             aria-expanded={showHistory}
+            onMouseEnter={e => { if (!showHistory) e.currentTarget.style.color = 'var(--theme-foreground)'; e.currentTarget.style.backgroundColor = 'var(--theme-bg-tertiary)'; }}
+            onMouseLeave={e => { if (!showHistory) e.currentTarget.style.color = 'var(--theme-foreground-subtle)'; e.currentTarget.style.backgroundColor = showHistory ? 'color-mix(in srgb, var(--theme-accent) 12%, transparent)' : 'transparent'; }}
           >
-            <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M13.5 2H2.5C1.67 2 1 2.67 1 3.5v9C1 13.33 1.67 14 2.5 14h11c.83 0 1.5-.67 1.5-1.5v-9C15 2.67 14.33 2 13.5 2zM4 5h8v1H4V5zm0 3h8v1H4V8zm0 3h5v1H4v-1z"/></svg>
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M13.5 2H2.5C1.67 2 1 2.67 1 3.5v9C1 13.33 1.67 14 2.5 14h11c.83 0 1.5-.67 1.5-1.5v-9C15 2.67 14.33 2 13.5 2zM4 5h8v1H4V5zm0 3h8v1H4V8zm0 3h5v1H4v-1z"/></svg>
           </button>
           <button
-            className="p-1 text-[#858585] hover:text-white rounded hover:bg-[#3c3c3c]"
+            className="p-1 rounded transition-colors"
+            style={{ color: 'var(--theme-foreground-subtle)' }}
             onClick={clearChat}
             title="Clear Chat History"
             aria-label="Clear chat"
+            onMouseEnter={e => { e.currentTarget.style.color = 'var(--theme-foreground)'; e.currentTarget.style.backgroundColor = 'var(--theme-bg-tertiary)'; }}
+            onMouseLeave={e => { e.currentTarget.style.color = 'var(--theme-foreground-subtle)'; e.currentTarget.style.backgroundColor = 'transparent'; }}
           >
-            <Trash2 size={12} />
+            <Trash2 size={13} />
           </button>
+
+          <div style={{ width: 1, height: 14, backgroundColor: 'var(--theme-border)', margin: '0 2px' }} />
+
           <button
-            className="p-1 text-[#858585] hover:text-white rounded hover:bg-[#3c3c3c]"
+            className="p-1 rounded transition-colors"
+            style={{ color: 'var(--theme-foreground-subtle)' }}
             onClick={onClose}
             title="Close"
             aria-label="Close chat panel"
+            onMouseEnter={e => { e.currentTarget.style.color = 'var(--theme-foreground)'; e.currentTarget.style.backgroundColor = 'var(--theme-bg-tertiary)'; }}
+            onMouseLeave={e => { e.currentTarget.style.color = 'var(--theme-foreground-subtle)'; e.currentTarget.style.backgroundColor = 'transparent'; }}
           >
-            <X size={12} />
+            <X size={13} />
           </button>
         </div>
       </div>
@@ -2891,18 +2913,6 @@ ${e.message}`,
                       // ── Build unified file map from all three sources ──
                       const fileMap = new Map<string, { baseContent: string; streamContent: string; status: 'streaming' | 'executing' | 'done'; lineCount?: number; result?: any }>();
 
-                      // 0. Seed from accumulated file content (Fix 68) — ensures code block
-                      // persists across iteration boundaries even when completedStreamingTools
-                      // is cleared. The accumulator always has the latest full file content.
-                      fileContentAccRef.current.forEach((content, fp) => {
-                        fileMap.set(fp, {
-                          baseContent: content,
-                          streamContent: '',
-                          status: 'done',
-                          result: { success: true },
-                        });
-                      });
-
                       // 1. Completed write tools (already finished + deduped)
                       completedStreamingTools.filter(td => WRITE_TOOLS_UNI.includes(td.tool)).forEach(td => {
                         const fp = (td.params?.filePath || td.params?.fileName || '') as string;
@@ -3116,14 +3126,22 @@ ${e.message}`,
                 <div
                   className={`text-[13px] leading-relaxed overflow-hidden break-words ${
                     msg.role === 'user'
-                      ? 'max-w-[85%] text-white rounded-lg rounded-br-sm px-3 py-2'
+                      ? 'max-w-[85%] rounded-2xl rounded-br-sm px-3.5 py-2.5'
                       : msg.role === 'system' && msg.isError
-                      ? 'w-full bg-[#2d1f1f] text-[#e8a09a] border border-[#6b2e2e] rounded-lg px-3 py-2.5'
+                      ? 'w-full rounded-lg px-3 py-2.5'
                       : msg.role === 'system'
-                      ? 'w-full bg-[#1e1e1e] text-[#858585] border border-[#3c3c3c] text-center rounded-lg px-3 py-2'
-                      : 'w-full text-[#cccccc] py-1'
+                      ? 'w-full text-center rounded-lg px-3 py-2'
+                      : 'w-full py-1'
                   }`}
-                  style={msg.role === 'user' ? { backgroundColor: 'var(--theme-chat-bubble)' } : undefined}
+                  style={
+                    msg.role === 'user'
+                      ? { backgroundColor: 'var(--theme-chat-bubble)', color: 'white' }
+                      : msg.role === 'system' && msg.isError
+                      ? { backgroundColor: 'color-mix(in srgb, #f44747 10%, var(--theme-bg))', color: '#e8a09a', border: '1px solid color-mix(in srgb, #f44747 25%, transparent)' }
+                      : msg.role === 'system'
+                      ? { backgroundColor: 'var(--theme-bg-secondary)', color: 'var(--theme-foreground-subtle)', border: '1px solid var(--theme-border)' }
+                      : { color: 'var(--theme-foreground)' }
+                  }
                 >
                   {msg.role === 'assistant' && msg.thinkingText && (() => {
                     const segments = msg.thinkingText.includes('\n\n---THINKING_SEGMENT---\n\n')
@@ -3377,7 +3395,7 @@ ${e.message}`,
       )}
 
       {/* Input */}
-      <div className="px-3 py-2 border-t border-[#1e1e1e] flex-shrink-0">
+      <div className="px-3 py-2 flex-shrink-0" style={{ borderTop: '1px solid var(--theme-border)' }}>
         {/* Hidden file input for image selection */}
         <input
           ref={fileInputRef}
@@ -3523,14 +3541,14 @@ ${e.message}`,
           {/* Textarea */}
           <textarea
             ref={inputRef}
-            className="w-full bg-transparent text-[#cccccc] text-[13px] px-3 py-2 outline-none resize-none placeholder-[#6e6e6e]"
+            className="w-full bg-transparent text-[13px] px-3 py-2 outline-none resize-none"
+            style={{ color: 'var(--theme-foreground)', height: '32px', overflowY: 'hidden' }}
             placeholder={isGenerating ? (messageQueue.length > 0 ? `${messageQueue.length} queued -- type to add more...` : 'Type to queue a message...') : 'Ask anything (Ctrl+L)'}
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             rows={1}
             aria-label="Chat message input"
-            style={{ height: '32px', overflowY: 'hidden' }}
             onInput={(e) => {
               const target = e.target as HTMLTextAreaElement;
               if (!target.value) {
@@ -3561,73 +3579,80 @@ ${e.message}`,
           <div className="flex items-center justify-between px-2 pb-1.5 min-w-0 gap-1 overflow-hidden">
             <div className="flex items-center gap-0.5 min-w-0 overflow-hidden flex-shrink flex-nowrap">
               <button
-                className="p-1 rounded text-[#858585] hover:text-white hover:bg-[#4c4c4c] transition-colors"
+                className="p-1 rounded transition-colors"
+                style={{ color: 'var(--theme-foreground-subtle)' }}
                 onClick={() => fileInputRef.current?.click()}
                 title="Attach image"
+                onMouseEnter={e => { e.currentTarget.style.color = 'var(--theme-foreground)'; e.currentTarget.style.backgroundColor = 'var(--theme-bg-tertiary)'; }}
+                onMouseLeave={e => { e.currentTarget.style.color = 'var(--theme-foreground-subtle)'; e.currentTarget.style.backgroundColor = 'transparent'; }}
               >
                 <Paperclip size={14} />
               </button>
               {/* AI Improve button removed */}
               <button
-                className={`p-1 rounded transition-colors ${
-                  isListening
-                    ? 'text-[#f44747]'
-                    : isTranscribing
-                      ? 'text-[#dcdcaa] animate-pulse cursor-wait'
-                      : 'text-[#858585] hover:text-white hover:bg-[#4c4c4c]'
-                }`}
+                className="p-1 rounded transition-colors"
+                style={{ color: isListening ? '#f44747' : isTranscribing ? 'var(--theme-accent)' : 'var(--theme-foreground-subtle)' }}
                 onClick={toggleListening}
                 disabled={isTranscribing}
                 title={isListening ? 'Stop & transcribe' : isTranscribing ? 'Transcribing...' : 'Voice input'}
                 aria-label={isListening ? 'Stop recording' : 'Voice input'}
+                onMouseEnter={e => { if (!isListening && !isTranscribing) { e.currentTarget.style.color = 'var(--theme-foreground)'; e.currentTarget.style.backgroundColor = 'var(--theme-bg-tertiary)'; } }}
+                onMouseLeave={e => { if (!isListening && !isTranscribing) { e.currentTarget.style.color = 'var(--theme-foreground-subtle)'; e.currentTarget.style.backgroundColor = 'transparent'; } }}
               >
                 {isTranscribing ? <Loader2 size={14} className="animate-spin" /> : isListening ? <MicOff size={14} /> : <Mic size={14} />}
               </button>
               {/* Audio wave animation when recording */}
               <AudioWaveAnimation isActive={isListening} />
               {/* Separator */}
-              <div className="w-px h-4 bg-[#555] mx-0.5" />
+              <div className="w-px h-4 mx-0.5" style={{ backgroundColor: 'var(--theme-border)' }} />
               {/* Auto Mode toggle — inline */}
               <button
-                className={`flex items-center gap-0.5 text-[11px] px-1 py-0.5 rounded transition-colors ${
-                  autoMode
-                    ? 'bg-[#007acc] text-white hover:bg-[#006bb3]'
-                    : 'text-[#858585] hover:text-[#cccccc] hover:bg-[#4c4c4c]'
-                }`}
+                className="flex items-center gap-0.5 text-[11px] px-1.5 py-0.5 rounded transition-colors"
+                style={{
+                  backgroundColor: autoMode ? 'var(--theme-accent)' : 'transparent',
+                  color: autoMode ? 'var(--theme-bg)' : 'var(--theme-foreground-subtle)',
+                }}
                 onClick={() => setAutoMode(!autoMode)}
                 title={autoMode ? 'Auto Mode ON — guIDE picks the best model per task' : 'Auto Mode OFF — Click to enable'}
                 aria-label={autoMode ? 'Disable auto mode' : 'Enable auto mode'}
                 aria-pressed={autoMode}
+                onMouseEnter={e => { if (!autoMode) { e.currentTarget.style.color = 'var(--theme-foreground)'; e.currentTarget.style.backgroundColor = 'var(--theme-bg-tertiary)'; } }}
+                onMouseLeave={e => { if (!autoMode) { e.currentTarget.style.color = 'var(--theme-foreground-subtle)'; e.currentTarget.style.backgroundColor = 'transparent'; } }}
               >
                 <Zap size={10} className={autoMode ? 'text-[#ffd700]' : ''} />
                 <span className="hidden sm:inline">Auto</span>
               </button>
               {/* Auto/Plan separator */}
-              <div className="w-px h-3.5 flex-shrink-0 mx-0.5" style={{ backgroundColor: 'rgba(255,255,255,0.12)' }} />
+              <div className="w-px h-3.5 flex-shrink-0 mx-0.5" style={{ backgroundColor: 'var(--theme-border)' }} />
               {/* Plan Mode toggle — inline */}
               <button
-                className={`flex items-center gap-0.5 text-[11px] px-1 py-0.5 rounded transition-colors ${
-                  planMode
-                    ? 'bg-[#c586c0] text-white hover:bg-[#b070a0]'
-                    : 'text-[#858585] hover:text-[#cccccc] hover:bg-[#4c4c4c]'
-                }`}
+                className="flex items-center gap-0.5 text-[11px] px-1.5 py-0.5 rounded transition-colors"
+                style={{
+                  backgroundColor: planMode ? '#c586c0' : 'transparent',
+                  color: planMode ? 'white' : 'var(--theme-foreground-subtle)',
+                }}
                 onClick={() => setPlanMode(!planMode)}
                 title={planMode ? 'Plan Mode ON — AI creates a plan before executing' : 'Plan Mode OFF — AI executes directly'}
                 aria-label={planMode ? 'Disable plan mode' : 'Enable plan mode'}
                 aria-pressed={planMode}
+                onMouseEnter={e => { if (!planMode) { e.currentTarget.style.color = 'var(--theme-foreground)'; e.currentTarget.style.backgroundColor = 'var(--theme-bg-tertiary)'; } }}
+                onMouseLeave={e => { if (!planMode) { e.currentTarget.style.color = 'var(--theme-foreground-subtle)'; e.currentTarget.style.backgroundColor = 'transparent'; } }}
               >
                 <FileCode size={10} className={planMode ? 'text-white' : ''} />
                 <span className="hidden sm:inline">Plan</span>
               </button>
               {/* Plan/Model separator */}
-              <div className="w-px h-3.5 flex-shrink-0 mx-0.5" style={{ backgroundColor: 'rgba(255,255,255,0.12)' }} />
+              <div className="w-px h-3.5 flex-shrink-0 mx-0.5" style={{ backgroundColor: 'var(--theme-border)' }} />
               {/* Model picker — inline */}
               <button
-                className="flex items-center gap-1 text-[11px] text-[#858585] hover:text-[#cccccc] px-1 py-0.5 rounded hover:bg-[#4c4c4c] transition-colors chat-dropdown-panel max-w-[120px]"
+                className="flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded transition-colors chat-dropdown-panel max-w-[120px]"
+                style={{ color: 'var(--theme-foreground-subtle)' }}
                 onClick={() => setShowModelPicker(!showModelPicker)}
                 title="Change model"
                 aria-label="Change model"
                 aria-expanded={showModelPicker}
+                onMouseEnter={e => { e.currentTarget.style.color = 'var(--theme-foreground)'; e.currentTarget.style.backgroundColor = 'var(--theme-bg-tertiary)'; }}
+                onMouseLeave={e => { e.currentTarget.style.color = 'var(--theme-foreground-subtle)'; e.currentTarget.style.backgroundColor = 'transparent'; }}
               >
                 {autoMode ? (
                   <Zap size={10} className="text-[#ffd700] flex-shrink-0" />
@@ -3652,7 +3677,8 @@ ${e.message}`,
             <div className="flex items-center gap-1 flex-shrink-0">
               {/* Queue counter badge */}
               {messageQueue.length > 0 && (
-                <div className="flex items-center gap-0.5 text-[10px] text-[#dcdcaa] bg-[#2d2d2d] px-1.5 py-0.5 rounded"
+                <div className="flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded"
+                     style={{ color: 'var(--theme-accent)', backgroundColor: 'var(--theme-bg-tertiary)' }}
                      title={`${messageQueue.length} message${messageQueue.length > 1 ? 's' : ''} queued`}>
                   <Clock size={9} />
                   <span>{messageQueue.length}</span>
@@ -3660,7 +3686,8 @@ ${e.message}`,
               )}
               {isGenerating && (
                 <button
-                  className="p-1 bg-[#f44747] text-white rounded-md hover:bg-[#d43c3c] transition-colors"
+                  className="p-1 text-white rounded-md transition-colors"
+                  style={{ backgroundColor: '#f44747' }}
                   onClick={() => {
                     messageQueueRef.current = [];
                     setMessageQueue([]);
@@ -3668,16 +3695,18 @@ ${e.message}`,
                   }}
                   title="Stop generating and clear queue"
                   aria-label="Stop generating"
+                  onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#d43c3c'; }}
+                  onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#f44747'; }}
                 >
                   <Square size={14} fill="currentColor" />
                 </button>
               )}
               <button
-                className={`p-1 rounded-md transition-colors ${
-                  isGenerating
-                    ? 'bg-[#dcdcaa] text-[#1e1e1e] hover:bg-[#e8e8b0]'
-                    : 'bg-[#007acc] text-white hover:bg-[#006bb3] disabled:opacity-30 disabled:bg-[#555]'
-                }`}
+                className="p-1 rounded-md transition-colors disabled:opacity-30"
+                style={{
+                  backgroundColor: isGenerating ? 'var(--theme-accent)' : 'var(--theme-accent)',
+                  color: 'var(--theme-bg)',
+                }}
                 onClick={sendMessage}
                 disabled={!input.trim() && attachedImages.length === 0 && attachedFiles.length === 0}
                 title={isGenerating ? 'Queue message (Enter)' : 'Send (Enter)'}

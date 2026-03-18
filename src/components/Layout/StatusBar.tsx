@@ -237,10 +237,16 @@ export const StatusBar: React.FC<StatusBarProps> = ({
         {/* Compact GPU/CPU indicator — tooltip has full details */}
         {gpuInfo && (
           <div className="flex items-center gap-1 cursor-pointer hover:bg-[#ffffff10] px-1 rounded flex-shrink-0"
-               title={`${gpuInfo.name}\nVRAM: ${gpuInfo.vramUsedGB}/${gpuInfo.vramTotalGB} GB (${gpuInfo.vramUsagePercent}%)\nGPU Util: ${gpuInfo.utilizationPercent}% • Temp: ${gpuInfo.temperatureC}°C\nCPU: ${systemResources?.cpu || 0}% • RAM: ${systemResources?.ram?.percent || 0}%\nLayers: ${gpuInfo.gpuLayers || 0} (${gpuInfo.backend || 'none'})`}>
+               title={`${gpuInfo.name || 'GPU'}${gpuInfo.vramUsedGB != null && gpuInfo.vramTotalGB != null ? `\nVRAM: ${gpuInfo.vramUsedGB}/${gpuInfo.vramTotalGB} GB (${gpuInfo.vramUsagePercent ?? 0}%)` : ''}${gpuInfo.utilizationPercent != null ? `\nGPU Util: ${gpuInfo.utilizationPercent}%` : ''}${gpuInfo.temperatureC != null ? ` • Temp: ${gpuInfo.temperatureC}°C` : ''}\nCPU: ${systemResources?.cpu || 0}% • RAM: ${systemResources?.ram?.percent || 0}%${gpuInfo.gpuLayers != null ? `\nLayers: ${gpuInfo.gpuLayers}` : ''}${gpuInfo.backend ? ` (${gpuInfo.backend})` : ''}`}>
             <span className={`text-[10px] font-medium ${gpuInfo.isActive ? 'text-[#89d185]' : 'text-[#f48771]'}`}>{gpuInfo.isActive ? 'GPU' : 'CPU'}</span>
-            <ProgressRing percent={gpuInfo.vramUsagePercent} size={12} strokeWidth={1.5} />
-            <span className="text-[10px] text-[#858585]">{gpuInfo.vramUsedGB}/{gpuInfo.vramTotalGB}G</span>
+            {gpuInfo.vramUsagePercent != null && !isNaN(gpuInfo.vramUsagePercent) && (
+              <ProgressRing percent={gpuInfo.vramUsagePercent} size={12} strokeWidth={1.5} />
+            )}
+            {gpuInfo.vramUsedGB != null && gpuInfo.vramTotalGB != null ? (
+              <span className="text-[10px] text-[#858585]">{gpuInfo.vramUsedGB}/{gpuInfo.vramTotalGB}G</span>
+            ) : systemResources ? (
+              <span className="text-[10px] text-[#858585]">CPU:{systemResources.cpu}% RAM:{systemResources.ram?.percent}%</span>
+            ) : null}
           </div>
         )}
 

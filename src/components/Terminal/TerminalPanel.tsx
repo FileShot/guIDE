@@ -332,9 +332,9 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({ cwd, onClose }) =>
   };
 
   return (
-    <div className="h-full flex flex-col bg-[#1e1e1e]">
+    <div className="h-full flex flex-col" style={{ backgroundColor: 'var(--theme-bg)' }}>
       {/* Tab bar */}
-      <div className="h-[30px] bg-[#252526] flex items-center border-b border-[#1e1e1e] flex-shrink-0">
+      <div className="h-[32px] flex items-center flex-shrink-0" style={{ backgroundColor: 'var(--theme-bg-secondary)', borderBottom: '1px solid var(--theme-border)' }}>
         {/* Panel tabs */}
         <div className="flex items-center h-full">
           {(['terminal', 'problems', 'output'] as const).map((tab, i) => (
@@ -343,12 +343,14 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({ cwd, onClose }) =>
                 <span className="text-[11px] select-none pointer-events-none px-0.5" style={{ color: 'var(--theme-foreground-subtle)' }}>/</span>
               )}
               <button
-                className={`px-2 h-full text-[11px] uppercase tracking-wider font-medium transition-colors border-b-2 ${
-                  bottomTab === tab
-                    ? 'text-white border-white'
-                    : 'text-[#858585] border-transparent hover:text-[#cccccc]'
-                }`}
+                className="px-2.5 h-full text-[11px] uppercase tracking-wider font-medium transition-colors"
+                style={{
+                  color: bottomTab === tab ? 'var(--theme-foreground)' : 'var(--theme-foreground-subtle)',
+                  borderBottom: bottomTab === tab ? '2px solid var(--theme-accent)' : '2px solid transparent',
+                }}
                 onClick={() => setBottomTab(tab)}
+                onMouseEnter={e => { if (bottomTab !== tab) e.currentTarget.style.color = 'var(--theme-foreground)'; }}
+                onMouseLeave={e => { if (bottomTab !== tab) e.currentTarget.style.color = 'var(--theme-foreground-subtle)'; }}
               >
                 {tab}
               </button>
@@ -364,16 +366,23 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({ cwd, onClose }) =>
             {terminals.map(t => (
               <div
                 key={t.id}
-                className={`flex items-center gap-1 px-2 h-[24px] text-[11px] rounded cursor-pointer ${
-                  activeTerminal === t.id ? 'bg-[#1e1e1e] text-white' : 'text-[#858585] hover:text-white hover:bg-[#2a2d2e]'
-                }`}
+                className="flex items-center gap-1 px-2 h-[24px] text-[11px] rounded cursor-pointer transition-colors"
+                style={{
+                  backgroundColor: activeTerminal === t.id ? 'var(--theme-bg)' : 'transparent',
+                  color: activeTerminal === t.id ? 'var(--theme-foreground)' : 'var(--theme-foreground-subtle)',
+                }}
                 onClick={() => setActiveTerminal(t.id)}
+                onMouseEnter={e => { if (activeTerminal !== t.id) { e.currentTarget.style.color = 'var(--theme-foreground)'; e.currentTarget.style.backgroundColor = 'var(--theme-bg-tertiary)'; } }}
+                onMouseLeave={e => { if (activeTerminal !== t.id) { e.currentTarget.style.color = 'var(--theme-foreground-subtle)'; e.currentTarget.style.backgroundColor = 'transparent'; } }}
               >
                 <TerminalIcon size={11} />
                 <span className="whitespace-nowrap max-w-[96px] truncate">{t.title}</span>
                 <button
-                  className="ml-1 hover:text-[#f44747] opacity-60 hover:opacity-100"
+                  className="ml-1 opacity-60 hover:opacity-100 transition-opacity"
+                  style={{ color: 'inherit' }}
                   onClick={(e) => { e.stopPropagation(); closeTerminal(t.id); }}
+                  onMouseEnter={e => { e.currentTarget.style.color = '#f44747'; }}
+                  onMouseLeave={e => { e.currentTarget.style.color = 'inherit'; }}
                 >
                   <X size={10} />
                 </button>
@@ -386,17 +395,23 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({ cwd, onClose }) =>
         <div className="flex items-center gap-1 px-2">
           {bottomTab === 'terminal' && (
             <button
-              className="p-1 text-[#858585] hover:text-white rounded hover:bg-[#2a2d2e]"
+              className="p-1 rounded transition-colors"
+              style={{ color: 'var(--theme-foreground-subtle)' }}
               onClick={createTerminal}
               title="New Terminal"
+              onMouseEnter={e => { e.currentTarget.style.color = 'var(--theme-foreground)'; e.currentTarget.style.backgroundColor = 'var(--theme-bg-tertiary)'; }}
+              onMouseLeave={e => { e.currentTarget.style.color = 'var(--theme-foreground-subtle)'; e.currentTarget.style.backgroundColor = 'transparent'; }}
             >
               <Plus size={14} />
             </button>
           )}
           <button
-            className="p-1 text-[#858585] hover:text-white rounded hover:bg-[#2a2d2e]"
+            className="p-1 rounded transition-colors"
+            style={{ color: 'var(--theme-foreground-subtle)' }}
             onClick={onClose}
             title="Close Panel"
+            onMouseEnter={e => { e.currentTarget.style.color = 'var(--theme-foreground)'; e.currentTarget.style.backgroundColor = 'var(--theme-bg-tertiary)'; }}
+            onMouseLeave={e => { e.currentTarget.style.color = 'var(--theme-foreground-subtle)'; e.currentTarget.style.backgroundColor = 'transparent'; }}
           >
             <X size={14} />
           </button>
@@ -414,24 +429,26 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({ cwd, onClose }) =>
         ))}
         {/* Terminal IntelliSense suggestion overlay */}
         {bottomTab === 'terminal' && showSuggestions && suggestions.length > 0 && (
-          <div className="absolute bottom-2 left-4 z-50 bg-[#252526] border border-[#454545] rounded-md shadow-xl max-w-[400px] overflow-hidden">
-            <div className="flex items-center gap-1 px-2 py-1 text-[10px] text-[#858585] border-b border-[#3c3c3c]">
-              <Sparkles size={9} className="text-[#dcdcaa]" />
+          <div className="absolute bottom-2 left-4 z-50 rounded-lg overflow-hidden" style={{ backgroundColor: 'var(--theme-bg-secondary)', border: '1px solid var(--theme-border)', boxShadow: '0 8px 32px rgba(0,0,0,0.4)', maxWidth: 400 }}>
+            <div className="flex items-center gap-1 px-2 py-1 text-[10px]" style={{ color: 'var(--theme-foreground-subtle)', borderBottom: '1px solid var(--theme-border)' }}>
+              <Sparkles size={9} style={{ color: 'var(--theme-accent)' }} />
               AI Suggestions
-              <span className="ml-auto text-[9px]">Tab to accept · Esc to dismiss</span>
+              <span className="ml-auto text-[9px]">Tab to accept &middot; Esc to dismiss</span>
             </div>
             {suggestions.map((s, i) => (
               <div
                 key={i}
-                className={`px-3 py-1.5 cursor-pointer flex items-start gap-2 transition-colors ${
-                  i === selectedSuggestion ? 'bg-[#04395e] text-white' : 'text-[#cccccc] hover:bg-[#2a2d2e]'
-                }`}
+                className="px-3 py-1.5 cursor-pointer flex items-start gap-2 transition-colors"
+                style={{
+                  backgroundColor: i === selectedSuggestion ? 'var(--theme-selection)' : 'transparent',
+                  color: i === selectedSuggestion ? 'var(--theme-foreground)' : 'var(--theme-foreground-muted)',
+                }}
                 onClick={() => applySuggestion(s)}
                 onMouseEnter={() => setSelectedSuggestion(i)}
               >
-                <code className="text-[12px] font-mono text-[#dcdcaa] flex-shrink-0">{s.command}</code>
+                <code className="text-[12px] font-mono flex-shrink-0" style={{ color: 'var(--theme-accent)' }}>{s.command}</code>
                 {s.description && (
-                  <span className="text-[10px] text-[#858585] mt-0.5 truncate">{s.description}</span>
+                  <span className="text-[10px] mt-0.5 truncate" style={{ color: 'var(--theme-foreground-subtle)' }}>{s.description}</span>
                 )}
               </div>
             ))}

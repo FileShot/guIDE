@@ -1337,6 +1337,25 @@ class MCPToolServer {
         this._setFileBackup(fullPath, { original: null, timestamp: Date.now(), tool: 'write_file', isNew: true });
       }
 
+      // Fix 57: Overwrite regression guard — if the file already exists with substantially
+      // more content than what's being written, block the write to prevent data loss.
+      // This catches ALL paths: salvage, native tool calls, text-mode parsing.
+      // The model should use append_to_file to add content, not write_file to replace.
+      if (!isNew && existingContent && existingContent.length > 500) {
+        const newLen = (content || '').length;
+        if (newLen < existingContent.length * 0.5) {
+          const existingLines = existingContent.split('\n').length;
+          const newLines = (content || '').split('\n').length;
+          console.log(`[MCP] Fix 57: BLOCKED write_file regression — "${filePath}" has ${existingLines} lines (${existingContent.length} chars) but write_file called with only ${newLines} lines (${newLen} chars). Use append_to_file instead.`);
+          return {
+            success: false,
+            error: `BLOCKED: File "${filePath}" already has ${existingLines} lines (${existingContent.length} chars). Your write_file call contains only ${newLines} lines (${newLen} chars) which would DESTROY existing content. Use append_to_file to add content, or edit_file to modify specific sections. Do NOT use write_file on files you have already written.`,
+            existingLines,
+            existingChars: existingContent.length,
+          };
+        }
+      }
+
       await fs.mkdir(path.dirname(fullPath), { recursive: true });
       // Defensive unescape: if content has no real newlines but has literal \n sequences,
       // the model double-escaped during JSON generation. Convert to real newlines.
@@ -2387,15 +2406,7 @@ class MCPToolServer {
 
   _updateTodo(params) {
     const { id, status, text } = params;
-    // Fix 56: Robust ID resolution — accept the todo's assigned ID (1-based) OR the
-    // array index (0-based). Small models (2-4B) routinely send id=0 for the first todo
-    // because they assume 0-indexed arrays. Instead of failing with "TODO #0 not found",
-    // fall back to treating the id as an array index. Also handle string IDs ("1" vs 1).
-    const numId = typeof id === 'string' ? parseInt(id, 10) : id;
-    let todo = this._todos.find(t => t.id === numId);
-    if (!todo && numId >= 0 && numId < this._todos.length) {
-      todo = this._todos[numId]; // Treat as 0-based array index
-    }
+    const todo = this._todos.find(t => t.id === id);
     if (!todo) return { success: false, error: `TODO #${id} not found` };
     if (status && ['pending', 'in-progress', 'done'].includes(status)) {
       todo.status = status;

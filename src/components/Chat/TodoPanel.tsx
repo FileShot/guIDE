@@ -19,11 +19,11 @@ interface TodoPanelProps {
 const StatusIcon: React.FC<{ status: string; size?: number }> = ({ status, size = 13 }) => {
   switch (status) {
     case 'done':
-      return <CheckCircle2 size={size} className="text-[#89d185] flex-shrink-0" />;
+      return <CheckCircle2 size={size} className="flex-shrink-0" style={{ color: 'var(--theme-success, #89d185)' }} />;
     case 'in-progress':
-      return <Loader2 size={size} className="text-[#007acc] animate-spin flex-shrink-0" />;
+      return <Loader2 size={size} className="animate-spin flex-shrink-0" style={{ color: 'var(--theme-accent)' }} />;
     default:
-      return <Circle size={size} className="text-[#555] flex-shrink-0" />;
+      return <Circle size={size} className="flex-shrink-0" style={{ color: 'var(--theme-foreground-muted)' }} />;
   }
 };
 
@@ -44,50 +44,56 @@ export const TodoPanel: React.FC<TodoPanelProps> = ({ todos }) => {
     : null;
 
   return (
-    <div className="mx-2 mb-1 rounded border border-[#2d2d2d] bg-[#252526] overflow-hidden flex-shrink-0">
+    <div className="mx-2 mb-1 rounded overflow-hidden flex-shrink-0" style={{ border: '1px solid var(--theme-border)', backgroundColor: 'var(--theme-bg-secondary)' }}>
       {/* Header row - VS Code style: chevron + icon + active task + progress */}
       <button
         onClick={() => setExpanded(e => !e)}
-        className="w-full flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] hover:bg-[#2d2d2d] transition-colors"
+        className="w-full flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] transition-colors"
+        style={{ color: 'var(--theme-foreground)' }}
+        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = 'var(--theme-selection)'; }}
+        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent'; }}
       >
-        <span className="flex-shrink-0 text-[#666]">
+        <span className="flex-shrink-0" style={{ color: 'var(--theme-foreground-muted)' }}>
           {expanded ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
         </span>
-        <ListTodo size={12} className={allDone ? 'text-[#89d185] flex-shrink-0' : 'text-[#007acc] flex-shrink-0'} />
+        <ListTodo size={12} className="flex-shrink-0" style={{ color: allDone ? 'var(--theme-success, #89d185)' : 'var(--theme-accent)' }} />
         {activeText && !expanded ? (
           <>
-            <span className="text-[#dcdcaa] truncate min-w-0">{activeText}</span>
-            <span className="text-[#555] flex-shrink-0 ml-auto pl-2">{done}/{total}</span>
+            <span className="truncate min-w-0" style={{ color: '#dcdcaa' }}>{activeText}</span>
+            <span className="flex-shrink-0 ml-auto pl-2" style={{ color: 'var(--theme-foreground-muted)' }}>{done}/{total}</span>
           </>
         ) : (
           <>
-            <span className={`font-medium flex-shrink-0 ${allDone ? 'text-[#89d185]' : 'text-[#ccc]'}`}>
+            <span className="font-medium flex-shrink-0" style={{ color: allDone ? 'var(--theme-success, #89d185)' : 'var(--theme-foreground)' }}>
               {allDone ? 'Plan complete' : 'Plan'}
             </span>
-            <span className="text-[#555] ml-1 flex-shrink-0">{done}/{total}</span>
-            <div className="flex-1 mx-2 h-[3px] bg-[#333] rounded-full overflow-hidden min-w-[24px]">
+            <span className="ml-1 flex-shrink-0" style={{ color: 'var(--theme-foreground-muted)' }}>{done}/{total}</span>
+            <div className="flex-1 mx-2 h-[3px] rounded-full overflow-hidden min-w-[24px]" style={{ backgroundColor: 'var(--theme-selection)' }}>
               <div
-                className={`h-full rounded-full transition-all duration-500 ${allDone ? 'bg-[#89d185]' : 'bg-[#007acc]'}`}
-                style={{ width: `${progressPct}%` }}
+                className="h-full rounded-full transition-all duration-500"
+                style={{ width: `${progressPct}%`, backgroundColor: allDone ? 'var(--theme-success, #89d185)' : 'var(--theme-accent)' }}
               />
             </div>
           </>
         )}
       </button>
 
-      {/* Expanded item list */}
+      {/* Expanded item list — scrollable after ~8 items */}
       {expanded && (
-        <div className="border-t border-[#2d2d2d] px-2.5 pb-1.5 pt-1 space-y-0.5">
+        <div className="px-2.5 pb-1.5 pt-1 space-y-0.5 overflow-y-auto" style={{ borderTop: '1px solid var(--theme-border)', maxHeight: '180px' }}>
           {todos.map(todo => (
             <div
               key={todo.id}
-              className={`flex items-start gap-1.5 py-[2px] text-[11px] transition-all duration-200 ${
-                todo.status === 'done'
-                  ? 'text-[#555] line-through'
+              className="flex items-start gap-1.5 py-[2px] text-[11px] transition-all duration-200"
+              style={{
+                color: todo.status === 'done'
+                  ? 'var(--theme-foreground-muted)'
                   : todo.status === 'in-progress'
-                    ? 'text-[#dcdcaa]'
-                    : 'text-[#888]'
-              }`}
+                    ? '#dcdcaa'
+                    : 'var(--theme-foreground)',
+                textDecoration: todo.status === 'done' ? 'line-through' : 'none',
+                opacity: todo.status === 'done' ? 0.6 : 1,
+              }}
             >
               <StatusIcon status={todo.status} />
               <span className="leading-snug">{todo.text}</span>

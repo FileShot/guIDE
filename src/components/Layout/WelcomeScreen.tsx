@@ -60,7 +60,8 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onOpenFolder, onNe
           api.modelsList?.() ?? [],
           api.getRecommendedModels?.() ?? { recommended: [] },
         ]);
-        setInstalledModels(Array.isArray(installed) ? installed : []);
+        const allModels = Array.isArray(installed) ? installed : [];
+        setInstalledModels(allModels.filter(m => !/mmproj/i.test(m.name || m.path || '')));
         // Top 3 hardware-matched models (server already sorts large→small)
         setRecommendedModels(((recs as any).recommended ?? []).slice(0, 3));
       } catch { /* offline or no models dir */ }
@@ -158,7 +159,8 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onOpenFolder, onNe
         setDownloadState(prev => ({ ...prev, [model.file]: 'done' }));
         // Refresh installed models list
         const fresh = await api.modelsList?.() ?? [];
-        setInstalledModels(Array.isArray(fresh) ? fresh : []);
+        const freshArr = Array.isArray(fresh) ? fresh : [];
+        setInstalledModels(freshArr.filter(m => !/mmproj/i.test(m.name || m.path || '')));
       } else {
         setDownloadState(prev => ({ ...prev, [model.file]: 'error' }));
       }

@@ -11,7 +11,6 @@ const path = require('path');
 const fs = require('fs').promises;
 const https = require('https');
 const http = require('http');
-const vm = require('vm');
 
 // Extracted tool modules
 const mcpBrowserTools = require('./tools/mcpBrowserTools');
@@ -59,12 +58,6 @@ class MCPToolServer {
 
     // Scratchpad
     this._scratchDir = options.projectPath ? path.join(options.projectPath, '.guide-scratch') : null;
-
-    // Custom tools
-    this._customTools = new Map();
-
-    // Subagent spawning
-    this._spawnSubagent = null;
 
     // Permission gates for destructive operations
     this.onPermissionRequest = null;
@@ -300,7 +293,7 @@ class MCPToolServer {
       },
       {
         name: 'write_file',
-        description: 'Write or create a file — OVERWRITES the entire file with the content provided. Use for new files or when replacing the full content. If you need to add to a file without losing existing content, use append_to_file instead. Always use this to save file content — never output file content as raw text. Format: {"tool":"write_file","params":{"filePath":"src/app.js","content":"..."}}',
+        description: 'Write or create a file — OVERWRITES the entire file with the content provided. Use for new files or when replacing the full content. If you need to add to a file without losing existing content, use append_to_file instead. Format: {"tool":"write_file","params":{"filePath":"src/app.js","content":"..."}}',
         parameters: {
           filePath: { type: 'string', description: 'File path', required: true },
           content: { type: 'string', description: 'File content', required: true },
@@ -766,7 +759,7 @@ class MCPToolServer {
       // ── Planning / TODO Tools ──
       {
         name: 'write_todos',
-        description: 'Create a visible TODO checklist for the user. Use for multi-step plans. Items are shown in the UI.',
+        description: 'Create a checklist for complex multi-step tasks (e.g. building an app, refactoring code, planning a project). Do NOT use for simple questions, greetings, or conversation.',
         parameters: {
           items: { type: 'array', description: 'Array of todo strings or {text,status} objects', required: true },
         },
@@ -796,33 +789,7 @@ class MCPToolServer {
           name: { type: 'string', description: 'Scratchpad name to read', required: true },
         },
       },
-      // ── Self-tool-creation ──
-      {
-        name: 'create_tool',
-        description: 'Create a reusable custom tool (JS function body). The code receives an "args" object and can use fs/path.',
-        parameters: {
-          name: { type: 'string', description: 'Tool name (alphanumeric)', required: true },
-          description: { type: 'string', description: 'What the tool does', required: false },
-          code: { type: 'string', description: 'JavaScript function body (receives args object)', required: true },
-        },
-      },
-      {
-        name: 'use_tool',
-        description: 'Run a custom tool you created with create_tool.',
-        parameters: {
-          name: { type: 'string', description: 'Custom tool name', required: true },
-          args: { type: 'object', description: 'Arguments to pass to the tool', required: false },
-        },
-      },
-      // ── Subagent Spawning ──
-      {
-        name: 'delegate_task',
-        description: 'Spawn a sub-agent to handle a complex subtask independently. Returns result when done.',
-        parameters: {
-          task: { type: 'string', description: 'Task description for the sub-agent', required: true },
-          maxIterations: { type: 'number', description: 'Max iterations for sub-agent (default 20, max 30)', required: false },
-        },
-      },
+
     ];
     return this._toolDefsCache;
   }
@@ -1094,17 +1061,6 @@ class MCPToolServer {
         case 'read_scratchpad':
           result = this._readScratchpad(params);
           break;
-        // Custom tools
-        case 'create_tool':
-          result = this._createCustomTool(params);
-          break;
-        case 'use_tool':
-          result = await this._useCustomTool(params);
-          break;
-        // Subagent
-        case 'delegate_task':
-          result = await this._delegateTask(params);
-          break;
         default:
           result = { success: false, error: `Unknown tool: ${toolName}` };
       }
@@ -1335,19 +1291,17 @@ class MCPToolServer {
         this._setFileBackup(fullPath, { original: null, timestamp: Date.now(), tool: 'write_file', isNew: true });
       }
 
-      // Fix 57: Overwrite regression guard — if the file already exists with substantially
-      // more content than what's being written, block the write to prevent data loss.
-      // This catches ALL paths: salvage, native tool calls, text-mode parsing.
-      // The model should use append_to_file to add content, not write_file to replace.
-      if (!isNew && existingContent && existingContent.length > 500) {
+      // Overwrite protection — disk check: if file exists on disk with content,
+      // block writes that would produce a shorter file (any length reduction = data loss).
+      if (!isNew && existingContent && existingContent.length > 200) {
         const newLen = (content || '').length;
-        if (newLen < existingContent.length * 0.5) {
+        if (newLen < existingContent.length) {
           const existingLines = existingContent.split('\n').length;
           const newLines = (content || '').split('\n').length;
-          console.log(`[MCP] Fix 57: BLOCKED write_file regression — "${filePath}" has ${existingLines} lines (${existingContent.length} chars) but write_file called with only ${newLines} lines (${newLen} chars). Use append_to_file instead.`);
+          console.log(`[MCP] Overwrite blocked — "${filePath}" has ${existingLines} lines (${existingContent.length} chars) but write_file called with only ${newLines} lines (${newLen} chars)`);
           return {
             success: false,
-            error: `BLOCKED: File "${filePath}" already has ${existingLines} lines (${existingContent.length} chars). Your write_file call contains only ${newLines} lines (${newLen} chars) which would DESTROY existing content. Use append_to_file to add content, or edit_file to modify specific sections. Do NOT use write_file on files you have already written.`,
+            error: `BLOCKED: File "${filePath}" already has ${existingLines} lines (${existingContent.length} chars). Your write_file call contains only ${newLines} lines (${newLen} chars) which would reduce the file. Use append_to_file to add content, or edit_file to modify specific sections.`,
             existingLines,
             existingChars: existingContent.length,
           };
@@ -1966,7 +1920,7 @@ class MCPToolServer {
     }
     const fullPath = path.isAbsolute(filePath) ? filePath : path.join(this.projectPath, filePath);
 
-    // Fix 33A: Reject empty content — the model called append but didn't provide code.
+    // Reject empty content — the model called append but didn't provide code.
     // Include the file's last lines so the model knows where to continue from.
     if (!content || !content.trim()) {
       let tailHint = '';
@@ -2452,55 +2406,6 @@ class MCPToolServer {
     return { success: true, ...data };
   }
 
-  // ─── Custom Tool Creation ────────────────────────────────────────────────
-
-  _createCustomTool(params) {
-    const { name, description, code } = params;
-    if (!name || typeof name !== 'string') return { success: false, error: 'name must be a non-empty string' };
-    if (!code || typeof code !== 'string') return { success: false, error: 'code must be a non-empty string' };
-    const forbidden = ['require', 'import', 'process.', 'child_process', 'fs.', 'eval(', 'Function('];
-    for (const pattern of forbidden) {
-      if (code.includes(pattern)) {
-        return { success: false, error: `Forbidden pattern in code: ${pattern}` };
-      }
-    }
-    this._customTools.set(name, { name, description, code, createdAt: Date.now() });
-    return { success: true, name, message: `Custom tool '${name}' created successfully` };
-  }
-
-  async _useCustomTool(params) {
-    const { name, args } = params;
-    if (!name || typeof name !== 'string') return { success: false, error: 'name must be a non-empty string' };
-    const tool = this._customTools.get(name);
-    if (!tool) return { success: false, error: `Custom tool '${name}' not found` };
-    try {
-      const sandbox = {
-        args: args || {},
-        console: { log: (...a) => a.join(' ') },
-        JSON, Math, Date, String, Number, Array, Object,
-      };
-      const vmContext = vm.createContext(sandbox);
-      const result = vm.runInContext(tool.code, vmContext, { timeout: 5000 });
-      return { success: true, result };
-    } catch (err) {
-      return { success: false, error: err.message };
-    }
-  }
-
-  // ─── Subagent Spawning ───────────────────────────────────────────────────
-
-  async _delegateTask(params) {
-    const { goal, context } = params;
-    if (!goal || typeof goal !== 'string') return { success: false, error: 'goal must be a non-empty string' };
-    if (!this._spawnSubagent) return { success: false, error: 'Subagent spawning not configured' };
-    try {
-      const result = await this._spawnSubagent(goal, context || '');
-      return { success: true, result };
-    } catch (err) {
-      return { success: false, error: err.message };
-    }
-  }
-
   // ─── Response Processing (parseToolCalls + processResponse) ──────────────
 
   parseToolCalls(responseText) {
@@ -2632,22 +2537,6 @@ class MCPToolServer {
     let browserCapped = false;
     let browserSkipped = 0;
 
-    // Write Deferral
-    const DATA_GATHER_TOOLS = new Set([
-      'browser_navigate', 'browser_click', 'browser_type', 'browser_snapshot',
-      'browser_evaluate', 'browser_get_content', 'browser_scroll', 'browser_back',
-      'browser_select_option', 'browser_press_key', 'browser_get_links',
-      'browser_screenshot', 'browser_hover', 'browser_tabs',
-      'web_search', 'fetch_webpage',
-    ]);
-    const DATA_WRITE_TOOLS = new Set(['write_file', 'edit_file']);
-    const batchHasGather = toolCalls.some(c => c?.tool && DATA_GATHER_TOOLS.has(c.tool));
-    const batchHasWrite = toolCalls.some(c => c?.tool && DATA_WRITE_TOOLS.has(c.tool));
-    const shouldDeferWrites = batchHasGather && batchHasWrite && !options?.skipWriteDeferral;
-    if (shouldDeferWrites) {
-      console.log('[MCP] Write deferral: batch contains both data-gathering and file-writing tools — deferring writes to next turn');
-    }
-
     console.log('[MCP] Executing', toolCalls.length, 'tool calls...', toolPaceMs ? `(${toolPaceMs}ms pace)` : '');
     const results = [];
     for (const call of toolCalls) {
@@ -2658,15 +2547,6 @@ class MCPToolServer {
           console.log(`[MCP] Browser cap: skipping ${call.tool} (${browserStateChanges} state changes already, refs are stale)`);
           continue;
         }
-      }
-
-      if (shouldDeferWrites && call?.tool && DATA_WRITE_TOOLS.has(call.tool)) {
-        console.log(`[MCP] Write deferred: skipping ${call.tool} (re-issue next turn with real data)`);
-        results.push({
-          tool: call.tool, params: call.params,
-          result: { success: false, error: `DEFERRED: ${call.tool} was batched with data-gathering tools. The file content was generated before seeing tool results and would be fabricated. Re-issue this ${call.tool} call in your NEXT response, using the ACTUAL data from the tool results above.` },
-        });
-        continue;
       }
 
       if (toolPaceMs > 0 && results.length > 0) {
@@ -2702,67 +2582,67 @@ class MCPToolServer {
 
   getCompactToolHint(taskType, options) {
     if (taskType === 'chat') return '';
-    const minimal = options && options.minimal;
-    let hint = '## Your Tools\n';
-    hint += 'Call tools with: ```json\n{"tool":"read_file","params":{"filePath":"index.js"}}\n```\nUse the actual parameter names shown below for each tool.\n';
+
+    // Build a clean, compact tool schema from actual definitions
+    const tools = this.getToolDefinitions();
+    const toolMap = {};
+    for (const tool of tools) toolMap[tool.name] = tool;
+
+    let hint = '## Tools\n';
+    hint += 'To call a tool, output a ```json block:\n```json\n{"tool":"<name>","params":{...}}\n```\n\n';
+
     if (this.projectPath) {
-      hint += `Project: ${this.projectPath} — use relative paths.\n`;
+      hint += `Project: ${this.projectPath}\n\n`;
     }
-    hint += '\n';
 
-    hint += '### File Operations\n';
-    hint += '- **write_file**(filePath, content) — Create/overwrite a file. USE THIS for the FIRST section of any new file.\n';
-    hint += '- **append_to_file**(filePath, content) — Append content to end of a file WITHOUT overwriting. Use for 2nd, 3rd, etc. sections.\n';
-    hint += '- **read_file**(filePath, startLine?, endLine?) — Read file contents.\n';
-    hint += '- **edit_file**(filePath, oldText, newText) — Replace text in existing file.\n';
-    hint += '- **list_directory**(dirPath) — List files in directory.\n';
-    hint += '- **run_command**(command) — Run a terminal/shell command.\n';
-    hint += '\n';
+    // Define categories to include based on task type
+    const categories = {
+      'File Operations': ['read_file', 'write_file', 'edit_file', 'append_to_file', 'delete_file', 'rename_file', 'copy_file', 'list_directory', 'find_files', 'create_directory', 'get_project_structure', 'grep_search'],
+      'Terminal': ['run_command'],
+      'Web': ['web_search', 'fetch_webpage', 'http_request'],
+      'Browser': ['browser_navigate', 'browser_snapshot', 'browser_click', 'browser_type', 'browser_fill_form', 'browser_evaluate', 'browser_scroll', 'browser_back', 'browser_press_key', 'browser_hover', 'browser_screenshot', 'browser_get_content', 'browser_tabs', 'browser_close'],
+      'Git': ['git_status', 'git_commit', 'git_diff', 'git_log', 'git_branch'],
+      'Memory': ['save_memory', 'get_memory', 'list_memories'],
+      'Planning': ['write_todos', 'update_todo'],
+    };
 
-    if (minimal) {
-      hint += '### Web\n';
-      hint += '- **web_search**(query) — Search the internet.\n\n';
-      hint += 'ALWAYS use the appropriate tool for action — NEVER output file content as code blocks in chat.\n';
+    // For minimal mode, only show essential tools
+    if (options && options.minimal) {
+      const minimalTools = ['read_file', 'write_file', 'edit_file', 'append_to_file', 'list_directory', 'run_command', 'web_search'];
+      for (const name of minimalTools) {
+        const tool = toolMap[name];
+        if (!tool) continue;
+        const params = tool.parameters ? Object.entries(tool.parameters)
+          .filter(([, info]) => info.required)
+          .map(([n]) => n)
+          .join(', ') : '';
+        hint += `- **${name}**(${params}) — ${tool.description.split('.')[0]}.\n`;
+      }
       return hint;
     }
 
-    if (taskType === 'code') {
-      hint += '### Code Task Examples\n';
-      hint += '```json\n{"tool":"write_file","params":{"filePath":"game.html","content":"<!DOCTYPE html>\\n<html>...</html>"}}\n```\n';
-      hint += '```json\n{"tool":"browser_navigate","params":{"url":"file:///path/to/game.html"}}\n```\n';
-    } else if (taskType === 'browser') {
-      hint += '### Browser (REAL Chromium)\n';
-      hint += '- **browser_navigate**(url) — Open a URL. Returns page snapshot.\n';
-      hint += '- **browser_snapshot**() — Get current page accessibility tree with [ref=N] IDs.\n';
-      hint += '- **browser_click**(ref) — Click element by ref number from snapshot.\n';
-      hint += '- **browser_type**(ref, text) — Type into input field.\n';
-      hint += '- **browser_scroll**(direction) — Scroll page up/down.\n';
-      hint += '- **browser_evaluate**(expression) — Run JavaScript on page.\n';
-      hint += '- **browser_back**() — Go back.\n';
-      hint += '\n### Browser Examples\n';
-      hint += '```json\n{"tool":"web_search","params":{"query":"current weather forecast"}}\n```\n';
-      hint += '```json\n{"tool":"browser_navigate","params":{"url":"https://example.com"}}\n```\n';
-    } else {
-      hint += '### Browser (REAL Chromium)\n';
-      hint += '- **browser_navigate**(url) — Open a URL.\n';
-      hint += '- **browser_snapshot**() — Get page content with [ref=N] IDs.\n';
-      hint += '- **browser_click**(ref) — Click element.\n';
-      hint += '- **browser_type**(ref, text) — Type into field.\n';
-      hint += '- **browser_evaluate**(expression) — Run JS on page.\n';
+    for (const [category, names] of Object.entries(categories)) {
+      const catTools = names.filter(n => toolMap[n]);
+      if (catTools.length === 0) continue;
+      hint += `### ${category}\n`;
+      for (const name of catTools) {
+        const tool = toolMap[name];
+        const params = tool.parameters ? Object.entries(tool.parameters)
+          .map(([n, info]) => `${n}${info.required ? '' : '?'}`)
+          .join(', ') : '';
+        // Use first sentence of description only for compact view
+        const desc = tool.description.split(/\.\s/)[0];
+        hint += `- **${name}**(${params}) — ${desc}.\n`;
+      }
       hint += '\n';
-      hint += '### Web & Memory\n';
-      hint += '- **web_search**(query) — Search the internet for live data (prices, news, weather, current versions). You have real internet access. Never refuse a live data query — always call this.\n';
-      hint += '- **fetch_webpage**(url) — Get page text/JSON directly.\n';
-      hint += '- **save_memory**(key, value) — Persist info across sessions.\n';
-      hint += '\n### Examples\n';
-      hint += '```json\n{"tool":"web_search","params":{"query":"weather in Dallas today"}}\n```\n';
-      hint += '```json\n{"tool":"write_file","params":{"filePath":"report.html","content":"<!DOCTYPE html>..."}}\n```\n';
     }
 
-    hint += '\n### Planning\n';
-    hint += '- **write_todos**(items) — Create task list for complex multi-step work.\n';
-    hint += '- **update_todo**(index, status) — Mark a task done/in-progress.\n';
-    hint += '\nYour browser is REAL Chromium. Never say you can\'t browse. ALWAYS use the appropriate tool for action — NEVER output file content as code blocks in chat.\n';
+    hint += '### Rules\n';
+    hint += '- Use write_file to create new files, append_to_file to add to existing files\n';
+    hint += '- For edits: read_file first, then edit_file with exact oldText\n';
+    hint += '- For large files: write_file for first section, then append_to_file for remaining sections\n';
+    hint += '- Browser workflow: browser_navigate → browser_snapshot → interact using [ref=N] IDs\n';
+
     return hint;
   }
 
@@ -2819,7 +2699,6 @@ class MCPToolServer {
       'Web': ['web_search', 'fetch_webpage'],
       'Git': ['git_status', 'git_commit', 'git_diff', 'git_log', 'git_branch'],
       'Context & Memory': ['save_memory', 'get_memory', 'list_memories', 'analyze_error'],
-      'Advanced': ['delegate_task'],
     };
 
     const toolMap = {};
@@ -2852,20 +2731,7 @@ class MCPToolServer {
       prompt += '\n';
     }
 
-    prompt += `### Example: User says "search for today's tech news"
-\`\`\`json
-{"tool":"web_search","params":{"query":"technology news today"}}
-\`\`\`
-Then after getting results:
-\`\`\`json
-{"tool":"browser_navigate","params":{"url":"https://news.ycombinator.com"}}
-\`\`\`
-Then to see the page:
-\`\`\`json
-{"tool":"browser_snapshot","params":{}}
-\`\`\`
-
-### Common Patterns
+    prompt += `### Common Patterns
 - **Web research**: web_search → browser_navigate → browser_snapshot → browser_click/type using [ref=N]
 - **Create & verify**: write_file → browser_navigate("file:///abs/path")
 - **Edit existing file**: read_file → edit_file (oldText/newText)

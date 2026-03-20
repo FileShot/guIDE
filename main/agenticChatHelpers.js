@@ -17,9 +17,14 @@ function checkFileCompleteness(content, filePath) {
   const trimmedEnd = content.trimEnd();
   const lastCodeLine = trimmedEnd.split('\n').pop().trim();
   const ext = (filePath?.match(/\.([^.]+)$/) || [])[1] || '';
+  // Non-code files (markdown, text, json, yaml, env, etc.) have no structural close tag.
+  // They are always considered "complete" — no forced continuation for these types.
+  if (/^(md|txt|json|ya?ml|toml|env|gitignore|csv|tsv|log|ini|cfg|conf|xml|svg|lock)$/i.test(ext)) {
+    return true;
+  }
   let looksComplete = false;
   if (/^html?$/i.test(ext)) {
-    // Fix 42: Anchor to end of content — </html> must be near the end, not just anywhere in the string.
+    // Anchor to end of content — </html> must be near the end, not just anywhere in the string.
     // Without $, a </html> inside a JS string/template in the middle of the file triggers a false positive.
     looksComplete = /<\/html\s*>\s*$/i.test(trimmedEnd);
   } else if (/^css$/i.test(ext)) {
@@ -227,7 +232,26 @@ function enrichErrorFeedback(toolName, error, failCounts = {}) {
 }
 
 /**
+ * Compress a single text string: prune large code fences and page snapshots.
+ * Returns the compressed string, or the original if compression didn't achieve ≥30% reduction.
+ */
+function _compressText(text) {
+  if (!text || text.length < 800) return null;
+  let compressed = text;
+  compressed = compressed.replace(
+    /```[\s\S]{800,}?```/g,
+    (match) => `\`\`\`\n[${(match.match(/\n/g) || []).length} lines — pruned]\n\`\`\``
+  );
+  compressed = compressed.replace(
+    /\*\*Page Snapshot\*\*\s*\([^)]*\):\n[\s\S]{500,}?(?=\n\*\*|\n###|\n---|$)/g,
+    () => `**Page Snapshot**: [pruned for context]`
+  );
+  return compressed.length < text.length * 0.7 ? compressed : null;
+}
+
+/**
  * Prune verbose messages in chat history to free context space.
+ * Handles both local format ({ type, text, response[] }) and cloud format ({ content }).
  */
 function pruneVerboseHistory(chatHistory, keepRecentCount = 6) {
   if (!Array.isArray(chatHistory) || chatHistory.length <= keepRecentCount + 1) return 0;
@@ -239,42 +263,28 @@ function pruneVerboseHistory(chatHistory, keepRecentCount = 6) {
     const msg = chatHistory[i];
     if (!msg) continue;
 
-    // Handle model responses: { type: 'model', response: [text] }
+    // Local format: model responses with response[] array
     if (msg.type === 'model' && Array.isArray(msg.response)) {
       let changed = false;
       for (let ri = 0; ri < msg.response.length; ri++) {
-        const r = msg.response[ri];
-        if (typeof r !== 'string' || r.length < 800) continue;
-        let compressed = r;
-        compressed = compressed.replace(
-          /```[\s\S]{800,}?```/g,
-          (match) => `\`\`\`\n[${(match.match(/\n/g) || []).length} lines — pruned]\n\`\`\``
-        );
-        if (compressed.length < r.length * 0.7) {
-          msg.response[ri] = compressed;
-          changed = true;
-        }
+        const compressed = _compressText(msg.response[ri]);
+        if (compressed) { msg.response[ri] = compressed; changed = true; }
       }
       if (changed) pruned++;
       continue;
     }
 
-    // Handle user/system messages: { type: 'user'|'system', text: '...' }
-    if (!msg.text || msg.text.length < 800) continue;
+    // Local format: user/system messages with text field
+    if (msg.text) {
+      const compressed = _compressText(msg.text);
+      if (compressed) { chatHistory[i] = { ...msg, text: compressed }; pruned++; }
+      continue;
+    }
 
-    let compressed = msg.text;
-    compressed = compressed.replace(
-      /```[\s\S]{800,}?```/g,
-      (match) => `\`\`\`\n[${(match.match(/\n/g) || []).length} lines — pruned]\n\`\`\``
-    );
-    compressed = compressed.replace(
-      /\*\*Page Snapshot\*\*\s*\([^)]*\):\n[\s\S]{500,}?(?=\n\*\*|\n###|\n---|$)/g,
-      (match) => `**Page Snapshot**: [pruned for context]`
-    );
-
-    if (compressed.length < msg.text.length * 0.7) {
-      chatHistory[i] = { ...msg, text: compressed };
-      pruned++;
+    // Cloud format: messages with content field
+    if (msg.content) {
+      const compressed = _compressText(msg.content);
+      if (compressed) { chatHistory[i] = { ...msg, content: compressed }; pruned++; }
     }
   }
   return pruned;
@@ -282,29 +292,10 @@ function pruneVerboseHistory(chatHistory, keepRecentCount = 6) {
 
 /**
  * Prune verbose messages in cloud conversation history.
+ * Delegates to the unified pruneVerboseHistory.
  */
 function pruneCloudHistory(history, keepRecentCount = 6) {
-  if (!Array.isArray(history) || history.length <= keepRecentCount + 1) return 0;
-
-  let pruned = 0;
-  const cutoff = history.length - keepRecentCount;
-
-  for (let i = 1; i < cutoff; i++) {
-    const msg = history[i];
-    if (!msg || !msg.content || msg.content.length < 800) continue;
-
-    let compressed = msg.content;
-    compressed = compressed.replace(
-      /```[\s\S]{800,}?```/g,
-      (match) => `\`\`\`\n[${(match.match(/\n/g) || []).length} lines — pruned]\n\`\`\``
-    );
-
-    if (compressed.length < msg.content.length * 0.7) {
-      history[i] = { ...msg, content: compressed };
-      pruned++;
-    }
-  }
-  return pruned;
+  return pruneVerboseHistory(history, keepRecentCount);
 }
 
 /**
@@ -458,7 +449,7 @@ function formatSuccessfulToolResult(tr, opts = {}) {
     case 'read_file':
       text += `**File:** ${tr.params?.filePath}${tr.result.readRange ? ` (lines ${tr.result.readRange})` : ''}\n`;
       {
-        // Fix 58B: Show head+tail for large files so the model can see both
+        // Show head+tail for large files so the model can see both
         // the file structure AND where it left off (critical for append workflows)
         const content = tr.result.content || '';
         if (content.length > 4000) {
@@ -510,7 +501,7 @@ function formatSuccessfulToolResult(tr, opts = {}) {
         }
       }
 
-      // Fix 59C: Post-write structural validation — immediate feedback loop
+      // Post-write structural validation — immediate feedback loop
       // Provides IDE-level diagnostics (like LSP Problems panel) so the model
       // knows the structural state of the file RIGHT AFTER writing, not just at rotation.
       const writtenFilePath = tr.result?.path || tr.params?.filePath || '';

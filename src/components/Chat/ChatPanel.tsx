@@ -6,11 +6,11 @@ import {
   ChevronDown, Trash2, Key, Loader2,
   Sparkles, Brain, Mic, MicOff, Volume2, VolumeX, Cloud,
   Paperclip, ArrowUp, Square, Shield, Zap, Clock, Check,
-  Image as ImageIcon, Download, XCircle, PlayCircle, AlertTriangle, Eye,
+  Image as ImageIcon, Download, PlayCircle, AlertTriangle, Eye,
 } from 'lucide-react';
 import type { LLMStatusEvent, AvailableModel, AIChatContext, MCPToolResult } from '@/types/electron';
 import { ModelPicker } from './ModelPicker';
-import { AudioWaveAnimation, ThinkingBlock, CollapsibleToolBlock, ToolCallGroup, CodeBlock, MermaidDiagram, ApiKeyInput, InlineMarkdownText } from './ChatWidgets';
+import { AudioWaveAnimation, ThinkingBlock, InlineToolCall, CodeBlock, MermaidDiagram, ApiKeyInput, InlineMarkdownText } from './ChatWidgets';
 import { useChatSettings } from './hooks/useChatSettings';
 import { useChatStreaming } from './hooks/useChatStreaming';
 import { useVoiceInput } from './hooks/useVoiceInput';
@@ -105,7 +105,6 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   // Fix 30D: File content accumulator — tracks completed file content per filePath
   // so append streaming can show base + growing append in one unified block
   const fileContentAccRef = useRef<Map<string, string>>(new Map());
-  const [_showThinking, _setShowThinking] = useState(false);
   const [cloudProviders, setCloudProviders] = useState<{ provider: string; label: string; models: { id: string; name: string }[] }[]>([]);
   const [allCloudProviders, setAllCloudProviders] = useState<{ provider: string; label: string; models: { id: string; name: string }[]; hasKey: boolean }[]>([]);
   // Model favorites — persisted in localStorage for quick switching
@@ -121,7 +120,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   const [fileChangesExpanded, setFileChangesExpanded] = useState(false);
   const [attachedImages, setAttachedImages] = useState<AttachedImage[]>([]);
   const [attachedFiles, setAttachedFiles] = useState<{ name: string; path: string; content: string }[]>([]);
-  const [contextUsage, setContextUsage] = useState<{ used: number; total: number; model: string } | null>(null);
+  const [, setContextUsage] = useState<{ used: number; total: number; model: string } | null>(null);
   const [showDevConsole, setShowDevConsole] = useState(false);
   const [devLogs, setDevLogs] = useState<Array<{ level: string; text: string; timestamp: number }>>([]);
   const devLogsRef = useRef<Array<{ level: string; text: string; timestamp: number }>>([]);
@@ -211,7 +210,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
         const filePath = rootPath.endsWith(sep) ? rootPath + filename : rootPath + sep + filename;
         await api.writeFile(filePath, code);
         addSystemMessage(`File saved: ${filePath}`);
-        onOpenFile(filePath);
+        onOpenFile?.(filePath);
         return;
       }
       return;
@@ -220,7 +219,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     const result = await api.showSaveDialog({ defaultPath: `file.${ext}`, filters: [{ name: 'All Files', extensions: ['*'] }] });
     if (!result.canceled && result.filePath) {
       await api.writeFile(result.filePath, code);
-      onOpenFile(result.filePath);
+      onOpenFile?.(result.filePath);
     }
   }, [onOpenFile, rootPath, addSystemMessage]);
 
@@ -706,8 +705,9 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     e.stopPropagation();
   }, []);
 
-  // "Improve with AI" — polish the user's prompt before sending
-  const improvePrompt = useCallback(async () => {
+  // "Improve with AI" — polish the user's prompt before sending (wired to UI button later)
+  // @ts-expect-error kept for future UI wiring
+  const _improvePrompt = useCallback(async () => {
     const text = input.trim();
     if (!text || isImproving || isGenerating) return;
     setIsImproving(true);
@@ -1314,7 +1314,6 @@ ${e.message}`,
   // Display tool call JSON content in full — no truncation. The <pre> elements use
   // max-h / overflow-y-auto so large content scrolls within the bubble instead of
   // being cut off with a misleading '[truncated]' marker.
-  const truncateToolContent = (content: string): string => content;
 
   // ── Generated Image Preview Component ──
   const GeneratedImagePreview: React.FC<{
@@ -1323,7 +1322,7 @@ ${e.message}`,
     prompt: string;
     provider: string;
     model: string;
-  }> = ({ imageBase64, mimeType, prompt, provider, model }) => {
+  }> = ({ imageBase64, mimeType, prompt, provider: _provider, model: _model }) => {
     const [saving, setSaving] = React.useState(false);
     const [saved, setSaved] = React.useState<string | null>(null);
     const [expanded, setExpanded] = React.useState(false);
@@ -1463,7 +1462,7 @@ ${e.message}`,
     provider: string;
     model: string;
     duration?: string;
-  }> = ({ videoBase64, mimeType, prompt: _videoPrompt, provider, model, duration }) => {
+  }> = ({ videoBase64, mimeType, prompt: _videoPrompt, provider: _vProvider, model: _vModel, duration: _vDuration }) => {
     const [saving, setSaving] = React.useState(false);
     const [saved, setSaved] = React.useState<string | null>(null);
 
@@ -1625,9 +1624,6 @@ ${e.message}`,
 
     const parts = content.split(/(```[\s\S]*?```)/g);
     const elements: React.ReactNode[] = [];
-    // ALL tool blocks are collected here — appended as a single ToolCallGroup at the
-    // bottom of the message. They are NEVER rendered inline in the text flow.
-    const allToolElements: React.ReactElement[] = [];
     let pendingWriteFP: string | null = null; // filePath from write_file json header with no content — reconnects to next code block
     let pendingWriteLang = ''; // mapped language for the pending filePath extension
 
@@ -1639,7 +1635,7 @@ ${e.message}`,
         const lang = part.substring(3, firstLine > 0 ? firstLine : 3).trim();
         const code = firstLine > 0 ? part.substring(firstLine + 1, part.length - 3) : part.substring(3, part.length - 3);
 
-        // Tool call JSON block — collect into allToolElements (never inline)
+        // Tool call JSON block — render inline chronologically
         const toolCall = (lang === 'json' || lang === 'tool') ? parseToolCall(code) : null;
         if (toolCall) {
           if (suppressTools) { continue; } // caller (renderMessage) owns tool rendering via msg.toolsUsed
@@ -1671,8 +1667,8 @@ ${e.message}`,
               pendingWriteLang = writeLang;
             }
           } else if (result) {
-            allToolElements.push(
-              <CollapsibleToolBlock key={`t-${i}`} label={getToolLabel(toolCall, result.isOk ? 'ok' : 'fail')} icon={result.isOk ? '✓' : '✗'}>
+            elements.push(
+              <InlineToolCall key={`t-${i}`} label={getToolLabel(toolCall, result.isOk ? 'ok' : 'fail')} icon={result.isOk ? '✓' : '✗'}>
                 <div>
                   <div className="text-[10px] text-[#858585] mb-1 font-medium tracking-wide">PARAMETERS</div>
                   <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2 mb-2 max-h-[300px] overflow-y-auto">{code}</pre>
@@ -1681,13 +1677,11 @@ ${e.message}`,
                     <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2">{result.text}</pre>
                   </div>
                 </div>
-              </CollapsibleToolBlock>
+              </InlineToolCall>
             );
           } else {
-            allToolElements.push(
-              <CollapsibleToolBlock key={`t-${i}`} label={getToolLabel(toolCall, 'ok')} icon="✓">
-                <div className="text-[11px] text-[#858585]">Completed</div>
-              </CollapsibleToolBlock>
+            elements.push(
+              <InlineToolCall key={`t-${i}`} label={getToolLabel(toolCall, 'ok')} icon="✓" />
             );
           }
           continue;
@@ -1706,7 +1700,7 @@ ${e.message}`,
         ) {
           // tool-call fence that failed parseToolCall — suppress. Never render as a raw code bubble.
           // Legitimate code examples won't open with {"tool":; tool calls here are malformed/aliased
-          // and already shown via ToolCallGroup (tool-executing events).
+          // and already shown via InlineToolCall (tool-executing events).
           continue;
         }
 
@@ -1806,7 +1800,7 @@ ${e.message}`,
 
           if (!tp.trim()) continue;
 
-          // Inline JSON tool calls — route to allToolElements, never inline in text
+          // Inline JSON tool calls — render inline chronologically
           const segments = splitInlineToolCalls(tp);
           for (const seg of segments) {
             if (seg.type === 'tool' && seg.toolCall) {
@@ -1832,14 +1826,12 @@ ${e.message}`,
                   </div>
                 );
               } else if (isInlineWriteTool && !inlineWriteContent && !result) {
-                allToolElements.push(
-                  <CollapsibleToolBlock key={`inline-${i}-${j}-${allToolElements.length}`} label={getToolLabel(seg.toolCall, 'fail')} icon="✗">
-                    <div className="text-[11px] text-[#858585]">Skipped — no content provided</div>
-                  </CollapsibleToolBlock>
+                elements.push(
+                  <InlineToolCall key={`inline-${i}-${j}-${elements.length}`} label={getToolLabel(seg.toolCall, 'fail')} icon="✗" />
                 );
               } else if (result) {
-                allToolElements.push(
-                  <CollapsibleToolBlock key={`inline-${i}-${j}-${allToolElements.length}`} label={getToolLabel(seg.toolCall, result.isOk ? 'ok' : 'fail')} icon={result.isOk ? '✓' : '✗'}>
+                elements.push(
+                  <InlineToolCall key={`inline-${i}-${j}-${elements.length}`} label={getToolLabel(seg.toolCall, result.isOk ? 'ok' : 'fail')} icon={result.isOk ? '✓' : '✗'}>
                     <div>
                       <div className="text-[10px] text-[#858585] mb-1 font-medium tracking-wide">PARAMETERS</div>
                       <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2 mb-2 max-h-[300px] overflow-y-auto">{seg.content}</pre>
@@ -1848,13 +1840,11 @@ ${e.message}`,
                         <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2">{result.text}</pre>
                       </div>
                     </div>
-                  </CollapsibleToolBlock>
+                  </InlineToolCall>
                 );
               } else {
-                allToolElements.push(
-                  <CollapsibleToolBlock key={`inline-${i}-${j}-${allToolElements.length}`} label={getToolLabel(seg.toolCall, 'ok')} icon="✓">
-                    <div className="text-[11px] text-[#858585]">Completed</div>
-                  </CollapsibleToolBlock>
+                elements.push(
+                  <InlineToolCall key={`inline-${i}-${j}-${elements.length}`} label={getToolLabel(seg.toolCall, 'ok')} icon="✓" />
                 );
               }
             } else {
@@ -1863,15 +1853,6 @@ ${e.message}`,
           }
         }
       }
-    }
-
-    // Single unified ToolCallGroup at the bottom — all tool calls in one place
-    if (allToolElements.length > 0) {
-      elements.push(
-        <ToolCallGroup key="tcg-all" count={allToolElements.length}>
-          {allToolElements}
-        </ToolCallGroup>
-      );
     }
 
     return elements;
@@ -1889,7 +1870,7 @@ ${e.message}`,
         const nonWriteMsgTools: MCPToolResult[] = [];
         // Dedup write tools by filePath: keep only the LATEST per file so one code block per file
         const writeToolsByPath = new Map<string, { tu: any; idx: number }>();
-        msg.toolsUsed.forEach((tu: any, i: number) => {
+        msg.toolsUsed?.forEach((tu: any, i: number) => {
           const isMsgWriteTool = WRITE_TOOLS_MSG.includes(tu.tool);
           if (isMsgWriteTool && tu.params?.content) {
             const fp = (tu.params?.filePath as string || tu.params?.fileName as string || '');
@@ -1918,40 +1899,45 @@ ${e.message}`,
         });
         const extraNodes: React.ReactNode[] = [...writeFlatNodes];
         if (nonWriteMsgTools.length > 0) {
-          extraNodes.push(
-            <ToolCallGroup key="msg-tools" count={nonWriteMsgTools.length}>
-              {nonWriteMsgTools.map((tu, i) => {
-                const isOk = tu.result?.success !== false;
-                const resultDisplay = tu.result
-                  ? (tu.tool === 'edit_file' && tu.result?.success
-                    ? `Edited ${tu.params?.filePath || 'file'}`
-                    : tu.tool === 'read_file' && tu.result?.success
-                    ? (tu.result.content || tu.result.text || '').substring(0, 500) + ((tu.result.content || tu.result.text || '').length > 500 ? '…' : '')
-                    : typeof tu.result === 'object'
-                    ? JSON.stringify(tu.result, null, 2).substring(0, 800)
-                    : String(tu.result).substring(0, 800))
-                  : 'Completed';
-                return (
-                  <CollapsibleToolBlock
-                    key={`msg-tu-${i}`}
-                    label={getToolLabel(tu, isOk ? 'ok' : 'fail')}
-                    icon={isOk ? '✓' : '✗'}
-                  >
-                    <div>
-                      {tu.params && Object.keys(tu.params).length > 0 && (
-                        <>
-                          <div className="text-[10px] text-[#858585] mb-1 font-medium tracking-wide">PARAMETERS</div>
-                          <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2 mb-2 max-h-[200px] overflow-y-auto">{JSON.stringify(tu.params, null, 2)}</pre>
-                        </>
-                      )}
-                      <div className={`text-[10px] mb-1 font-medium tracking-wide ${isOk ? 'text-[#89d185]' : 'text-[#f14c4c]'}`}>RESULT</div>
-                      <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2 max-h-[300px] overflow-y-auto">{resultDisplay}</pre>
-                    </div>
-                  </CollapsibleToolBlock>
-                );
-              })}
-            </ToolCallGroup>
-          );
+          nonWriteMsgTools.forEach((tu, i) => {
+            const isOk = tu.result?.success !== false;
+            const resultDisplay = tu.result
+              ? (tu.tool === 'edit_file' && tu.result?.success
+                ? `Edited ${tu.params?.filePath || 'file'}`
+                : tu.tool === 'read_file' && tu.result?.success
+                ? (tu.result.content || tu.result.text || '').substring(0, 500) + ((tu.result.content || tu.result.text || '').length > 500 ? '...' : '')
+                : typeof tu.result === 'object'
+                ? JSON.stringify(tu.result, null, 2).substring(0, 800)
+                : String(tu.result).substring(0, 800))
+              : 'Completed';
+            // Compute diff stats for edit_file
+            const diffStats: { added?: number; removed?: number } | undefined =
+              tu.tool === 'edit_file' && tu.result?.success
+                ? { added: tu.params?.newText ? String(tu.params.newText).split('\n').length : undefined,
+                    removed: tu.params?.oldText ? String(tu.params.oldText).split('\n').length : undefined }
+                : tu.tool === 'write_file' && tu.params?.content
+                ? { added: String(tu.params.content).split('\n').length }
+                : undefined;
+            extraNodes.push(
+              <InlineToolCall
+                key={`msg-tu-${i}`}
+                label={getToolLabel(tu, isOk ? 'ok' : 'fail')}
+                icon={isOk ? '✓' : '✗'}
+                diffStats={diffStats}
+              >
+                <div>
+                  {tu.params && Object.keys(tu.params).length > 0 && (
+                    <>
+                      <div className="text-[10px] text-[#858585] mb-1 font-medium tracking-wide">PARAMETERS</div>
+                      <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2 mb-2 max-h-[200px] overflow-y-auto">{JSON.stringify(tu.params, null, 2)}</pre>
+                    </>
+                  )}
+                  <div className={`text-[10px] mb-1 font-medium tracking-wide ${isOk ? 'text-[#89d185]' : 'text-[#f14c4c]'}`}>RESULT</div>
+                  <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2 max-h-[300px] overflow-y-auto">{resultDisplay}</pre>
+                </div>
+              </InlineToolCall>
+            );
+          });
         }
         return [...extraNodes, ...parts];
     }
@@ -2050,7 +2036,7 @@ ${e.message}`,
       if (blockMatch.start > lastIndex) {
         let before = text.substring(lastIndex, blockMatch.start);
         // Strip everything from "## Tool Execution Results" to end of this text segment —
-        // results are already merged into CollapsibleToolBlock via extractToolResults().
+        // results are already merged into InlineToolCall via extractToolResults().
         before = before.replace(/\n*## Tool Execution Results[\s\S]*/g, '');
         // Strip any remaining standalone ### toolname [OK|FAIL] sections (greedy to end)
         before = before.replace(/\n*### \S+ \[(?:OK|FAIL)\][\s\S]*/g, '');
@@ -2103,7 +2089,7 @@ ${e.message}`,
           const segments = splitInlineToolCalls(stripTrailingPartialToolCall(before));
           for (const seg of segments) {
             if (seg.type === 'tool') {
-              // Suppress — tool calls are tracked in the ToolCallGroup (executingTools/completedStreamingTools)
+              // Suppress — tool calls are tracked in InlineToolCall (executingTools/completedStreamingTools)
               // Rendering them here too causes duplicate clutter in the stream.
             } else {
               parts.push(<InlineMarkdownText key={`s-${idx}`} content={seg.content} />);
@@ -2128,11 +2114,11 @@ ${e.message}`,
         const result = queue?.length ? queue.shift() : undefined;
 
         if (result) {
-          // Suppress — completed tool calls are shown in the ToolCallGroup (completedStreamingTools).
+          // Suppress — completed tool calls are shown as InlineToolCall (completedStreamingTools).
           // Rendering them inline here too causes duplicate clutter in the stream.
           // (intentionally nothing pushed)
         } else {
-          // Tool block complete but no result yet — executingTools already shows it in the ToolCallGroup.
+          // Tool block complete but no result yet — executingTools already shows it as InlineToolCall.
           // (intentionally nothing pushed)
         }
       } else if (lang === '' && (code.trim().startsWith('Tool Execution Results') || code.trim().startsWith('## Tool Execution Results'))) {
@@ -2144,7 +2130,7 @@ ${e.message}`,
         (lang === '' && /^\s*\{\s*"tool"\s*:/.test(code))
       ) {
         // tool-call fence that failed parseToolCall in streaming — suppress, not a code bubble.
-        // Already shown via ToolCallGroup (tool-executing events). Malformed/aliased tool calls
+        // Already shown via InlineToolCall (tool-executing events). Malformed/aliased tool calls
         // have no business rendering as raw JSON to the user.
       } else if (lang === 'mermaid') {
         parts.push(<MermaidDiagram key={`b-${idx}`} code={code} />);
@@ -2159,7 +2145,7 @@ ${e.message}`,
     if (lastIndex < text.length) {
       let remaining = text.substring(lastIndex);
 
-      // Strip everything from "## Tool Execution Results" to end — already in CollapsibleToolBlock
+      // Strip everything from "## Tool Execution Results" to end — already in InlineToolCall
       remaining = remaining.replace(/\n*## Tool Execution Results[\s\S]*/g, '');
       // Strip any remaining standalone ### toolname [OK|FAIL] sections (greedy to end)
       remaining = remaining.replace(/\n*### \S+ \[(?:OK|FAIL)\][\s\S]*/g, '');
@@ -2313,12 +2299,12 @@ ${e.message}`,
             }
           } else {
           // Inline tool calls in remaining text — suppress them (they're already in the
-          // executingTools/completedStreamingTools ToolCallGroup). Use the cleaned text
+          // executingTools/completedStreamingTools InlineToolCall). Use the cleaned text
           // segments from splitInlineToolCalls (which applies stripToolArtifacts).
           const segments = splitInlineToolCalls(remaining);
           for (const seg of segments) {
             if (seg.type === 'tool') {
-              // Suppress — ToolCallGroup wrench already shows these
+              // Suppress — InlineToolCall already shows these
             } else if (seg.content.trim()) {
               parts.push(<InlineMarkdownText key={`sr-${idx}`} content={seg.content} />);
             }
@@ -3039,85 +3025,73 @@ ${e.message}`,
                       return (
                         <>
                           {fileBlocks}
-                          {nonWriteGenTools.length > 0 && (
-                            <div className="mt-1">
-                              <ToolCallGroup count={nonWriteGenTools.length}>
-                                {nonWriteGenTools.map((tc) => {
-                                  let partialDetail = '';
-                                  try {
-                                    const fpMatch = tc.paramsText.match(/"filePath"\s*:\s*"([^"]+)"/);
-                                    const urlMatch = tc.paramsText.match(/"url"\s*:\s*"([^"]+)"/);
-                                    const qMatch = tc.paramsText.match(/"query"\s*:\s*"([^"]+)"/);
-                                    if (fpMatch) {
-                                      const fp = fpMatch[1];
-                                      partialDetail = fp.includes('/') ? fp.split('/').pop() || fp : fp.includes('\\') ? fp.split('\\').pop() || fp : fp;
-                                    } else if (urlMatch) {
-                                      try { partialDetail = new URL(urlMatch[1]).hostname; } catch { partialDetail = urlMatch[1].substring(0, 30); }
-                                    } else if (qMatch) {
-                                      partialDetail = qMatch[1].substring(0, 25) + (qMatch[1].length > 25 ? '...' : '');
-                                    }
-                                  } catch {}
-                                  const genLabel = partialDetail ? `${tc.functionName}: ${partialDetail}` : tc.functionName;
-                                  return (
-                                    <CollapsibleToolBlock key={`gen-${tc.callIndex}`} label={genLabel} icon="⧗">
-                                      <div>
-                                        <div className="flex items-center gap-1.5 mb-1">
-                                          <Loader2 size={10} className="animate-spin" style={{ color: 'var(--theme-accent)' }} />
-                                          <span className="text-[10px]" style={{ color: 'var(--theme-foreground-muted)' }}>Generating tool call...</span>
-                                        </div>
-                                        {tc.paramsText && (
-                                          <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2 max-h-[180px] overflow-y-auto">{tc.paramsText}</pre>
-                                        )}
-                                      </div>
-                                    </CollapsibleToolBlock>
-                                  );
-                                })}
-                              </ToolCallGroup>
-                            </div>
-                          )}
-                          {(nonWriteDone.length > 0 || nonWriteExec.length > 0) && (
-                            <div className="mt-1">
-                              <ToolCallGroup count={nonWriteDone.length + nonWriteExec.length}>
-                                {nonWriteDone.map((toolData, i) => {
-                                  const rdResult = (toolData as any).result;
-                                  const rdIsOk = rdResult?.success !== false;
-                                  const rdDisplay = rdResult
-                                    ? (typeof rdResult === 'object' ? JSON.stringify(rdResult, null, 2).substring(0, 600) : String(rdResult).substring(0, 600))
-                                    : 'Completed';
-                                  return (
-                                    <CollapsibleToolBlock key={`done-${i}`} label={getToolLabel(toolData, rdIsOk ? 'ok' : 'fail')} icon={rdIsOk ? '✓' : '✗'}>
-                                      <div>
-                                        {toolData.params && Object.keys(toolData.params).length > 0 && (
-                                          <>
-                                            <div className="text-[10px] text-[#858585] mb-1 font-medium tracking-wide">PARAMETERS</div>
-                                            <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2 mb-2 max-h-[150px] overflow-y-auto">{JSON.stringify(toolData.params, null, 2)}</pre>
-                                          </>
-                                        )}
-                                        <div className={`text-[10px] mb-1 font-medium tracking-wide ${rdIsOk ? 'text-[#89d185]' : 'text-[#f14c4c]'}`}>RESULT</div>
-                                        <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2 max-h-[200px] overflow-y-auto">{rdDisplay}</pre>
-                                      </div>
-                                    </CollapsibleToolBlock>
-                                  );
-                                })}
-                                {nonWriteExec.map((toolData, i) => (
-                                  <CollapsibleToolBlock key={`exec-${i}`} label={getToolLabel(toolData, 'running')} icon="⟳">
-                                    <div>
-                                      <div className="flex items-center gap-2 mb-2">
-                                        <Loader2 size={12} className="animate-spin" style={{ color: 'var(--theme-accent)' }} />
-                                        <span className="text-[11px]" style={{ color: 'var(--theme-foreground-muted)' }}>Executing...</span>
-                                      </div>
-                                      {toolData.params && Object.keys(toolData.params).length > 0 ? (
-                                        <>
-                                          <div className="text-[10px] mb-1 font-medium tracking-wide" style={{ color: 'var(--theme-foreground-muted)' }}>PARAMETERS</div>
-                                          <pre className="whitespace-pre-wrap text-[11px] font-mono rounded-md p-2" style={{ color: 'var(--theme-foreground)', backgroundColor: 'var(--theme-bg)' }}>{JSON.stringify(toolData.params, null, 2)}</pre>
-                                        </>
-                                      ) : null}
-                                    </div>
-                                  </CollapsibleToolBlock>
-                                ))}
-                              </ToolCallGroup>
-                            </div>
-                          )}
+                          {nonWriteGenTools.map((tc) => {
+                            let partialDetail = '';
+                            try {
+                              const fpMatch = tc.paramsText.match(/"filePath"\s*:\s*"([^"]+)"/);
+                              const urlMatch = tc.paramsText.match(/"url"\s*:\s*"([^"]+)"/);
+                              const qMatch = tc.paramsText.match(/"query"\s*:\s*"([^"]+)"/);
+                              if (fpMatch) {
+                                const fp = fpMatch[1];
+                                partialDetail = fp.includes('/') ? fp.split('/').pop() || fp : fp.includes('\\') ? fp.split('\\').pop() || fp : fp;
+                              } else if (urlMatch) {
+                                try { partialDetail = new URL(urlMatch[1]).hostname; } catch { partialDetail = urlMatch[1].substring(0, 30); }
+                              } else if (qMatch) {
+                                partialDetail = qMatch[1].substring(0, 25) + (qMatch[1].length > 25 ? '...' : '');
+                              }
+                            } catch {}
+                            const genLabel = partialDetail ? `${tc.functionName}: ${partialDetail}` : tc.functionName;
+                            return (
+                              <InlineToolCall key={`gen-${tc.callIndex}`} label={genLabel} icon="⧗">
+                                <div>
+                                  <div className="flex items-center gap-1.5 mb-1">
+                                    <Loader2 size={10} className="animate-spin" style={{ color: 'var(--theme-accent)' }} />
+                                    <span className="text-[10px]" style={{ color: 'var(--theme-foreground-muted)' }}>Generating tool call...</span>
+                                  </div>
+                                  {tc.paramsText && (
+                                    <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2 max-h-[180px] overflow-y-auto">{tc.paramsText}</pre>
+                                  )}
+                                </div>
+                              </InlineToolCall>
+                            );
+                          })}
+                          {nonWriteDone.map((toolData, i) => {
+                            const rdResult = (toolData as any).result;
+                            const rdIsOk = rdResult?.success !== false;
+                            const rdDisplay = rdResult
+                              ? (typeof rdResult === 'object' ? JSON.stringify(rdResult, null, 2).substring(0, 600) : String(rdResult).substring(0, 600))
+                              : 'Completed';
+                            return (
+                              <InlineToolCall key={`done-${i}`} label={getToolLabel(toolData, rdIsOk ? 'ok' : 'fail')} icon={rdIsOk ? '✓' : '✗'}>
+                                <div>
+                                  {toolData.params && Object.keys(toolData.params).length > 0 && (
+                                    <>
+                                      <div className="text-[10px] text-[#858585] mb-1 font-medium tracking-wide">PARAMETERS</div>
+                                      <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2 mb-2 max-h-[150px] overflow-y-auto">{JSON.stringify(toolData.params, null, 2)}</pre>
+                                    </>
+                                  )}
+                                  <div className={`text-[10px] mb-1 font-medium tracking-wide ${rdIsOk ? 'text-[#89d185]' : 'text-[#f14c4c]'}`}>RESULT</div>
+                                  <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2 max-h-[200px] overflow-y-auto">{rdDisplay}</pre>
+                                </div>
+                              </InlineToolCall>
+                            );
+                          })}
+                          {nonWriteExec.map((toolData, i) => (
+                            <InlineToolCall key={`exec-${i}`} label={getToolLabel(toolData, 'running')} icon="⟳">
+                              <div>
+                                <div className="flex items-center gap-2 mb-2">
+                                  <Loader2 size={12} className="animate-spin" style={{ color: 'var(--theme-accent)' }} />
+                                  <span className="text-[11px]" style={{ color: 'var(--theme-foreground-muted)' }}>Executing...</span>
+                                </div>
+                                {toolData.params && Object.keys(toolData.params).length > 0 ? (
+                                  <>
+                                    <div className="text-[10px] mb-1 font-medium tracking-wide" style={{ color: 'var(--theme-foreground-muted)' }}>PARAMETERS</div>
+                                    <pre className="whitespace-pre-wrap text-[11px] font-mono rounded-md p-2" style={{ color: 'var(--theme-foreground)', backgroundColor: 'var(--theme-bg)' }}>{JSON.stringify(toolData.params, null, 2)}</pre>
+                                  </>
+                                ) : null}
+                              </div>
+                            </InlineToolCall>
+                          ))}
                         </>
                       );
                     })()}
@@ -3166,7 +3140,7 @@ ${e.message}`,
                           {' \u2014 You\'ve used your 20 free Guide Cloud AI messages for today.'}
                         </div>
                         <div className="flex flex-col gap-2">
-                          {licenseStatus?.email ? (
+                          {licenseStatus?.license?.email ? (
                             // User is signed in but hit quota — show upgrade CTA, not sign-in
                             <button
                               className="flex items-center gap-2 px-3 py-2 rounded-lg text-[12px] font-medium transition-all w-full"
@@ -3293,53 +3267,61 @@ ${e.message}`,
         />
       )}
 
-      {/* Plan / Todo panel — pinned above input, visible like VS Code's planning steps */}
-      {todos.length > 0 && <TodoPanel todos={todos} />}
+      {/* ── Unified Input Container: Plan + Keep/Undo + Context + Input ── */}
+      <div className="px-2.5 py-1.5 flex-shrink-0" style={{ borderTop: '1px solid var(--theme-border)' }}>
+        <div
+          className="rounded-lg border overflow-hidden focus-within:border-[var(--theme-accent)] transition-colors"
+          style={{ backgroundColor: 'var(--theme-input-bg)', borderColor: 'var(--theme-input-border)' }}
+          onDrop={handleDrop}
+          onDragOver={handleDragOver}
+        >
+          {/* Plan / Todo panel — inside the unified container */}
+          {todos.length > 0 && <TodoPanel todos={todos} />}
 
-      {/* Context indicator */}
-      {(currentFile || selectedText) && (
-        <div className="px-2.5 py-1 flex items-center gap-1.5 flex-shrink-0" style={{ borderTop: '1px solid var(--theme-border)' }}>
-          {currentFile && (
-            <span className="text-[10px] px-2 py-1 rounded-md truncate max-w-[200px] inline-flex items-center gap-1.5 group font-medium"
-              style={{ color: 'var(--theme-foreground-muted)', backgroundColor: 'var(--theme-bg-secondary)', border: '1px solid var(--theme-border)' }}
-            >
-              {currentFile.split(/[/\\]/).pop()}
-              {onClearCurrentFile && (
-                <button
-                  className="text-[10px] opacity-0 group-hover:opacity-100 transition-opacity leading-none"
-                  style={{ color: 'var(--theme-foreground-muted)' }}
-                  onClick={onClearCurrentFile}
-                  title="Remove file context"
-                  onMouseEnter={e => { e.currentTarget.style.color = '#f44747'; }}
-                  onMouseLeave={e => { e.currentTarget.style.color = 'var(--theme-foreground-muted)'; }}
+          {/* Context indicator — inside the unified container */}
+          {(currentFile || selectedText) && (
+            <div className="px-2.5 py-1 flex items-center gap-1.5" style={{ borderTop: '1px solid color-mix(in srgb, var(--theme-border) 50%, transparent)' }}>
+              {currentFile && (
+                <span className="text-[10px] px-2 py-1 rounded-md truncate max-w-[200px] inline-flex items-center gap-1.5 group font-medium"
+                  style={{ color: 'var(--theme-foreground-muted)', backgroundColor: 'var(--theme-bg-secondary)', border: '1px solid var(--theme-border)' }}
                 >
-                  <X size={10} />
-                </button>
+                  {currentFile.split(/[/\\]/).pop()}
+                  {onClearCurrentFile && (
+                    <button
+                      className="text-[10px] opacity-0 group-hover:opacity-100 transition-opacity leading-none"
+                      style={{ color: 'var(--theme-foreground-muted)' }}
+                      onClick={onClearCurrentFile}
+                      title="Remove file context"
+                      onMouseEnter={e => { e.currentTarget.style.color = '#f44747'; }}
+                      onMouseLeave={e => { e.currentTarget.style.color = 'var(--theme-foreground-muted)'; }}
+                    >
+                      <X size={10} />
+                    </button>
+                  )}
+                </span>
               )}
-            </span>
+              {selectedText && (
+                <span className="text-[10px] px-2 py-1 rounded-md font-medium"
+                  style={{ color: 'var(--theme-foreground-muted)', backgroundColor: 'var(--theme-bg-secondary)', border: '1px solid var(--theme-border)' }}
+                >
+                  Selection ({selectedText.length} chars)
+                </span>
+              )}
+            </div>
           )}
-          {selectedText && (
-            <span className="text-[10px] px-2 py-1 rounded-md font-medium"
-              style={{ color: 'var(--theme-foreground-muted)', backgroundColor: 'var(--theme-bg-secondary)', border: '1px solid var(--theme-border)' }}
-            >
-              Selection ({selectedText.length} chars)
-            </span>
-          )}
-        </div>
-      )}
 
-      {/* Pending file changes — Keep / Undo bar */}
-      {pendingFileChanges.length > 0 && (
-        <div className="px-2.5 py-1 flex-shrink-0" style={{ borderTop: '1px solid var(--theme-border)', backgroundColor: 'var(--theme-bg-secondary)' }}>
-          <div className="flex items-center gap-1.5 mb-0.5">
-            <button
-              className="flex items-center gap-1.5 text-[11px] font-medium transition-colors"
-              style={{ color: 'var(--theme-foreground)' }}
-              onClick={() => setFileChangesExpanded(!fileChangesExpanded)}
-              title={fileChangesExpanded ? 'Collapse file list' : 'Expand file list'}
-              onMouseEnter={e => { e.currentTarget.style.color = 'var(--theme-accent)'; }}
-              onMouseLeave={e => { e.currentTarget.style.color = 'var(--theme-foreground)'; }}
-            >
+          {/* Pending file changes — Keep / Undo bar — inside the unified container */}
+          {pendingFileChanges.length > 0 && (
+            <div className="px-2.5 py-1" style={{ borderTop: '1px solid color-mix(in srgb, var(--theme-border) 50%, transparent)', backgroundColor: 'color-mix(in srgb, var(--theme-bg-secondary) 50%, transparent)' }}>
+              <div className="flex items-center gap-1.5 mb-0.5">
+                <button
+                  className="flex items-center gap-1.5 text-[11px] font-medium transition-colors"
+                  style={{ color: 'var(--theme-foreground)' }}
+                  onClick={() => setFileChangesExpanded(!fileChangesExpanded)}
+                  title={fileChangesExpanded ? 'Collapse file list' : 'Expand file list'}
+                  onMouseEnter={e => { e.currentTarget.style.color = 'var(--theme-accent)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.color = 'var(--theme-foreground)'; }}
+                >
               <span style={{ display: 'inline-block', transform: fileChangesExpanded ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.15s', fontSize: '9px', color: 'var(--theme-foreground-muted)' }}>▶</span>
               {pendingFileChanges.length} file{pendingFileChanges.length > 1 ? 's' : ''} changed
               {(() => {
@@ -3432,24 +3414,15 @@ ${e.message}`,
         </div>
       )}
 
-      {/* Input */}
-      <div className="px-2.5 py-1.5 flex-shrink-0" style={{ borderTop: '1px solid var(--theme-border)' }}>
-        {/* Hidden file input for image selection */}
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          multiple
-          className="hidden"
-          onChange={(e) => { if (e.target.files) handleImageFiles(e.target.files); e.target.value = ''; }}
-        />
-        {/* Unified input container */}
-        <div
-          className="rounded-lg border focus-within:border-[var(--theme-accent)] transition-colors"
-          style={{ backgroundColor: 'var(--theme-input-bg)', borderColor: 'var(--theme-input-border)' }}
-          onDrop={handleDrop}
-          onDragOver={handleDragOver}
-        >
+          {/* Hidden file input for image selection */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={(e) => { if (e.target.files) handleImageFiles(e.target.files); e.target.value = ''; }}
+          />
           {/* Attached image previews — inside the container */}
           {attachedImages.length > 0 && (
             <div className="flex flex-wrap gap-2 px-2.5 pt-2.5">
@@ -3770,5 +3743,5 @@ ${e.message}`,
   );
 };
 
-// Components ApiKeyInput, MermaidDiagram, CollapsibleToolBlock, CodeBlock
+// Components ApiKeyInput, MermaidDiagram, InlineToolCall, CodeBlock
 // are now imported from './ChatWidgets'

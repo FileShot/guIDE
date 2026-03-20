@@ -198,24 +198,11 @@ export function useChatStreaming(): ChatStreamingState {
       scheduleStreamUpdate();
     });
 
-    // ROLLBACK signal — backend is retrying after a bad response; clear only the current
-    // iteration's streamed tokens, preserving text from prior iterations.
-    const cleanupReset = (api as any).onLlmStreamReset?.(() => {
-      console.log('[STREAM-DIAG] llm-stream-reset: trimming to offset', iterationStartOffsetRef.current, 'current bufLen=', streamBufferRef.current.length);
-      if (streamRafRef.current) cancelAnimationFrame(streamRafRef.current);
-      streamRafRef.current = null;
-      // Trim back to the start of the current iteration only — prior iterations' text stays visible
-      streamBufferRef.current = streamBufferRef.current.slice(0, iterationStartOffsetRef.current);
-      displayPosRef.current = iterationStartOffsetRef.current;
-      setStreamingText(streamBufferRef.current);
-    });
-
     return () => {
       cleanupToken?.();
       cleanupThinking?.();
       cleanupIterationBegin?.();
       cleanupReplace?.();
-      cleanupReset?.();
       if (streamRafRef.current) cancelAnimationFrame(streamRafRef.current);
       if (thinkingRafRef.current) cancelAnimationFrame(thinkingRafRef.current);
     };

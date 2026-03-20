@@ -58,7 +58,7 @@ function setupWebElectronAPI() {
           if (_tokenEventCount <= 3 || _tokenEventCount % 100 === 0) {
             console.log('[WS-DIAG] llm-token #' + _tokenEventCount, 'listeners:', listeners.get(msg.channel)?.size || 0);
           }
-        } else if (msg.channel === 'llm-replace-last' || msg.channel === 'llm-stream-reset' || msg.channel === 'llm-iteration-begin') {
+        } else if (msg.channel === 'llm-replace-last' || msg.channel === 'llm-iteration-begin') {
           console.log('[WS-DIAG]', msg.channel, 'listeners:', listeners.get(msg.channel)?.size || 0);
         }
         const cbs = listeners.get(msg.channel);
@@ -169,7 +169,6 @@ function setupWebElectronAPI() {
     onLlmToken:         (cb: Function) => on('llm-token', cb),
     onLlmThinkingToken: (cb: Function) => on('llm-thinking-token', cb),
     onLlmReplaceLast:   (cb: Function) => on('llm-replace-last', cb),
-    onLlmStreamReset:   (cb: Function) => on('llm-stream-reset', cb),
     onLlmIterationBegin:(cb: Function) => on('llm-iteration-begin', cb),
     onLlmToolGenerating:(cb: Function) => on('llm-tool-generating', cb),
     onDevLog:           (cb: Function) => on('dev-log', cb),

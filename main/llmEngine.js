@@ -626,7 +626,19 @@ class LLMEngine extends EventEmitter {
       }
     }
 
-    // Add user message to history
+    // Add user message to history (Fix 64B: replace last user entry when replaceLastUser is set)
+    if (params.replaceLastUser && this.chatHistory.length >= 2) {
+      // Find the last user entry and replace it, along with any model response after it
+      let lastUserIdx = -1;
+      for (let i = this.chatHistory.length - 1; i >= 0; i--) {
+        if (this.chatHistory[i].type === 'user') { lastUserIdx = i; break; }
+      }
+      if (lastUserIdx >= 0) {
+        // Remove last user entry and everything after it (model response from prior iteration)
+        this.chatHistory.splice(lastUserIdx);
+        this.lastEvaluation = null;
+      }
+    }
     this.chatHistory.push({ type: 'user', text: userMessage });
 
     // Merge sampling params: defaultParams → modelOverrides → caller params
@@ -820,11 +832,11 @@ class LLMEngine extends EventEmitter {
         rawText: fullResponse,
         model: this.modelInfo?.name || 'unknown',
         tokensUsed: this.sequence?.nextTokenIndex || 0,
-        contextUsed: this.context?.contextSize || 0,
+        contextUsed: this.sequence?.nextTokenIndex || 0,
         stopReason: finalStopReason,
       };
     } catch (err) {
-      return this._handleGenerationError(err, fullResponse, detectedToolBlock);
+      return await this._handleGenerationError(err, fullResponse, detectedToolBlock);
     } finally {
       if (stallTimer) clearTimeout(stallTimer);
       if (_forceAbortTimer) clearTimeout(_forceAbortTimer);
@@ -897,7 +909,7 @@ class LLMEngine extends EventEmitter {
     });
   }
 
-  _handleGenerationError(err, fullResponse, detectedToolBlock) {
+  async _handleGenerationError(err, fullResponse, detectedToolBlock) {
     const isAbort = err.name === 'AbortError' || err.message?.includes('aborted');
 
     if (isAbort && this._abortReason === 'tool_call' && detectedToolBlock) {
@@ -909,7 +921,7 @@ class LLMEngine extends EventEmitter {
         rawText: fullResponse,
         model: this.modelInfo?.name || 'unknown',
         tokensUsed: this.sequence?.nextTokenIndex || 0,
-        contextUsed: this.context?.contextSize || 0,
+        contextUsed: this.sequence?.nextTokenIndex || 0,
         stopReason: 'tool_call',
       };
     }
@@ -930,7 +942,7 @@ class LLMEngine extends EventEmitter {
           rawText: fullResponse,
           model: this.modelInfo?.name || 'unknown',
           tokensUsed: 0,
-          contextUsed: this.context?.contextSize || 0,
+          contextUsed: this.sequence?.nextTokenIndex || 0,
           stopReason: 'timeout',
         };
       }
@@ -944,7 +956,7 @@ class LLMEngine extends EventEmitter {
         rawText: fullResponse,
         model: this.modelInfo?.name || 'unknown',
         tokensUsed: this.sequence?.nextTokenIndex || 0,
-        contextUsed: this.context?.contextSize || 0,
+        contextUsed: this.sequence?.nextTokenIndex || 0,
         stopReason: 'cancelled',
       };
     }
@@ -955,7 +967,9 @@ class LLMEngine extends EventEmitter {
     if (msg.includes('compress') || msg.includes('context') || msg.includes('too long')) {
       console.error(`[LLM] Treating as CONTEXT_OVERFLOW (matched: ${msg.includes('compress') ? 'compress' : msg.includes('context') ? 'context' : 'too long'})`);
       const summary = this.getConversationSummary();
-      this.resetSession(true);
+      // Clear active generation ref to prevent resetSession from awaiting itself (we ARE the active generation)
+      this._activeGenerationPromise = null;
+      await this.resetSession(true);
       const overflowErr = new Error(`CONTEXT_OVERFLOW:${summary}`);
       overflowErr.partialResponse = fullResponse;
       throw overflowErr;
@@ -1046,6 +1060,17 @@ class LLMEngine extends EventEmitter {
       }
     }
 
+    // Add user message to history (Fix 64B: replace last user entry when replaceLastUser is set)
+    if (params.replaceLastUser && this.chatHistory.length >= 2) {
+      let lastUserIdx = -1;
+      for (let i = this.chatHistory.length - 1; i >= 0; i--) {
+        if (this.chatHistory[i].type === 'user') { lastUserIdx = i; break; }
+      }
+      if (lastUserIdx >= 0) {
+        this.chatHistory.splice(lastUserIdx);
+        this.lastEvaluation = null;
+      }
+    }
     this.chatHistory.push({ type: 'user', text: userMessage });
     const modelOverrides = this._getModelSpecificParams();
     const merged = { ...this.defaultParams, ...modelOverrides, ...params };
@@ -1310,7 +1335,7 @@ class LLMEngine extends EventEmitter {
       throw new Error('Cannot reset session — no model loaded');
     }
 
-    // Fix 54: Await active generation settlement before disposing resources.
+    // Await active generation settlement before disposing resources.
     // Without this, cancelGeneration() sets the abort signal but generateResponse()
     // hasn't actually stopped yet. Disposing the sequence while generation is still
     // running causes a race: the old generation continues on a disposed sequence,

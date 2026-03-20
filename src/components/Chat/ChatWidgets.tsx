@@ -44,6 +44,59 @@ export const AudioWaveAnimation: React.FC<{ isActive: boolean }> = ({ isActive }
   );
 };
 
+// ── Inline Tool Call — VS Code-style compact tool call element ──
+// Rendered chronologically in the message flow, not grouped at the bottom.
+export const InlineToolCall: React.FC<{
+  label: string;
+  icon?: string;
+  detail?: string;
+  diffStats?: { added?: number; removed?: number };
+  children?: React.ReactNode;
+}> = ({ label, icon, detail, diffStats, children }) => {
+  const [expanded, setExpanded] = useState(false);
+  const isOk = icon === '✓';
+  const isFail = icon === '✗';
+  return (
+    <div className="my-1 rounded overflow-hidden"
+      style={{ backgroundColor: 'color-mix(in srgb, var(--theme-bg-secondary) 60%, transparent)' }}
+    >
+      <button
+        className="w-full flex items-center gap-1.5 px-2 py-[3px] text-[11px] transition-colors leading-snug min-h-0"
+        style={{ color: 'var(--theme-foreground-muted)' }}
+        onClick={() => children && setExpanded(!expanded)}
+        onMouseEnter={e => { e.currentTarget.style.backgroundColor = 'color-mix(in srgb, var(--theme-selection) 50%, transparent)'; }}
+        onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+      >
+        {children && (
+          <span className={`text-[8px] transition-transform duration-150 flex-shrink-0 ${expanded ? 'rotate-90' : ''}`} style={{ color: 'var(--theme-foreground-muted)' }}>▶</span>
+        )}
+        {isOk ? (
+          <Check size={12} className="text-[#89d185] flex-shrink-0" />
+        ) : isFail ? (
+          <XIcon size={12} className="text-[#f14c4c] flex-shrink-0" />
+        ) : (
+          <Loader2 size={11} className="animate-spin text-[#dcdcaa] flex-shrink-0" />
+        )}
+        <span className="font-medium truncate" style={{ color: 'var(--theme-foreground-muted)' }}>{label}</span>
+        {detail && (
+          <span className="truncate text-[10px]" style={{ color: 'var(--theme-foreground-muted)', opacity: 0.7 }}>{detail}</span>
+        )}
+        {diffStats && (diffStats.added || diffStats.removed) ? (
+          <span className="ml-auto flex gap-1.5 flex-shrink-0 text-[10px] font-mono">
+            {diffStats.added ? <span className="text-[#89d185]">+{diffStats.added}</span> : null}
+            {diffStats.removed ? <span className="text-[#f14c4c]">-{diffStats.removed}</span> : null}
+          </span>
+        ) : null}
+      </button>
+      {expanded && children && (
+        <div className="px-2 py-1.5 text-[10px]" style={{ borderTop: '1px solid color-mix(in srgb, var(--theme-border) 50%, transparent)', color: 'var(--theme-foreground-muted)' }}>
+          {children}
+        </div>
+      )}
+    </div>
+  );
+};
+
 // ── Collapsible Thinking/Reasoning Block ──
 export const ThinkingBlock: React.FC<{ text: string; isLive?: boolean; segmentCount?: number }> = ({ text, isLive, segmentCount }) => {
   const [expanded, setExpanded] = useState(false);

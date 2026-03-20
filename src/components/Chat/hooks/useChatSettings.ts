@@ -57,7 +57,7 @@ export function useChatSettings(): ChatSettings & ChatSettingsActions {
   const [seed, setSeed] = useState(-1);
   const [reasoningEffort, setReasoningEffort] = useState<'low' | 'medium' | 'high'>('medium');
   const [thinkingBudget, setThinkingBudget] = useState(0); // 0 = auto (model profile), -1 = unlimited, >0 = exact token cap
-  const [maxIterations, setMaxIterations] = useState(50);
+  const [maxIterations, setMaxIterations] = useState(100);
   const [gpuPreference, setGpuPreference] = useState<'auto' | 'cpu'>('auto');
   const [useWebSearch, setUseWebSearch] = useState(false);
   const [useRAG, setUseRAG] = useState(true);
@@ -179,7 +179,7 @@ export function useChatSettings(): ChatSettings & ChatSettingsActions {
     setSeed(-1);
     setReasoningEffort('medium');
     setThinkingBudget(0);
-    setMaxIterations(50);
+    setMaxIterations(100);
     (window as any).electronAPI?.llmSetContextSize?.(0);
     (window as any).electronAPI?.llmSetReasoningEffort?.('medium');
   }, []);

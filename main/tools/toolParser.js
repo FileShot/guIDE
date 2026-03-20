@@ -49,7 +49,6 @@ const TOOL_NAME_ALIASES = {
   // Other
   undo: 'undo_edit', todos: 'write_todos', todo: 'update_todo',
   request: 'http_request', http: 'http_request', curl: 'http_request',
-  delegate: 'delegate_task', subagent: 'delegate_task',
 };
 
 // ─── Valid Tool Names ───
@@ -70,7 +69,7 @@ const VALID_TOOLS = new Set([
   'run_command', 'get_project_structure', 'create_directory', 'analyze_error', 'install_packages',
   'undo_edit', 'list_undoable',
   'write_todos', 'update_todo',
-  'write_scratchpad', 'read_scratchpad', 'create_tool', 'use_tool', 'delegate_task',
+  'write_scratchpad', 'read_scratchpad',
   'http_request', 'check_port', 'open_file_in_editor', 'generate_image', 'diff_files',
 ]);
 

@@ -228,6 +228,26 @@ export const themes: Theme[] = [
       chatBubble: '#362b58',
     },
   },
+  {
+    id: 'monolith',
+    name: 'Monolith',
+    type: 'dark',
+    colors: {
+      bg: '#0d0d0d', bgSecondary: '#141414', bgTertiary: '#1a1a1a',
+      sidebar: '#111111', sidebarBorder: '#252525',
+      activityBar: '#0a0a0a', activityBarActive: '#141414',
+      titleBar: '#0a0a0a',
+      border: '#252525', borderFocus: '#e07b39',
+      foreground: '#cccccc', foregroundMuted: '#808080', foregroundSubtle: '#555555',
+      accent: '#e07b39', accentHover: '#c96a2e',
+      selection: '#1a1a1a', selectionHover: '#1f1f1f',
+      inputBg: '#1a1a1a', inputBorder: '#2a2a2a',
+      statusBar: '#0a0a0a', statusBarFg: '#555555',
+      tabActive: '#0d0d0d', tabInactive: '#141414',
+      scrollbar: '#2a2a2a', scrollbarHover: '#363636',
+      chatBubble: '#1f1f1f',
+    },
+  },
 ];
 
 interface ThemeContextType {
@@ -245,7 +265,7 @@ export const useTheme = () => useContext(ThemeContext);
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [theme, setTheme] = useState<Theme>(() => {
     const saved = localStorage.getItem('guIDE-theme');
-    return themes.find(t => t.id === saved) || themes.find(t => t.id === 'dark-void') || themes[0];
+    return themes.find(t => t.id === saved) || themes.find(t => t.id === 'monolith') || themes[0];
   });
 
   const setThemeById = useCallback((id: string) => {

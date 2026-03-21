@@ -269,7 +269,7 @@ class MCPToolServer {
     this._toolDefsCache = [
       {
         name: 'web_search',
-        description: 'Search the web for information using DuckDuckGo. Use when the answer may have changed since your training — anything that varies over time. Also use for documentation and error solutions when the current version matters.',
+        description: 'Search the web for current information using DuckDuckGo. Use for anything current, live, or time-sensitive: prices, weather, news, headlines, scores, events, stock data, documentation lookups.',
         parameters: {
           query: { type: 'string', description: 'Search query', required: true },
           maxResults: { type: 'number', description: 'Max results (default 5)', required: false },
@@ -759,7 +759,7 @@ class MCPToolServer {
       // ── Planning / TODO Tools ──
       {
         name: 'write_todos',
-        description: 'Create a checklist for complex multi-step tasks (e.g. building an app, refactoring code, planning a project). Do NOT use for simple questions, greetings, or conversation.',
+        description: 'Create a checklist to plan and track multi-step tasks. Use when a task involves multiple steps — building an app, refactoring code, implementing a feature, planning a project.',
         parameters: {
           items: { type: 'array', description: 'Array of todo strings or {text,status} objects', required: true },
         },

@@ -457,13 +457,14 @@ export const ToolCallGroup: React.FC<{ children: React.ReactNode; count: number 
 // ── Code Block with Copy/Apply ──
 const COLLAPSE_LINE_THRESHOLD = 6; // Collapse code blocks taller than this many lines
 
-export const CodeBlock: React.FC<{ code: string; language: string; onApply: () => void; isToolCall?: boolean; isStreaming?: boolean; isAlreadyWritten?: boolean; onSaveAsFile?: (code: string, language: string) => void; defaultCollapsed?: boolean }> = ({ code, language, onApply, isToolCall, isStreaming, isAlreadyWritten, onSaveAsFile, defaultCollapsed }) => {
+export const CodeBlock: React.FC<{ code: string; language: string; onApply: () => void; isToolCall?: boolean; isStreaming?: boolean; isAlreadyWritten?: boolean; onSaveAsFile?: (code: string, language: string) => void; defaultCollapsed?: boolean; startExpanded?: boolean }> = ({ code, language, onApply, isToolCall, isStreaming, isAlreadyWritten, onSaveAsFile, defaultCollapsed, startExpanded }) => {
   const [copied, setCopied] = useState(false);
   const lineCount = code.split('\n').length;
   const isLong = lineCount > COLLAPSE_LINE_THRESHOLD;
   // Default to collapsed for long blocks; keep streaming blocks expanded so users can watch generation
   // defaultCollapsed forces collapsed on first render (used for live tool call generation bubbles)
-  const [expanded, setExpanded] = useState(defaultCollapsed ? false : !!isStreaming || !isLong);
+  // startExpanded overrides collapse for just-finalized messages to prevent height jump on finalization
+  const [expanded, setExpanded] = useState(defaultCollapsed ? false : !!isStreaming || !!startExpanded || !isLong);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(code);

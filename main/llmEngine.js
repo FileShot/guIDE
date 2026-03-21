@@ -853,6 +853,8 @@ class LLMEngine extends EventEmitter {
         finalStopReason = 'maxTokens';
         console.log(`[LLM] Generation stopped at maxTokens (${fullResponse.length} chars)`);
       }
+      const tokensUsed = this.sequence?.nextTokenIndex || 0;
+      console.log(`[LLM] Post-gen: stopReason=${finalStopReason}, responseChars=${fullResponse.length}, tokensUsed=${tokensUsed}, maxTokens=${merged.maxTokens}, llamaStopReason=${result?.metadata?.stopReason || 'unknown'}`);
       return {
         text: sanitized,
         rawText: fullResponse,

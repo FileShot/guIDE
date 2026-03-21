@@ -1618,7 +1618,7 @@ ${e.message}`,
 
   // Render content with tool terminal and code block detection
   // Merges tool calls with their results into single collapsible blocks
-  const renderContentParts = (content: string, suppressTools = false) => {
+  const renderContentParts = (content: string, suppressTools = false, expandBlocks = false) => {
     // Pre-extract tool results for merging
     const toolResultMap = extractToolResults(content);
 
@@ -1733,7 +1733,7 @@ ${e.message}`,
           );
         } else {
           pendingWriteFP = null;
-          elements.push(<CodeBlock key={i} code={code} language={lang} onApply={() => onApplyCode(currentFile, code)} onSaveAsFile={handleSaveAsFile} />);
+          elements.push(<CodeBlock key={i} code={code} language={lang} onApply={() => onApplyCode(currentFile, code)} onSaveAsFile={handleSaveAsFile} startExpanded={expandBlocks} />);
         }
         continue;
       }
@@ -1858,11 +1858,11 @@ ${e.message}`,
     return elements;
   };
 
-  const renderMessage = (msg: ChatMessage): React.ReactNode[] => {
+  const renderMessage = (msg: ChatMessage, expandBlocks = false): React.ReactNode[] => {
     const hasMsgTools = !!(msg.toolsUsed && msg.toolsUsed.length > 0);
     // suppressTools=true: content rendering skips all tool blocks to prevent duplicate write_file
     // bubbles and wrong failure counts. msg.toolsUsed is the authoritative source for tool UI.
-    const parts = renderContentParts(msg.content, hasMsgTools);
+    const parts = renderContentParts(msg.content, hasMsgTools, expandBlocks);
     if (hasMsgTools) {
       const WRITE_TOOLS_MSG = ['write_file', 'create_file', 'edit_file', 'append_to_file'];
         const MSG_LANG_MAP: Record<string, string> = { ts: 'typescript', tsx: 'tsx', js: 'javascript', jsx: 'jsx', py: 'python', rs: 'rust', go: 'go', java: 'java', cs: 'csharp', cpp: 'cpp', c: 'c', html: 'html', css: 'css', json: 'json', yaml: 'yaml', yml: 'yaml', md: 'markdown', sh: 'bash', bat: 'batch', txt: 'text', xml: 'xml', sql: 'sql' };
@@ -3193,7 +3193,7 @@ ${e.message}`,
                         </div>
                       </div>
                     ) : (
-                    <div className="space-y-1">{renderMessage(msg)}</div>
+                    <div className="space-y-1">{renderMessage(msg, index === messages.length - 1)}</div>
                     )
                   ) : (
                     <>

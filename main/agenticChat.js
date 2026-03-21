@@ -128,7 +128,7 @@ function register(ctx) {
       // ─── Clear per-turn state ─────────────────────────
       mcpToolServer._todos = [];
       mcpToolServer._todoNextId = 1;
-      mcpToolServer._filesWrittenThisTurn = new Set();
+
 
       // ─── Cloud Path ───────────────────────────────────
       if (context?.cloudProvider && context?.cloudModel) {

@@ -1177,9 +1177,12 @@ class LLMEngine extends EventEmitter {
           lastTokens: merged.lastTokensPenaltyCount,
         },
         seed: merged.seed !== -1 ? merged.seed : undefined,
-        lastEvaluationContextWindow: useKvCache ? this.lastEvaluation : undefined,
+        lastEvaluationContextWindow: useKvCache ? {
+          history: this.lastEvaluation?.contextWindow,
+          minimumOverlapPercentageToPreventContextShift: 0.5,
+        } : undefined,
         contextShift: useKvCache ? {
-          lastEvaluationContextWindowHistory: this.lastEvaluation?.contextShiftMetadata,
+          lastEvaluationMetadata: this.lastEvaluation?.contextShiftMetadata,
         } : undefined,
         budgets,
         signal: this.abortController?.signal,

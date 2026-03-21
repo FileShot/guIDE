@@ -496,6 +496,7 @@ async function handleLocalChat(ctx, message, context, helpers) {
       text: fullResponseText,
       stopReason: lastStopReason,
       model: llmEngine.modelInfo?.name || 'unknown',
+      toolResults: allToolResults,
     };
   }
 
@@ -510,6 +511,7 @@ async function handleLocalChat(ctx, message, context, helpers) {
     text: fullResponseText + '\n\n*[Reached maximum iterations]*',
     stopReason: 'maxIterations',
     model: llmEngine.modelInfo?.name || 'unknown',
+    toolResults: allToolResults,
   };
 }
 

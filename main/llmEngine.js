@@ -156,6 +156,25 @@ class LLMEngine extends EventEmitter {
     this._lastCompactDropped = droppedCount;
   }
 
+  /**
+   * Strip think/thought segment objects from cleanHistory model responses.
+   * node-llama-cpp includes segment objects (type: "segment", segmentType: "thought")
+   * in cleanHistory even when budgets.thoughtTokens = 0. These accumulate across
+   * turns and inflate the history token count on re-tokenization. This method
+   * preserves only string (visible) content in model responses.
+   */
+  _stripThinkSegments(history) {
+    if (!Array.isArray(history)) return history;
+    return history.map(entry => {
+      if (entry.type !== 'model' || !Array.isArray(entry.response)) return entry;
+      const filtered = entry.response.filter(item =>
+        typeof item === 'string' || (item && item.type === 'segment' && item.segmentType !== 'thought')
+      );
+      if (filtered.length === entry.response.length) return entry;
+      return { ...entry, response: filtered };
+    });
+  }
+
   _sanitizeResponse(text) {
     return sanitizeResponse(text);
   }
@@ -653,6 +672,13 @@ class LLMEngine extends EventEmitter {
     // Compact history if too long
     this._compactHistory();
 
+    // Diagnostic: actual chatHistory size before generation
+    const _histChars = this.chatHistory.reduce((s, h) => {
+      if (h.type === 'model') return s + JSON.stringify(h.response).length;
+      return s + (h.text?.length || 0);
+    }, 0);
+    console.log(`[LLM DIAG] Pre-gen: entries=${this.chatHistory.length}, chars=${_histChars}, kvReuse=${this._kvReuseCooldown <= 0 && !!this.lastEvaluation}, seqPos=${this.sequence?.nextTokenIndex || 0}`);
+
     // Stall watchdog — two-phase: longer timeout for prompt eval (first token),
     // shorter timeout for generation stalls (between tokens)
     const PROMPT_EVAL_TIMEOUT_MS = (this.modelInfo?.gpuMode === false) ? STALL_TIMEOUT_CPU_MS : STALL_TIMEOUT_GPU_MS;
@@ -811,11 +837,11 @@ class LLMEngine extends EventEmitter {
         });
         if (retryResult?.lastEvaluation) {
           this.lastEvaluation = retryResult.lastEvaluation;
-          this.chatHistory = retryResult.lastEvaluation.cleanHistory || this.chatHistory;
+          this.chatHistory = this._stripThinkSegments(retryResult.lastEvaluation.cleanHistory) || this.chatHistory;
         }
       } else if (result?.lastEvaluation) {
         this.lastEvaluation = result.lastEvaluation;
-        this.chatHistory = result.lastEvaluation.cleanHistory || this.chatHistory;
+        this.chatHistory = this._stripThinkSegments(result.lastEvaluation.cleanHistory) || this.chatHistory;
       }
 
       if (this._kvReuseCooldown > 0) this._kvReuseCooldown--;
@@ -898,9 +924,12 @@ class LLMEngine extends EventEmitter {
         lastTokens: params.lastTokensPenaltyCount,
       },
       seed: params.seed !== -1 ? params.seed : undefined,
-      lastEvaluationContextWindow: useKvCache ? this.lastEvaluation : undefined,
+      lastEvaluationContextWindow: useKvCache ? {
+        history: this.lastEvaluation?.contextWindow,
+        minimumOverlapPercentageToPreventContextShift: 0.5,
+      } : undefined,
       contextShift: useKvCache ? {
-        lastEvaluationContextWindowHistory: this.lastEvaluation?.contextShiftMetadata,
+        lastEvaluationMetadata: this.lastEvaluation?.contextShiftMetadata,
       } : undefined,
       budgets,
       signal: this.abortController?.signal,

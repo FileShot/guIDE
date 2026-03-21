@@ -131,8 +131,12 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onOpenFolder, onNe
   const handleGoogleSignIn = async () => {
     setLicenseLoading(true);
     try {
-      const result = await window.electronAPI?.licenseOAuthSignIn?.('google');
-      if (result?.success || (result as any)?.authenticated) {
+      const timeout = new Promise<null>(r => setTimeout(() => r(null), 30000));
+      const result = await Promise.race([
+        window.electronAPI?.licenseOAuthSignIn?.('google'),
+        timeout,
+      ]);
+      if (result && (result.success || (result as any)?.authenticated)) {
         const status = await window.electronAPI?.licenseGetStatus?.();
         if (status) setLicenseStatus(status);
       }
@@ -243,6 +247,28 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onOpenFolder, onNe
           New Project
         </button>
       </div>
+
+      {/* Continue with Google — prominent position */}
+      {!licenseStatus?.isAuthenticated && (
+        <button
+          onClick={handleGoogleSignIn}
+          disabled={licenseLoading}
+          className="flex items-center gap-2.5 rounded-lg text-[13px] font-medium transition-all mb-6"
+          style={{ padding: '7px 18px', backgroundColor: 'var(--theme-bg-secondary)', color: 'var(--theme-foreground)', border: '1px solid var(--theme-border)', opacity: licenseLoading ? 0.7 : 1 }}
+          onMouseEnter={(e) => { if (!licenseLoading) (e.currentTarget as HTMLElement).style.borderColor = 'var(--theme-accent)'; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--theme-border)'; }}
+        >
+          {licenseLoading ? <Loader2 size={12} className="animate-spin" /> : (
+            <svg viewBox="0 0 18 18" width="15" height="15" style={{ flexShrink: 0 }}>
+              <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z"/>
+              <path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/>
+              <path fill="#FBBC05" d="M3.964 10.707A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.707V4.961H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.039l3.007-2.332z"/>
+              <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.961L3.964 7.293C4.672 5.163 6.656 3.58 9 3.58z"/>
+            </svg>
+          )}
+          {licenseLoading ? 'Signing in...' : 'Continue with Google'}
+        </button>
+      )}
 
       {/* Two–column content area */}
       <div className="w-full max-w-[820px] px-4 flex gap-6 min-h-0">
@@ -481,10 +507,9 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onOpenFolder, onNe
         <span>Open a folder to get started</span>
       </div>
 
-      {/* Sign-in strip */}
+      {/* Sign-in strip — only shows when authenticated */}
+      {licenseStatus?.isAuthenticated && (
       <div className="mt-4 flex items-center gap-2">
-        {licenseStatus?.isAuthenticated ? (
-          <>
             <UserCircle size={13} style={{ color: 'var(--theme-accent)' }} />
             <span className="text-[11px]" style={{ color: 'var(--theme-foreground-muted)' }}>
               {licenseStatus.license?.email || 'Signed in'}
@@ -508,28 +533,8 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onOpenFolder, onNe
               <LogOut size={11} />
               Sign out
             </button>
-          </>
-        ) : (
-          <button
-            onClick={handleGoogleSignIn}
-            disabled={licenseLoading}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all"
-            style={{ backgroundColor: 'var(--theme-bg-secondary)', color: 'var(--theme-foreground)', border: '1px solid var(--theme-border)', opacity: licenseLoading ? 0.7 : 1 }}
-            onMouseEnter={(e) => { if (!licenseLoading) (e.currentTarget as HTMLElement).style.borderColor = 'var(--theme-accent)'; }}
-            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--theme-border)'; }}
-          >
-            {licenseLoading ? <Loader2 size={12} className="animate-spin" /> : (
-              <svg viewBox="0 0 18 18" width="13" height="13">
-                <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z"/>
-                <path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/>
-                <path fill="#FBBC05" d="M3.964 10.707A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.707V4.961H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.039l3.007-2.332z"/>
-                <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.961L3.964 7.293C4.672 5.163 6.656 3.58 9 3.58z"/>
-              </svg>
-            )}
-            {licenseLoading ? 'Signing in...' : 'Continue with Google'}
-          </button>
-        )}
       </div>
+      )}
     </div>
   );
 };

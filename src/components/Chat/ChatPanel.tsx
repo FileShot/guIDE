@@ -18,6 +18,7 @@ import { useTTS } from './hooks/useTTS';
 import { useChatSessions } from './hooks/useChatSessions';
 import { TodoPanel, TodoItem } from './TodoPanel';
 import { toast } from '@/components/Layout/Toast';
+import { getActiveConcept } from './concepts';
 
 interface ChatPanelProps {
   rootPath: string;
@@ -86,6 +87,7 @@ const CheckpointDivider: React.FC<{
 export const ChatPanel: React.FC<ChatPanelProps> = ({
   rootPath, currentFile, selectedText, llmStatus, availableModels, onApplyCode, onOpenFile, onClearCurrentFile, onClose,
 }) => {
+  const concept = getActiveConcept();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
@@ -2321,19 +2323,39 @@ ${e.message}`,
 
   return (
     <div className="h-full flex flex-col overflow-hidden relative" style={{ backgroundColor: 'var(--theme-bg)' }}>
+      {/* Header */}
+      {concept ? (
+        <concept.Header
+          ttsEnabled={ttsEnabled}
+          onToggleTts={() => { setTtsEnabled(!ttsEnabled); if (isSpeaking) stopSpeaking(); }}
+          isSpeaking={isSpeaking}
+          onStopSpeaking={stopSpeaking}
+          showSettings={showSettings}
+          onToggleSettings={() => setShowSettings(!showSettings)}
+          showDevConsole={showDevConsole}
+          onToggleDevConsole={() => { const next = !showDevConsole; setShowDevConsole(next); showDevConsoleRef.current = next; if (next) setDevLogs([...devLogsRef.current]); }}
+          showHistory={showHistory}
+          onToggleHistory={() => setShowHistory(!showHistory)}
+          onRefreshSessions={refreshSavedSessions}
+          onNew={clearChat}
+          onClear={clearChat}
+          onClose={onClose}
+        />
+      ) : (
+      <>
       {/* Header — pr-[140px] reserves space for Electron window controls (min/max/close) */}
       <div
-        className="h-[38px] flex items-center px-3 pr-[140px] flex-shrink-0"
+        className="h-[32px] flex items-center px-2 pr-[140px] flex-shrink-0"
         style={{ backgroundColor: 'var(--theme-bg-secondary)', borderBottom: '1px solid var(--theme-border)' }}
       >
         <Sparkles size={14} className="mr-2 flex-shrink-0" style={{ color: 'var(--theme-accent)' }} />
         <span className="text-[12px] font-semibold whitespace-nowrap brand-font" style={{ color: 'var(--theme-foreground)' }}>gu<span style={{ color: 'var(--theme-accent)' }}>IDE</span> <span className="font-sans font-medium" style={{ color: 'var(--theme-foreground-muted)' }}>AI</span></span>
         <div className="flex-1 min-w-0" />
         {/* Action buttons — grouped with even spacing */}
-        <div className="flex items-center gap-1 flex-shrink-0 chat-header-buttons">
+        <div className="flex items-center gap-0.5 flex-shrink-0 chat-header-buttons">
 
           <button
-            className="w-[26px] h-[26px] flex items-center justify-center rounded-md transition-colors"
+            className="w-[24px] h-[24px] flex items-center justify-center rounded transition-colors"
             style={{ color: ttsEnabled ? 'var(--theme-accent)' : 'var(--theme-foreground-subtle)', backgroundColor: ttsEnabled ? 'color-mix(in srgb, var(--theme-accent) 12%, transparent)' : 'transparent' }}
             onClick={() => { setTtsEnabled(!ttsEnabled); if (isSpeaking) stopSpeaking(); }}
             title={ttsEnabled ? 'TTS On (click to disable)' : 'TTS Off (click to enable)'}
@@ -2342,11 +2364,11 @@ ${e.message}`,
             onMouseEnter={e => { if (!ttsEnabled) e.currentTarget.style.color = 'var(--theme-foreground)'; e.currentTarget.style.backgroundColor = 'var(--theme-selection)'; }}
             onMouseLeave={e => { if (!ttsEnabled) e.currentTarget.style.color = 'var(--theme-foreground-subtle)'; e.currentTarget.style.backgroundColor = ttsEnabled ? 'color-mix(in srgb, var(--theme-accent) 12%, transparent)' : 'transparent'; }}
           >
-            {ttsEnabled ? <Volume2 size={14} /> : <VolumeX size={14} />}
+            {ttsEnabled ? <Volume2 size={13} /> : <VolumeX size={13} />}
           </button>
 
           <button
-            className="w-[26px] h-[26px] flex items-center justify-center rounded-md transition-colors"
+            className="w-[24px] h-[24px] flex items-center justify-center rounded transition-colors"
             style={{ color: 'var(--theme-foreground-subtle)' }}
             onClick={() => setShowSettings(!showSettings)}
             title="API Keys &amp; License"
@@ -2355,10 +2377,10 @@ ${e.message}`,
             onMouseEnter={e => { e.currentTarget.style.color = 'var(--theme-foreground)'; e.currentTarget.style.backgroundColor = 'var(--theme-selection)'; }}
             onMouseLeave={e => { e.currentTarget.style.color = 'var(--theme-foreground-subtle)'; e.currentTarget.style.backgroundColor = 'transparent'; }}
           >
-            <Key size={14} />
+            <Key size={13} />
           </button>
           <button
-            className="w-[26px] h-[26px] flex items-center justify-center rounded-md transition-colors"
+            className="w-[24px] h-[24px] flex items-center justify-center rounded transition-colors"
             style={{ color: showDevConsole ? 'var(--theme-accent)' : 'var(--theme-foreground-subtle)', backgroundColor: showDevConsole ? 'color-mix(in srgb, var(--theme-accent) 12%, transparent)' : 'transparent' }}
             onClick={() => { const next = !showDevConsole; setShowDevConsole(next); showDevConsoleRef.current = next; if (next) setDevLogs([...devLogsRef.current]); }}
             title="Developer Console — view backend logs"
@@ -2367,10 +2389,10 @@ ${e.message}`,
             onMouseEnter={e => { if (!showDevConsole) e.currentTarget.style.color = 'var(--theme-foreground)'; e.currentTarget.style.backgroundColor = 'var(--theme-selection)'; }}
             onMouseLeave={e => { if (!showDevConsole) e.currentTarget.style.color = 'var(--theme-foreground-subtle)'; e.currentTarget.style.backgroundColor = showDevConsole ? 'color-mix(in srgb, var(--theme-accent) 12%, transparent)' : 'transparent'; }}
           >
-            <Terminal size={14} />
+            <Terminal size={13} />
           </button>
           <button
-            className="w-[26px] h-[26px] flex items-center justify-center rounded-md transition-colors"
+            className="w-[24px] h-[24px] flex items-center justify-center rounded transition-colors"
             style={{ color: 'var(--theme-foreground-subtle)' }}
             onClick={clearChat}
             title="New Conversation"
@@ -2378,10 +2400,10 @@ ${e.message}`,
             onMouseEnter={e => { e.currentTarget.style.color = 'var(--theme-foreground)'; e.currentTarget.style.backgroundColor = 'var(--theme-selection)'; }}
             onMouseLeave={e => { e.currentTarget.style.color = 'var(--theme-foreground-subtle)'; e.currentTarget.style.backgroundColor = 'transparent'; }}
           >
-            <Plus size={14} />
+            <Plus size={13} />
           </button>
           <button
-            className="w-[26px] h-[26px] flex items-center justify-center rounded-md transition-colors"
+            className="w-[24px] h-[24px] flex items-center justify-center rounded transition-colors"
             style={{ color: showHistory ? 'var(--theme-accent)' : 'var(--theme-foreground-subtle)', backgroundColor: showHistory ? 'color-mix(in srgb, var(--theme-accent) 12%, transparent)' : 'transparent' }}
             onClick={() => { setShowHistory(!showHistory); if (!showHistory) refreshSavedSessions(); }}
             title="Chat History"
@@ -2390,10 +2412,10 @@ ${e.message}`,
             onMouseEnter={e => { if (!showHistory) e.currentTarget.style.color = 'var(--theme-foreground)'; e.currentTarget.style.backgroundColor = 'var(--theme-selection)'; }}
             onMouseLeave={e => { if (!showHistory) e.currentTarget.style.color = 'var(--theme-foreground-subtle)'; e.currentTarget.style.backgroundColor = showHistory ? 'color-mix(in srgb, var(--theme-accent) 12%, transparent)' : 'transparent'; }}
           >
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M13.5 2H2.5C1.67 2 1 2.67 1 3.5v9C1 13.33 1.67 14 2.5 14h11c.83 0 1.5-.67 1.5-1.5v-9C15 2.67 14.33 2 13.5 2zM4 5h8v1H4V5zm0 3h8v1H4V8zm0 3h5v1H4v-1z"/></svg>
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M13.5 2H2.5C1.67 2 1 2.67 1 3.5v9C1 13.33 1.67 14 2.5 14h11c.83 0 1.5-.67 1.5-1.5v-9C15 2.67 14.33 2 13.5 2zM4 5h8v1H4V5zm0 3h8v1H4V8zm0 3h5v1H4v-1z"/></svg>
           </button>
           <button
-            className="w-[26px] h-[26px] flex items-center justify-center rounded-md transition-colors"
+            className="w-[24px] h-[24px] flex items-center justify-center rounded transition-colors"
             style={{ color: 'var(--theme-foreground-subtle)' }}
             onClick={clearChat}
             title="Clear Chat History"
@@ -2401,13 +2423,13 @@ ${e.message}`,
             onMouseEnter={e => { e.currentTarget.style.color = 'var(--theme-foreground)'; e.currentTarget.style.backgroundColor = 'var(--theme-selection)'; }}
             onMouseLeave={e => { e.currentTarget.style.color = 'var(--theme-foreground-subtle)'; e.currentTarget.style.backgroundColor = 'transparent'; }}
           >
-            <Trash2 size={14} />
+            <Trash2 size={13} />
           </button>
 
-          <div style={{ width: 1, height: 16, backgroundColor: 'var(--theme-border)', margin: '0 3px' }} />
+          <div style={{ width: 1, height: 14, backgroundColor: 'var(--theme-border)', margin: '0 2px' }} />
 
           <button
-            className="w-[26px] h-[26px] flex items-center justify-center rounded-md transition-colors"
+            className="w-[24px] h-[24px] flex items-center justify-center rounded transition-colors"
             style={{ color: 'var(--theme-foreground-subtle)' }}
             onClick={onClose}
             title="Close"
@@ -2415,10 +2437,12 @@ ${e.message}`,
             onMouseEnter={e => { e.currentTarget.style.color = 'var(--theme-foreground)'; e.currentTarget.style.backgroundColor = 'var(--theme-selection)'; }}
             onMouseLeave={e => { e.currentTarget.style.color = 'var(--theme-foreground-subtle)'; e.currentTarget.style.backgroundColor = 'transparent'; }}
           >
-            <X size={14} />
+            <X size={13} />
           </button>
         </div>
       </div>
+      </>
+      )}
 
       {/* Model picker dropdown */}
       <ModelPicker
@@ -2689,7 +2713,45 @@ ${e.message}`,
       )}
 
       {/* Developer Console — verbose backend logs */}
-      {showDevConsole && (
+      {showDevConsole && (() => {
+        const logContent = (
+          <div className="flex-1 overflow-auto font-mono text-[10px] px-2 py-1">
+            {devLogs.length === 0 && (
+              <div className="text-[#555] italic py-2">No logs yet. Interact with AI to see backend activity...</div>
+            )}
+            {devLogs.map((entry, i) => {
+              const time = new Date(entry.timestamp).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+              const levelColor = entry.level === 'error' ? 'text-[#f48771]' : entry.level === 'warn' ? 'text-[#dcdcaa]' : 'text-[#858585]';
+              return (
+                <div key={i} className={`leading-[16px] ${levelColor} hover:bg-[#ffffff06]`}>
+                  <span className="text-[#555] mr-1.5">{time}</span>
+                  <span>{entry.text}</span>
+                </div>
+              );
+            })}
+            <div ref={devLogEndRef} />
+          </div>
+        );
+        if (concept) {
+          return (
+            <concept.DevConsoleWrapper onClose={() => { setShowDevConsole(false); showDevConsoleRef.current = false; }}>
+              <div className="flex items-center justify-between px-2 py-1 flex-shrink-0" style={{ borderBottom: '1px solid var(--theme-border)' }}>
+                <div className="flex items-center gap-1">
+                  <button
+                    className="text-[10px] px-1 rounded transition-colors"
+                    style={{ color: 'var(--theme-foreground-muted)' }}
+                    onClick={() => { setDevLogs([]); devLogsRef.current = []; }}
+                    title="Clear logs"
+                    onMouseEnter={e => { e.currentTarget.style.color = 'var(--theme-foreground)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.color = 'var(--theme-foreground-muted)'; }}
+                  >Clear</button>
+                </div>
+              </div>
+              {logContent}
+            </concept.DevConsoleWrapper>
+          );
+        }
+        return (
         <div className="border-b border-[#1e1e1e] bg-[#1a1a1a] flex flex-col" style={{ maxHeight: '200px', minHeight: '80px' }}>
           <div className="flex items-center justify-between px-2 py-1 border-b border-[#2b2b2b] flex-shrink-0">
             <span className="text-[10px] font-mono text-[#dcdcaa] uppercase tracking-wider">Developer Console</span>
@@ -2707,28 +2769,17 @@ ${e.message}`,
               </button>
             </div>
           </div>
-          <div className="flex-1 overflow-auto font-mono text-[10px] px-2 py-1">
-            {devLogs.length === 0 && (
-              <div className="text-[#555] italic py-2">No logs yet. Interact with AI to see backend activity...</div>
-            )}
-            {devLogs.map((entry, i) => {
-              const time = new Date(entry.timestamp).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
-              const levelColor = entry.level === 'error' ? 'text-[#f48771]' : entry.level === 'warn' ? 'text-[#dcdcaa]' : 'text-[#858585]';
-              return (
-                <div key={i} className={`leading-[16px] ${levelColor} hover:bg-[#ffffff06]`}>
-                  <span className="text-[#555] mr-1.5">{time}</span>
-                  <span>{entry.text}</span>
-                </div>
-              );
-            })}
-            <div ref={devLogEndRef} />
-          </div>
+          {logContent}
         </div>
-      )}
+        );
+      })()}
 
       {/* Messages */}
       {messages.length === 0 ? (
         <div ref={chatContainerRef} className="flex-1 overflow-auto px-3 py-2 space-y-3 min-h-0">
+          {concept ? (
+            <concept.EmptyState onSetInput={setInput} licenseStatus={licenseStatus} />
+          ) : (
           <div className="flex flex-col items-center justify-center h-full text-center">
             <Sparkles size={32} className="text-[#007acc] opacity-30 mb-3" />
             <p className="text-[13px] text-[#858585] mb-1"><span className="brand-font">gu<span className="text-[#007acc]">IDE</span></span> AI Assistant</p>
@@ -2751,9 +2802,10 @@ ${e.message}`,
               ))}
             </div>
           </div>
+          )}
 
           {/* License Status Banner */}
-          {licenseStatus && !licenseStatus.isActivated && (
+          {!concept && licenseStatus && !licenseStatus.isActivated && (
             <div className="mx-1 mb-2 px-3 py-2 rounded-lg border text-[11px] bg-[#007acc]/10 border-[#007acc]/30 text-[#858585]">
               <span>🔑 Cloud AI requires activation — <a href="https://graysoft.dev/account" target="_blank" rel="noopener noreferrer" className="underline hover:text-white">Subscribe (Pro $4.99/mo)</a> or activate in Settings → License</span>
             </div>
@@ -3102,28 +3154,29 @@ ${e.message}`,
 
             const msg = messages[index];
             if (!msg) return null;
+            const bubbleStyles = concept?.getMessageBubbleStyles(msg.role as 'user' | 'assistant' | 'system', msg.isError);
             return (
               <React.Fragment>
-              <div className={`px-3 py-1.5 ${msg.role === 'user' ? 'flex justify-end' : ''}`}>
+              <div className={bubbleStyles ? bubbleStyles.outerClassName : `px-3 py-1.5 ${msg.role === 'user' ? 'flex justify-end' : ''}`} style={bubbleStyles?.outerStyle}>
                 <div
-                  className={`text-[13px] leading-relaxed overflow-hidden break-words ${
+                  className={bubbleStyles ? bubbleStyles.innerClassName : `text-[13px] leading-relaxed overflow-hidden break-words ${
                     msg.role === 'user'
-                      ? 'max-w-[85%] rounded-2xl rounded-br-sm px-3 py-2'
+                      ? 'max-w-[85%] px-3.5 py-2.5'
                       : msg.role === 'system' && msg.isError
                       ? 'w-full rounded-lg px-2.5 py-1.5'
                       : msg.role === 'system'
                       ? 'w-full text-center rounded-lg px-2.5 py-1.5'
                       : 'w-full px-1'
                   }`}
-                  style={
+                  style={bubbleStyles ? bubbleStyles.innerStyle : (
                     msg.role === 'user'
-                      ? { backgroundColor: 'var(--theme-chat-bubble)', color: 'white' }
+                      ? { backgroundColor: 'var(--theme-chat-bubble)', color: 'white', borderRadius: '14px 14px 4px 14px' }
                       : msg.role === 'system' && msg.isError
                       ? { backgroundColor: 'color-mix(in srgb, #f44747 10%, var(--theme-bg))', color: '#e8a09a', border: '1px solid color-mix(in srgb, #f44747 25%, transparent)' }
                       : msg.role === 'system'
                       ? { backgroundColor: 'var(--theme-bg-secondary)', color: 'var(--theme-foreground-subtle)', border: '1px solid var(--theme-border)' }
                       : { color: 'var(--theme-foreground)' }
-                  }
+                  )}
                 >
                   {msg.role === 'assistant' && msg.thinkingText && (() => {
                     const segments = msg.thinkingText.includes('\n\n---THINKING_SEGMENT---\n\n')
@@ -3228,7 +3281,7 @@ ${e.message}`,
                     </>
                   )}
                   {msg.role === 'assistant' && (
-                    <div className="flex items-center gap-2 mt-2 pt-1.5" style={{ borderTop: '1px solid var(--theme-border)' }}>
+                    <div className={concept?.messageFooterClassName || "flex items-center gap-2 mt-2 pt-1.5"} style={concept?.messageFooterStyle || { borderTop: '1px solid var(--theme-border)' }}>
                       {msg.model && <span className="text-[10px]" style={{ color: 'var(--theme-foreground-muted)' }}>{msg.model}</span>}
                       {msg.webSearchUsed && <Globe size={10} className="text-[#3794ff]" />}
                       {msg.ragUsed && <Brain size={10} className="text-[#89d185]" />}

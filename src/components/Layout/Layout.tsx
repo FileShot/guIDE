@@ -51,9 +51,9 @@ export const Layout: React.FC = () => {
   const [rootPath, setRootPath] = useState<string>('');
   const [sidebarView, setSidebarView] = useState<SidebarView>('explorer');
   const [sidebarVisible, setSidebarVisible] = useState(true);
-  const [sidebarWidth, setSidebarWidth] = useState(260);
+  const [sidebarWidth, setSidebarWidth] = useState(240);
   const [chatVisible, setChatVisible] = useState(true);
-  const [chatWidth, setChatWidth] = useState(340);
+  const [chatWidth, setChatWidth] = useState(320);
   const [terminalVisible, setTerminalVisible] = useState(true);
   const [terminalHeight, setTerminalHeight] = useState(250);
   const [_editorHasOpenTabs, setEditorHasOpenTabs] = useState(false);
@@ -216,13 +216,13 @@ export const Layout: React.FC = () => {
         rafId = null;
         if (type === 'sidebar') {
           // Cap sidebar so center panel always keeps MIN_CENTER_WIDTH
-          // 48px activity bar + 4px handle + chatWidth + 4px handle = right-side overhead
-          const maxSidebar = window.innerWidth - 48 - 8 - chatWidth - MIN_CENTER_WIDTH;
-          setSidebarWidth(Math.max(180, Math.min(500, maxSidebar, e.clientX - 48)));
+          // 40px activity bar + 4px handle + chatWidth + 4px handle = right-side overhead
+          const maxSidebar = window.innerWidth - 40 - 8 - chatWidth - MIN_CENTER_WIDTH;
+          setSidebarWidth(Math.max(180, Math.min(500, maxSidebar, e.clientX - 40)));
         } else if (type === 'chat') {
           // Cap chat so the center panel always keeps MIN_CENTER_WIDTH
-          // 48px activity bar + sidebarWidth + 8px handles
-          const maxChatBySpace = Math.max(280, window.innerWidth - 48 - sidebarWidth - 8 - MIN_CENTER_WIDTH);
+          // 40px activity bar + sidebarWidth + 8px handles
+          const maxChatBySpace = Math.max(280, window.innerWidth - 40 - sidebarWidth - 8 - MIN_CENTER_WIDTH);
           setChatWidth(Math.max(280, Math.min(600, maxChatBySpace, window.innerWidth - e.clientX)));
         }
         else if (type === 'terminal') setTerminalHeight(Math.max(100, Math.min(600, window.innerHeight - e.clientY - 24)));
@@ -376,11 +376,11 @@ export const Layout: React.FC = () => {
   return (
     <div className="flex flex-col h-screen overflow-hidden" style={{ backgroundColor: 'var(--theme-bg)', color: 'var(--theme-foreground)' }}>
       {/* Title Bar with Menu */}
-      <div className="h-[34px] flex items-center select-none flex-shrink-0 relative z-50"
+      <div className="h-[28px] flex items-center select-none flex-shrink-0 relative z-50"
            style={{ backgroundColor: 'var(--theme-title-bar)', WebkitAppRegion: 'drag' } as any}>
-        <div className="flex items-center text-[12px]" style={{ color: 'var(--theme-foreground)', opacity: 0.8, WebkitAppRegion: 'no-drag' } as any}>
-          <span className="px-2 flex items-center" title="guIDE by Brendan Gray">
-            <img src="zzz.png" alt="guIDE" className="w-5 h-5" style={{ filter: 'brightness(1.2)' }} />
+        <div className="flex items-center text-[11px]" style={{ color: 'var(--theme-foreground)', opacity: 0.8, WebkitAppRegion: 'no-drag' } as any}>
+          <span className="px-1.5 flex items-center" title="guIDE by Brendan Gray">
+            <img src="zzz.png" alt="guIDE" className="w-4 h-4" style={{ filter: 'brightness(1.2)' }} />
           </span>
           <MenuBar onAction={handleMenuAction} />
         </div>
@@ -390,12 +390,12 @@ export const Layout: React.FC = () => {
           style={{ WebkitAppRegion: 'no-drag' } as any}
         >
           <button
-            className="flex items-center gap-2 h-[22px] rounded transition-all px-3 hover:opacity-100"
+            className="flex items-center gap-2 h-[20px] rounded-[3px] transition-all px-2.5 hover:opacity-100"
             style={{
               backgroundColor: 'var(--theme-input-bg, rgba(255,255,255,0.06))',
               border: '1px solid var(--theme-border, rgba(255,255,255,0.10))',
               color: 'var(--theme-foreground-muted)',
-              width: 'clamp(220px, 30vw, 440px)',
+              width: 'clamp(200px, 28vw, 400px)',
               opacity: 0.75,
             }}
             onClick={() => handleMenuAction('command-palette')}
@@ -413,43 +413,43 @@ export const Layout: React.FC = () => {
         {/* VS Code–style layout toggle buttons */}
         <div className="flex items-center gap-0.5 mr-2" style={{ WebkitAppRegion: 'no-drag' } as any}>
           <button
-            className="w-[28px] h-[28px] flex items-center justify-center rounded hover:bg-[#ffffff15] transition-colors"
+            className="w-[24px] h-[24px] flex items-center justify-center rounded hover:bg-[#ffffff15] transition-colors"
             style={{ color: sidebarVisible ? 'var(--theme-foreground)' : 'var(--theme-foreground-muted)' }}
             onClick={() => setSidebarVisible(v => !v)}
             title="Toggle Primary Sidebar (Ctrl+B)"
           >
-            <PanelLeft size={14} />
+            <PanelLeft size={13} />
           </button>
           <button
-            className="w-[28px] h-[28px] flex items-center justify-center rounded hover:bg-[#ffffff15] transition-colors"
+            className="w-[24px] h-[24px] flex items-center justify-center rounded hover:bg-[#ffffff15] transition-colors"
             style={{ color: terminalVisible ? 'var(--theme-foreground)' : 'var(--theme-foreground-muted)' }}
             onClick={() => setTerminalVisible(v => !v)}
             title="Toggle Panel (Ctrl+J)"
           >
-            <PanelBottom size={14} />
+            <PanelBottom size={13} />
           </button>
           <button
-            className="w-[28px] h-[28px] flex items-center justify-center rounded hover:bg-[#ffffff15] transition-colors"
+            className="w-[24px] h-[24px] flex items-center justify-center rounded hover:bg-[#ffffff15] transition-colors"
             style={{ color: chatVisible ? 'var(--theme-foreground)' : 'var(--theme-foreground-muted)' }}
             onClick={() => setChatVisible(v => !v)}
             title="Toggle Secondary Sidebar (Ctrl+L)"
           >
-            <PanelRight size={14} />
+            <PanelRight size={13} />
           </button>
         </div>
         {currentFile && <span className="text-[12px] mr-2 truncate max-w-[150px] flex-shrink" style={{ color: 'var(--theme-foreground)', opacity: 0.4 }}>{currentFile.split(/[/\\]/).pop()}</span>}
-        <span className="text-[10px] mr-[140px] select-none brand-font flex-shrink-0" style={{ color: 'var(--theme-foreground)', opacity: 0.2 }} title="guIDE by Brendan Gray">guIDE</span>
+        <span className="text-[9px] mr-[140px] select-none brand-font flex-shrink-0" style={{ color: 'var(--theme-foreground)', opacity: 0.15 }} title="guIDE by Brendan Gray">guIDE</span>
       </div>
 
       {/* Main */}
       <div className="flex flex-1 min-h-0">
         {/* Activity Bar */}
-        <div className="w-[48px] flex flex-col items-center py-0 flex-shrink-0" style={{ backgroundColor: 'var(--theme-activity-bar)', borderRight: '1px solid var(--theme-sidebar-border)', overflow: 'visible', position: 'relative', zIndex: 10 }}>
+        <div className="w-[40px] flex flex-col items-center py-0 flex-shrink-0" style={{ backgroundColor: 'var(--theme-activity-bar)', borderRight: '1px solid var(--theme-sidebar-border)', overflow: 'visible', position: 'relative', zIndex: 10 }}>
           {/* Primary icons */}
           {primaryBarItems.map(item => (
             <button
               key={item.id}
-              className="w-[48px] h-[48px] flex items-center justify-center transition-all duration-150 flex-shrink-0 relative"
+              className="w-[40px] h-[40px] flex items-center justify-center transition-all duration-150 flex-shrink-0 relative"
               style={{
                 color: sidebarView === item.id && sidebarVisible ? 'var(--theme-foreground)' : 'var(--theme-foreground-muted)',
                 backgroundColor: 'transparent',
@@ -464,13 +464,13 @@ export const Layout: React.FC = () => {
               {sidebarView === item.id && sidebarVisible && (
                 <div className="absolute left-0 top-[25%] w-[2px] h-[50%] rounded-r" style={{ backgroundColor: 'var(--theme-accent)' }} />
               )}
-              <item.icon size={22} />
+              <item.icon size={18} />
             </button>
           ))}
           {/* More Tools button */}
           <div className="relative flex-shrink-0">
             <button
-              className="w-[48px] h-[48px] flex items-center justify-center transition-all duration-150 relative"
+              className="w-[40px] h-[40px] flex items-center justify-center transition-all duration-150 relative"
               style={{
                 color: isMoreToolActive || moreToolsOpen ? 'var(--theme-foreground)' : 'var(--theme-foreground-muted)',
               }}
@@ -479,13 +479,13 @@ export const Layout: React.FC = () => {
               aria-label="More Tools"
             >
               {(isMoreToolActive || moreToolsOpen) && <div className="absolute left-0 top-[25%] w-[2px] h-[50%] rounded-r" style={{ backgroundColor: 'var(--theme-accent)' }} />}
-              <MoreHorizontal size={22} />
+              <MoreHorizontal size={18} />
             </button>
             {/* More Tools popover */}
             {moreToolsOpen && (
               <>
                 <div className="fixed inset-0 z-40" onClick={() => { setMoreToolsOpen(false); notifyBrowserOverlay(false); }} />
-                <div className="absolute left-[48px] top-0 z-50 py-1 rounded-r-lg shadow-xl min-w-[180px] glass"
+                <div className="absolute left-[40px] top-0 z-50 py-1 rounded-r-lg shadow-xl min-w-[180px] glass"
                   style={{ backgroundColor: 'color-mix(in srgb, var(--theme-bg-secondary) 85%, transparent)', border: '1px solid color-mix(in srgb, var(--theme-border) 60%, transparent)' }}>
                   {moreToolsItems.map(item => (
                     <button
@@ -514,16 +514,16 @@ export const Layout: React.FC = () => {
           </div>
           <div className="flex-1" />
           <button
-            className="w-[48px] h-[48px] flex items-center justify-center transition-colors"
+            className="w-[40px] h-[40px] flex items-center justify-center transition-colors"
             style={{ color: 'var(--theme-foreground-muted)', borderLeft: '2px solid transparent' }}
             onClick={() => editorRef.current?.openBrowserTab()}
             title="Browser"
             aria-label="Browser"
           >
-            <Globe size={24} />
+            <Globe size={18} />
           </button>
           <button
-            className="w-[48px] h-[48px] flex items-center justify-center transition-all duration-150 relative"
+            className="w-[40px] h-[40px] flex items-center justify-center transition-all duration-150 relative"
             style={{
               color: chatVisible ? 'var(--theme-foreground)' : 'var(--theme-foreground-muted)',
             }}
@@ -532,10 +532,10 @@ export const Layout: React.FC = () => {
             aria-label="AI Chat"
           >
             {chatVisible && <div className="absolute left-0 top-[25%] w-[2px] h-[50%] rounded-r" style={{ backgroundColor: 'var(--theme-accent)' }} />}
-            <MessageSquare size={22} />
+            <MessageSquare size={18} />
           </button>
           <button
-            className="w-[48px] h-[48px] flex items-center justify-center transition-all duration-150 relative"
+            className="w-[40px] h-[40px] flex items-center justify-center transition-all duration-150 relative"
             style={{
               color: sidebarView === 'benchmark' && sidebarVisible ? 'var(--theme-foreground)' : 'var(--theme-foreground-muted)',
             }}
@@ -547,19 +547,19 @@ export const Layout: React.FC = () => {
             aria-label="Model Benchmark"
           >
             {sidebarView === 'benchmark' && sidebarVisible && <div className="absolute left-0 top-[25%] w-[2px] h-[50%] rounded-r" style={{ backgroundColor: 'var(--theme-accent)' }} />}
-            <BarChart3 size={22} />
+            <BarChart3 size={18} />
           </button>
           <button
-            className="w-[48px] h-[48px] flex items-center justify-center transition-colors"
+            className="w-[40px] h-[40px] flex items-center justify-center transition-colors"
             style={{ color: showThemePicker ? 'var(--theme-accent)' : 'var(--theme-foreground-muted)', borderLeft: '2px solid transparent' }}
             onClick={() => { setShowThemePicker(v => { const next = !v; notifyBrowserOverlay(next); return next; }); }}
             title="Theme"
             aria-label="Theme"
           >
-            <Palette size={22} />
+            <Palette size={18} />
           </button>
           <button
-            className="w-[48px] h-[48px] flex items-center justify-center transition-all duration-150 relative group"
+            className="w-[40px] h-[40px] flex items-center justify-center transition-all duration-150 relative group"
             style={{
               color: sidebarView === 'account' && sidebarVisible ? 'var(--theme-foreground)' : 'var(--theme-foreground-muted)',
             }}
@@ -572,12 +572,12 @@ export const Layout: React.FC = () => {
           >
             {sidebarView === 'account' && sidebarVisible && <div className="absolute left-0 top-[25%] w-[2px] h-[50%] rounded-r" style={{ backgroundColor: 'var(--theme-accent)' }} />}
             <div className="relative">
-              <UserCircle size={24} />
+              <UserCircle size={18} />
               <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full animate-pulse" style={{ backgroundColor: 'var(--theme-accent)', boxShadow: '0 0 8px var(--theme-accent)' }} />
             </div>
           </button>
           <button
-            className="w-[48px] h-[48px] flex items-center justify-center transition-colors"
+            className="w-[40px] h-[40px] flex items-center justify-center transition-colors"
             style={{
               color: 'var(--theme-foreground-muted)',
               borderRadius: '8px',
@@ -586,7 +586,7 @@ export const Layout: React.FC = () => {
             title="Advanced Settings (Ctrl+,)"
             aria-label="Advanced Settings"
           >
-            <Settings size={22} />
+            <Settings size={18} />
           </button>
         </div>
 
@@ -596,7 +596,7 @@ export const Layout: React.FC = () => {
           <>
         {/* Sidebar — always mounted so panels stay alive; width animates open/close */}
         <div className="flex flex-col flex-shrink-0 overflow-hidden" style={{ width: sidebarVisible ? sidebarWidth : 0, backgroundColor: 'var(--theme-sidebar)', borderRight: sidebarVisible ? '1px solid var(--theme-sidebar-border)' : 'none', transition: 'width 200ms cubic-bezier(0.4,0,0.2,1)', boxShadow: sidebarVisible ? '2px 0 8px rgba(0,0,0,0.28)' : 'none' }}>
-              <div className="h-[30px] flex items-center px-4 text-[11px] font-semibold uppercase tracking-wider flex-shrink-0" style={{ color: 'var(--theme-foreground-subtle)', borderBottom: '1px solid var(--theme-sidebar-border)' }}>
+              <div className="h-[28px] flex items-center px-4 text-[10px] font-semibold uppercase tracking-wider flex-shrink-0" style={{ color: 'var(--theme-foreground-subtle)', borderBottom: '1px solid var(--theme-sidebar-border)' }}>
                 {sidebarView === 'explorer' && 'Explorer'}
                 {sidebarView === 'search' && 'Search'}
                 {sidebarView === 'git' && 'Source Control'}

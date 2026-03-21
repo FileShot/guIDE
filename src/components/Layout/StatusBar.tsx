@@ -185,7 +185,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({
   const ctxPct = contextUsage.total > 0 ? Math.round((contextUsage.used / contextUsage.total) * 100) : 0;
 
   return (
-    <div className="h-[24px] flex items-center justify-between px-2 text-[12px] select-none flex-shrink-0 overflow-hidden" style={{ backgroundColor: 'var(--theme-status-bar)', borderTop: '1px solid var(--theme-border)', color: 'var(--theme-status-bar-fg)' }}>
+    <div className="h-[20px] flex items-center justify-between px-1.5 text-[10px] select-none flex-shrink-0 overflow-hidden" style={{ backgroundColor: 'var(--theme-status-bar)', borderTop: '1px solid var(--theme-border)', color: 'var(--theme-status-bar-fg)' }}>
       {/* Left */}
       <div className="flex items-center gap-2 flex-shrink-0">
         {/* Git branch */}

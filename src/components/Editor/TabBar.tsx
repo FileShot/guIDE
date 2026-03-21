@@ -190,10 +190,11 @@ export const TabBar: React.FC<TabBarProps> = ({
                   className={cn(
                     'flex items-center group min-w-0 max-w-xs px-3 py-2 border-r border-border cursor-pointer transition-colors',
                     'hover:bg-background-tertiary',
-                    isActive && 'bg-background border-t-2 border-t-border-focus',
+                    isActive && 'bg-background border-b-2',
                     isDragged && 'opacity-50',
-                    isDragOver && 'bg-background-tertiary border-t-2 border-t-info'
+                    isDragOver && 'bg-background-tertiary border-b-2 border-b-info'
                   )}
+                  style={isActive ? { borderBottomColor: 'var(--theme-accent)' } : undefined}
                   onClick={() => handleTabClick(tab.id)}
                   onAuxClick={(e) => handleTabMiddleClick(e, tab.id)}
                   onKeyDown={(e) => handleKeyDown(e, tab.id)}

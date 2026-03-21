@@ -295,7 +295,7 @@ function register(ctx) {
         mainWindow.webContents.send('agentic-progress', { iteration, maxIterations: MAX_CLOUD_ITERATIONS });
       }
       if (mainWindow) mainWindow.webContents.send('llm-iteration-begin');
-q
+
       // Token batching for cloud
       const tokenFlushMs = isBundledCloudProvider ? 50 : 25;
       const charsPerFlush = isBundledCloudProvider ? 4 : undefined;

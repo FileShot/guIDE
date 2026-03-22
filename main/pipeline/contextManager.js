@@ -100,7 +100,12 @@ function progressiveContextCompaction(options) {
     console.log(`[ContextManager] Compaction at ${(pct * 100).toFixed(1)}% — phase ${currentPhase}: ${actions.join('; ')}`);
   }
 
-  return { phase: currentPhase, shouldRotate, actions };
+  // When compaction phases 2+ ran, the in-memory text has been modified.
+  // Signal that KV cache should be invalidated so the NEXT generation
+  // evaluates the compacted history from scratch instead of reusing stale KV.
+  const needsKvInvalidation = currentPhase >= 2 && !shouldRotate;
+
+  return { phase: currentPhase, shouldRotate, needsKvInvalidation, actions };
 }
 
 // ─── Pre-Generation Context Check ────────────────────────────
@@ -174,7 +179,16 @@ function preGenerationContextCheck(opts) {
     fullResponseText,
   });
 
-  if (!compaction.shouldRotate) return null;
+  if (!compaction.shouldRotate) {
+    // Phases 2-3 compacted in-memory text. If KV invalidation is needed,
+    // signal the caller so the next generation evaluates compacted history
+    // from scratch instead of reusing stale KV (which still has uncompacted tokens).
+    if (compaction.needsKvInvalidation) {
+      llmEngine.lastEvaluation = null;
+      console.log('[ContextManager] KV cache invalidated after phase 2-3 compaction — next gen will re-evaluate compacted history');
+    }
+    return null;
+  }
   if (contextRotations >= MAX_CONTEXT_ROTATIONS) return null;
 
   // Generate rotation summary
@@ -207,7 +221,8 @@ function preGenerationContextCheck(opts) {
       prompt: {
         systemContext: sysPrompt,
         userMessage: message + progressHints +
-          '\n\nContext rotated. Continue generating content from where you left off. Do NOT output any acknowledgment, recap, or summary — immediately make forward progress.',
+          '\n\nContext rotated. Continue generating content from where you left off. Do NOT output any acknowledgment, recap, or summary — immediately make forward progress.' +
+          '\nDo NOT redo completed work. Files listed in progress exist on disk. If a plan exists, it is already active — use update_todo, do NOT call write_todos.',
       },
       rotated: true,
       summary,
@@ -222,7 +237,8 @@ function preGenerationContextCheck(opts) {
       userMessage: summary +
         `\nContext rotated. Current request: ${message.substring(0, 300)}` +
         progressHints +
-        '\n\nContinue the task. Do NOT output any acknowledgment or summary — make forward progress immediately.',
+        '\n\nContinue the task. Do NOT output any acknowledgment or summary — make forward progress immediately.' +
+        '\nDo NOT redo completed work. Files listed in progress exist on disk. If a plan exists, it is already active — use update_todo, do NOT call write_todos.',
     },
     rotated: true,
     summary,

@@ -1,0 +1,347 @@
+- generic [ref=e3]:
+  - generic [ref=e4]:
+    - generic [ref=e5]:
+      - generic "guIDE by Brendan Gray" [ref=e6]:
+        - img "guIDE" [ref=e7]
+      - generic [ref=e8]:
+        - button "File" [ref=e10] [cursor=pointer]
+        - button "Edit" [ref=e12] [cursor=pointer]
+        - button "View" [ref=e14] [cursor=pointer]
+        - button "Terminal" [ref=e16] [cursor=pointer]
+        - button "Help" [ref=e18] [cursor=pointer]
+    - button "Open command palette" [ref=e20] [cursor=pointer]:
+      - img [ref=e21]
+      - generic [ref=e24]: my-blank-apphhj
+      - generic [ref=e25]: Ctrl+P
+    - generic [ref=e26]:
+      - button "Toggle Primary Sidebar (Ctrl+B)" [ref=e27] [cursor=pointer]:
+        - img [ref=e28]
+      - button "Toggle Panel (Ctrl+J)" [ref=e30] [cursor=pointer]:
+        - img [ref=e31]
+      - button "Toggle Secondary Sidebar (Ctrl+L)" [ref=e33] [cursor=pointer]:
+        - img [ref=e34]
+    - generic "guIDE by Brendan Gray" [ref=e36]: guIDE
+  - generic [ref=e37]:
+    - generic [ref=e38]:
+      - button "Explorer" [ref=e39] [cursor=pointer]:
+        - img [ref=e40]
+      - button "Search" [ref=e44] [cursor=pointer]:
+        - img [ref=e45]
+      - button "Source Control" [ref=e48] [cursor=pointer]:
+        - img [ref=e49]
+      - button "Debug" [ref=e53] [cursor=pointer]:
+        - img [ref=e54]
+      - button "MCP Servers" [ref=e63] [cursor=pointer]:
+        - img [ref=e64]
+      - button "Database" [ref=e67] [cursor=pointer]:
+        - img [ref=e68]
+      - button "More Tools" [ref=e73] [cursor=pointer]:
+        - img [ref=e74]
+      - button "Browser" [ref=e78] [cursor=pointer]:
+        - img [ref=e79]
+      - button "AI Chat" [ref=e82] [cursor=pointer]:
+        - img [ref=e83]
+      - button "Model Benchmark" [ref=e85] [cursor=pointer]:
+        - img [ref=e86]
+      - button "Theme" [ref=e88] [cursor=pointer]:
+        - img [ref=e89]
+      - button "Account & Sign In" [ref=e95] [cursor=pointer]:
+        - img [ref=e97]
+      - button "Advanced Settings" [ref=e102] [cursor=pointer]:
+        - img [ref=e103]
+    - generic [ref=e183]:
+      - generic [ref=e184]: Explorer
+      - generic [ref=e187]:
+        - generic [ref=e188]:
+          - generic [ref=e189]:
+            - generic [ref=e190]:
+              - img [ref=e191]
+              - generic [ref=e193]: my-blank-apphhj
+            - generic "C:\\Users\\brend\\my-blank-apphhj" [ref=e194]
+          - generic [ref=e195]:
+            - button "Grid View" [ref=e196] [cursor=pointer]:
+              - img [ref=e197]
+            - button "Refresh" [ref=e199] [cursor=pointer]:
+              - img [ref=e200]
+            - button "New File" [ref=e205] [cursor=pointer]:
+              - img [ref=e206]
+            - button "New Folder" [ref=e209] [cursor=pointer]:
+              - img [ref=e210]
+        - generic [ref=e213]:
+          - generic [ref=e214]:
+            - img [ref=e215]
+            - textbox "Search files..." [ref=e218]
+          - generic [ref=e219]:
+            - button "Hidden" [ref=e220] [cursor=pointer]:
+              - img [ref=e221]
+              - generic [ref=e223]: Hidden
+            - combobox [ref=e224]:
+              - option "Name" [selected]
+              - option "Size"
+              - option "Modified"
+              - option "Type"
+        - generic [ref=e226]:
+          - generic [ref=e228] [cursor=pointer]:
+            - button [ref=e229]:
+              - img [ref=e230]
+            - generic "commands" [ref=e232]
+            - generic "commands" [ref=e233]
+          - generic [ref=e235] [cursor=pointer]:
+            - generic "src" [ref=e236]
+            - generic "src" [ref=e237]
+          - generic [ref=e239] [cursor=pointer]:
+            - generic "audio-dsp.js" [ref=e240]
+            - generic "audio-dsp.js" [ref=e241]
+          - generic [ref=e243] [cursor=pointer]:
+            - generic "audioManager.js" [ref=e244]
+            - generic "audioManager.js" [ref=e245]
+          - generic [ref=e247] [cursor=pointer]:
+            - generic "cli.js" [ref=e248]
+            - generic "cli.js" [ref=e249]
+          - generic [ref=e251] [cursor=pointer]:
+            - generic "collab-editor-backend.js" [ref=e252]
+            - generic "collab-editor-backend.js" [ref=e253]
+          - generic [ref=e255] [cursor=pointer]:
+            - generic "config.py" [ref=e256]
+            - generic "config.py" [ref=e257]
+          - generic [ref=e259] [cursor=pointer]:
+            - generic "container.ts" [ref=e260]
+            - generic "container.ts" [ref=e261]
+          - generic [ref=e263] [cursor=pointer]:
+            - generic "data_loader.py" [ref=e264]
+            - generic "data_loader.py" [ref=e265]
+          - generic [ref=e267] [cursor=pointer]:
+            - generic "demoGame.js" [ref=e268]
+            - generic "demoGame.js" [ref=e269]
+          - generic [ref=e271] [cursor=pointer]:
+            - generic "ecs-engine.js" [ref=e272]
+            - generic "ecs-engine.js" [ref=e273]
+          - generic [ref=e275] [cursor=pointer]:
+            - generic "ecs.js" [ref=e276]
+            - generic "ecs.js" [ref=e277]
+          - generic [ref=e279] [cursor=pointer]:
+            - generic "EventEmitter.js" [ref=e280]
+            - generic "EventEmitter.js" [ref=e281]
+          - generic [ref=e283] [cursor=pointer]:
+            - generic "fileshot.html" [ref=e284]
+            - generic "fileshot.html" [ref=e285]
+          - generic [ref=e287] [cursor=pointer]:
+            - generic "gameEngine.js" [ref=e288]
+            - generic "gameEngine.js" [ref=e289]
+          - generic [ref=e291] [cursor=pointer]:
+            - generic "http2-server.js" [ref=e292]
+            - generic "http2-server.js" [ref=e293]
+          - generic [ref=e295] [cursor=pointer]:
+            - generic "index.html" [ref=e296]
+            - generic "index.html" [ref=e297]
+          - generic [ref=e299] [cursor=pointer]:
+            - generic "inputManager.js" [ref=e300]
+            - generic "inputManager.js" [ref=e301]
+          - generic [ref=e303] [cursor=pointer]:
+            - generic "microservices-framework.js" [ref=e304]
+            - generic "microservices-framework.js" [ref=e305]
+          - generic [ref=e307] [cursor=pointer]:
+            - generic "Middleware.js" [ref=e308]
+            - generic "Middleware.js" [ref=e309]
+          - generic [ref=e311] [cursor=pointer]:
+            - generic "package.json" [ref=e312]
+            - generic "package.json" [ref=e313]
+          - generic [ref=e315] [cursor=pointer]:
+            - generic "physics-engine.js" [ref=e316]
+            - generic "physics-engine.js" [ref=e317]
+          - generic [ref=e319] [cursor=pointer]:
+            - generic "physics.js" [ref=e320]
+            - generic "physics.js" [ref=e321]
+          - generic [ref=e323] [cursor=pointer]:
+            - generic "README.md" [ref=e324]
+            - generic "README.md" [ref=e325]
+          - generic [ref=e327] [cursor=pointer]:
+            - generic "redis-cache.js" [ref=e328]
+            - generic "redis-cache.js" [ref=e329]
+          - generic [ref=e331] [cursor=pointer]:
+            - generic "Router.js" [ref=e332]
+            - generic "Router.js" [ref=e333]
+          - generic [ref=e335] [cursor=pointer]:
+            - generic "sceneGraph.js" [ref=e336]
+            - generic "sceneGraph.js" [ref=e337]
+          - generic [ref=e339] [cursor=pointer]:
+            - generic "server.js" [ref=e340]
+            - generic "server.js" [ref=e341]
+          - generic [ref=e343] [cursor=pointer]:
+            - generic "shit.html" [ref=e344]
+            - generic "shit.html" [ref=e345]
+          - generic [ref=e347] [cursor=pointer]:
+            - generic "spriteAnimation.js" [ref=e348]
+            - generic "spriteAnimation.js" [ref=e349]
+          - generic [ref=e351] [cursor=pointer]:
+            - generic "sql-engine.js" [ref=e352]
+            - generic "sql-engine.js" [ref=e353]
+          - generic [ref=e355] [cursor=pointer]:
+            - generic "state-manager.js" [ref=e356]
+            - generic "state-manager.js" [ref=e357]
+          - generic [ref=e359] [cursor=pointer]:
+            - generic "types.ts" [ref=e360]
+            - generic "types.ts" [ref=e361]
+    - generic [ref=e363]:
+      - generic [ref=e368]:
+        - generic [ref=e369]:
+          - img "guIDE" [ref=e370]
+          - heading "guIDE" [level=1] [ref=e371]
+          - paragraph [ref=e372]: AI-Powered IDE
+        - generic [ref=e373]:
+          - paragraph [ref=e374]: Recent
+          - button "my-blank-apphhj Users/brend" [ref=e376] [cursor=pointer]:
+            - generic [ref=e377]: my-blank-apphhj
+            - generic [ref=e378]: Users/brend
+        - generic [ref=e379]:
+          - paragraph [ref=e380]:
+            - generic [ref=e381]: Ctrl+N
+            - generic [ref=e382]: New file
+          - paragraph [ref=e383]:
+            - generic [ref=e384]: Ctrl+Shift+P
+            - generic [ref=e385]: Command palette
+          - paragraph [ref=e386]:
+            - generic [ref=e387]: "Ctrl+`"
+            - generic [ref=e388]: Toggle terminal
+        - generic [ref=e389]: AI-powered • Local LLM • RAG • Web Search
+      - generic [ref=e392]:
+        - generic [ref=e393]:
+          - generic [ref=e394]:
+            - button "terminal" [ref=e395] [cursor=pointer]
+            - generic: /
+            - button "problems" [ref=e396] [cursor=pointer]
+            - generic: /
+            - button "output" [ref=e397] [cursor=pointer]
+          - generic [ref=e399] [cursor=pointer]:
+            - img [ref=e400]
+            - generic [ref=e402]: Terminal 1
+            - button [ref=e403]:
+              - img [ref=e404]
+          - generic [ref=e407]:
+            - button "New Terminal" [ref=e408] [cursor=pointer]:
+              - img [ref=e409]
+            - button "Close Panel" [ref=e410] [cursor=pointer]:
+              - img [ref=e411]
+        - generic [ref=e418]:
+          - generic:
+            - textbox "Terminal input"
+    - generic [ref=e437]:
+      - generic [ref=e438]:
+        - img [ref=e439]
+        - generic [ref=e441]: guIDE AI
+        - generic [ref=e442]:
+          - button "Enable text-to-speech" [ref=e443] [cursor=pointer]:
+            - img [ref=e444]
+          - button "API Keys and License" [ref=e448] [cursor=pointer]:
+            - img [ref=e449]
+          - button "Developer console" [ref=e453] [cursor=pointer]:
+            - img [ref=e454]
+          - button "New conversation" [ref=e456] [cursor=pointer]:
+            - img [ref=e457]
+          - button "Chat history" [ref=e458] [cursor=pointer]:
+            - img [ref=e459]
+          - button "Clear chat" [ref=e461] [cursor=pointer]:
+            - img [ref=e462]
+          - button "Close chat panel" [ref=e465] [cursor=pointer]:
+            - img [ref=e466]
+      - generic [ref=e471]:
+        - generic [ref=e614]: thats sick dude yeah i love all of those ideas. one more thing tho - i want the color scheme to be like deep purple (#1a0030) to almost black backgrounds, with electric cyan (#00f5ff) and hot magenta (#ff00aa) neon accents. think like a neon sign in a dark alley kind of vibe. and i really want custom CSS animations everywhere - like glowing text, pulsing buttons, animated gradient borders. the fonts should be orbitron for headings and rajdhani for body text from google fonts. does that sound doable?
+        - generic [ref=e626]:
+          - generic [ref=e645]:
+            - button "▶ Reasoning..." [ref=e646] [cursor=pointer]:
+              - generic [ref=e647]: ▶
+              - emphasis [ref=e649]: Reasoning...
+              - img [ref=e650]
+            - generic [ref=e652]: "[Context rotated — continuing task]"
+          - generic [ref=e627]: I'll update the color scheme and add all those neon animations with Orbitron and Rajdhani fonts! Let me modify fileshot.html now. Let me read the file first to see its current structure and apply all the neon styling properly.
+          - generic [ref=e628]: Step 5
+          - generic [ref=e653]:
+            - generic [ref=e654]:
+              - img [ref=e655]
+              - generic [ref=e657]: fileshot.html
+              - generic [ref=e658]: writing…
+            - generic [ref=e660]:
+              - generic [ref=e661]:
+                - generic [ref=e662]: html
+                - generic [ref=e663]: (64 lines)
+              - generic [ref=e664]:
+                - button "▶ Expand" [ref=e665] [cursor=pointer]
+                - button "Copy" [ref=e666] [cursor=pointer]:
+                  - img [ref=e667]
+                  - text: Copy
+                - button "Run" [ref=e670] [cursor=pointer]:
+                  - img [ref=e671]
+                  - text: Run
+          - generic [ref=e673]:
+            - generic [ref=e674]:
+              - img [ref=e675]
+              - generic [ref=e678]: "edit_file: fileshot.html [FAIL]"
+            - generic [ref=e679]: Failed
+          - generic [ref=e681]:
+            - generic [ref=e682]:
+              - img [ref=e683]
+              - generic [ref=e685]: 1 tool call
+              - generic [ref=e686]: 1 passed
+            - 'button "▶ read_file: fileshot.html [OK]" [ref=e689] [cursor=pointer]':
+              - generic [ref=e690]: ▶
+              - img [ref=e691]
+              - generic [ref=e693]: "read_file: fileshot.html [OK]"
+      - generic [ref=e476]:
+        - textbox "Chat message input" [active] [ref=e477]:
+          - /placeholder: Type to queue a message...
+        - generic [ref=e478]:
+          - generic [ref=e479]:
+            - button "Attach image" [ref=e480] [cursor=pointer]:
+              - img [ref=e481]
+            - button "Voice input" [ref=e483] [cursor=pointer]:
+              - img [ref=e484]
+            - button "Enable auto mode" [ref=e488] [cursor=pointer]:
+              - img [ref=e489]
+              - generic [ref=e491]: Auto
+            - button "Enable plan mode" [ref=e493] [cursor=pointer]:
+              - img [ref=e494]
+              - generic [ref=e499]: Plan
+            - button "Change model" [ref=e501] [cursor=pointer]:
+              - img [ref=e502]
+              - generic [ref=e505]: Qwen3.5-4B
+              - img [ref=e506]
+          - generic [ref=e508]:
+            - button "Stop generating" [ref=e615] [cursor=pointer]:
+              - img [ref=e616]
+            - button "Queue message" [disabled] [ref=e618]:
+              - img [ref=e619]
+  - generic [ref=e146]:
+    - generic [ref=e147]:
+      - generic [ref=e148] [cursor=pointer]:
+        - img [ref=e149]
+        - generic [ref=e153]: main
+      - generic "Show Problems panel" [ref=e154] [cursor=pointer]:
+        - img [ref=e155]
+        - generic [ref=e157]: "0"
+        - generic [ref=e158]: W
+        - generic [ref=e159]: "0"
+    - generic [ref=e160]:
+      - generic "Generation speed" [ref=e694]:
+        - img [ref=e695]
+        - generic [ref=e697]: 5 tok/s
+      - 'generic "Context: 5,934 / 14,080 tokens (42%)" [ref=e700] [cursor=pointer]':
+        - img [ref=e560]
+        - generic [ref=e563]: 42%
+      - 'generic "NVIDIA GeForce RTX 3050 Ti Laptop GPU VRAM: undefined/undefined GB (undefined%) GPU Util: undefined% • Temp: undefined°C CPU: 76% • RAM: 78% Layers: 20 (20)" [ref=e701] [cursor=pointer]':
+        - generic [ref=e513]: GPU
+        - img [ref=e514]
+        - generic [ref=e517]: /G
+      - generic [ref=e162] [cursor=pointer]: Ln 1, Col 1
+      - generic [ref=e163] [cursor=pointer]: plaintext
+      - 'generic "Qwen3.5-4B-Q4_K_M.gguf Context: 14080 tokens GPU Layers: 20 Backend: ?" [ref=e522] [cursor=pointer]':
+        - img [ref=e523]
+        - generic [ref=e168]: Qwen3.5-4B-Q4_K_M.gguf • 14K • GPU:20L
+      - button "Voice command (Ctrl+Shift+V)" [ref=e170] [cursor=pointer]:
+        - img [ref=e171]
+      - button [ref=e174] [cursor=pointer]:
+        - img [ref=e175]
+      - img [ref=e178] [cursor=pointer]
+      - generic [ref=e181]:
+        - text: by
+        - link "Brendan Gray" [ref=e182] [cursor=pointer]:
+          - /url: "#"

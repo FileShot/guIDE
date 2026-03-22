@@ -1,0 +1,6 @@
+10:59:41.485 [CUDA mode loaded 0 layers despite 4.0GB VRAM & 40 estimated layers — trying explicit layer count]
+10:59:43.692 [AUTO mode loaded 0 layers despite 4.0GB VRAM & 40 estimated layers — trying explicit layer count]
+11:01:42.312 [CUDA mode loaded 0 layers despite 4.0GB VRAM & 40 estimated layers — trying explicit layer count]
+11:01:44.463 [AUTO mode loaded 0 layers despite 4.0GB VRAM & 40 estimated layers — trying explicit layer count]
+D:\a\node-llama-cpp\node-llama-cpp\llama\llama.cpp\ggml\src\ggml-cuda\ggml-cuda.cu:97: CUDA error
+[node-llama-cpp] CUDA error: out of memory

@@ -1,0 +1,180 @@
+/**
+ * IPC Handlers: LLM Operations & GPU Management
+ */
+const { ipcMain } = require('electron');
+
+function register(ctx) {
+  ipcMain.handle('llm-get-status', () => {
+    const status = ctx.llmEngine.getStatus();
+    const win = ctx.getMainWindow();
+    if (win && status.modelInfo?.contextSize) {
+      let used = 0;
+      try {
+        const seq = ctx.llmEngine.context?.getSequence?.();
+        if (seq?.nTokens) used = seq.nTokens;
+      } catch (_) {}
+      win.webContents.send('context-usage', { used, total: status.modelInfo.contextSize });
+    }
+    return status;
+  });
+
+  // ─── GPU Monitoring & Preference ──────────────────────────────────
+  ipcMain.handle('gpu-get-info', async () => {
+    try { return { success: true, gpu: await ctx.llmEngine.getGPUInfo() }; }
+    catch (e) { return { success: false, error: e.message, gpu: null }; }
+  });
+
+  ipcMain.handle('gpu-set-preference', async (_, pref) => {
+    ctx.llmEngine.setGPUPreference(pref);
+    const config = ctx._readConfig();
+    if (!config.userSettings) config.userSettings = {};
+    config.userSettings.gpuPreference = pref;
+    ctx._writeConfig(config);
+
+    if (ctx.llmEngine.currentModelPath && ctx.llmEngine.isReady) {
+      try {
+        const modelInfo = await ctx.llmEngine.initialize(ctx.llmEngine.currentModelPath);
+        const win = ctx.getMainWindow();
+        if (win && modelInfo?.contextSize) {
+          win.webContents.send('context-usage', { used: 0, total: modelInfo.contextSize });
+        }
+        return { success: true, preference: pref, reloaded: true, modelInfo };
+      } catch (e) {
+        console.error('[GPU] Failed to reload model with new preference:', e.message);
+        return { success: true, preference: pref, reloaded: false, error: e.message };
+      }
+    }
+    return { success: true, preference: pref };
+  });
+
+  ipcMain.handle('gpu-get-preference', () => {
+    return { success: true, preference: ctx.llmEngine.gpuPreference };
+  });
+
+  // ─── LLM Operations ────────────────────────────────────────────────
+  ipcMain.handle('llm-load-model', async (_, modelPath) => {
+    try {
+      if (ctx.llmEngine.abortController) {
+        console.log('[LLM] Cancelling active generation before model switch');
+        ctx.llmEngine.cancelGeneration();
+        await new Promise(r => setTimeout(r, 100));
+      }
+      const modelInfo = await ctx.llmEngine.initialize(modelPath);
+      // Persist as last-used model for auto-load on next startup
+      try {
+        const { ipcMain: _ipc } = require('electron');
+        // Write directly to settings file to avoid IPC roundtrip
+        const fs = require('fs');
+        const path = require('path');
+        const { app } = require('electron');
+        const settingsPath = path.join(app.getPath('userData'), 'settings.json');
+        let config = {};
+        try { config = JSON.parse(fs.readFileSync(settingsPath, 'utf8')); } catch {}
+        config.lastUsedModel = modelPath;
+        fs.writeFileSync(settingsPath + '.tmp', JSON.stringify(config, null, 2));
+        fs.renameSync(settingsPath + '.tmp', settingsPath);
+        console.log(`[LLM] Persisted lastUsedModel: ${path.basename(modelPath)}`);
+      } catch (e) { console.warn('[LLM] Failed to persist lastUsedModel:', e.message); }
+      const win = ctx.getMainWindow();
+      if (win && modelInfo?.contextSize) {
+        win.webContents.send('context-usage', { used: 0, total: modelInfo.contextSize });
+      }
+      return { success: true, modelInfo };
+    } catch (error) { return { success: false, error: error.message }; }
+  });
+
+  ipcMain.handle('llm-generate', async (_, prompt, params) => {
+    const access = ctx.licenseManager.checkAccess();
+    if (!access.allowed) {
+      return { success: false, error: '__LICENSE_BLOCKED__', reason: access.reason };
+    }
+    try { return { success: true, ...(await ctx.llmEngine.generate(prompt, params)) }; }
+    catch (error) { return { success: false, error: error.message }; }
+  });
+
+  ipcMain.handle('llm-generate-stream', async (_, prompt, params) => {
+    const access = ctx.licenseManager.checkAccess();
+    if (!access.allowed) {
+      return { success: false, error: '__LICENSE_BLOCKED__', reason: access.reason };
+    }
+    try {
+      const win = ctx.getMainWindow();
+      const result = await ctx.llmEngine.generateStream(prompt, params, (token) => {
+        if (win) win.webContents.send('llm-token', token);
+      }, (thinkToken) => {
+        if (win) win.webContents.send('llm-thinking-token', thinkToken);
+      });
+      return { success: true, ...result };
+    } catch (error) { return { success: false, error: error.message }; }
+  });
+
+  ipcMain.handle('llm-cancel', async () => {
+    ctx.agenticCancelled = true;
+    ctx.llmEngine.cancelGeneration();
+    // Fix 75: Wait for the agentic loop to actually exit before resetting session.
+    // Previously, resetSession() was called immediately, disposing the context while
+    // generateWithFunctions/generateStream was still running — causing race conditions
+    // and the "stop button doesn't work" behavior.
+    // The generation loop checks isStale() → agenticCancelled on every token callback,
+    // calls cancelGeneration('user'), and exits. We wait up to 5s for that to happen.
+    if (ctx._generationDonePromise) {
+      await Promise.race([ctx._generationDonePromise, new Promise(r => setTimeout(r, 5000))]);
+    }
+    try { await ctx.llmEngine.resetSession(); } catch (_) {}
+    return { success: true };
+  });
+
+  ipcMain.handle('llm-reset-session', async () => {
+    await ctx.llmEngine.resetSession();
+    // Clear todo state from previous session — prevents ghost todos
+    if (ctx.mcpToolServer) {
+      ctx.mcpToolServer._todos = [];
+      ctx.mcpToolServer._todoNextId = 1;
+    }
+    if (ctx.playwrightBrowser.isLaunched) {
+      try { await ctx.playwrightBrowser.close(); } catch (_) {}
+      console.log('[Reset] Closed Playwright browser for fresh session');
+    }
+    return { success: true };
+  });
+
+  ipcMain.handle('llm-update-params', (_, params) => { ctx.llmEngine.updateParams(params); return { success: true }; });
+
+  ipcMain.handle('llm-set-context-size', async (_, contextSize) => {
+    try {
+      ctx.llmEngine.contextSizeOverride = contextSize;
+      if (ctx.llmEngine.currentModelPath && ctx.llmEngine.isReady) {
+        const modelInfo = await ctx.llmEngine.initialize(ctx.llmEngine.currentModelPath);
+        const win = ctx.getMainWindow();
+        if (win && modelInfo?.contextSize) {
+          win.webContents.send('context-usage', { used: 0, total: modelInfo.contextSize });
+        }
+        return { success: true, contextSize: modelInfo.contextSize };
+      }
+      return { success: true, contextSize };
+    } catch (error) { return { success: false, error: error.message }; }
+  });
+
+  ipcMain.handle('llm-set-reasoning-effort', (_, level) => {
+    const budgetMap = { low: 256, medium: 1024, high: -1 };
+    ctx.llmEngine.reasoningEffort = level;
+    ctx.llmEngine.thoughtTokenBudget = budgetMap[level] ?? 2048;
+    console.log(`[LLM] Reasoning effort set to: ${level} (thought budget: ${budgetMap[level] === -1 ? 'unlimited' : budgetMap[level]})`);
+    return { success: true };
+  });
+
+  ipcMain.handle('llm-set-thinking-budget', (_, budget) => {
+    if (budget === 0) {
+      // Reset to profile default based on current reasoningEffort
+      const budgetMap = { low: 256, medium: 1024, high: -1 };
+      ctx.llmEngine.thoughtTokenBudget = budgetMap[ctx.llmEngine.reasoningEffort] ?? 1024;
+      console.log(`[LLM] Thinking budget reset to auto (profile default: ${ctx.llmEngine.thoughtTokenBudget})`);
+    } else {
+      ctx.llmEngine.thoughtTokenBudget = budget; // -1 = unlimited, or exact token count
+      console.log(`[LLM] Thinking budget set to: ${budget === -1 ? 'unlimited' : budget}`);
+    }
+    return { success: true };
+  });
+}
+
+module.exports = { register };

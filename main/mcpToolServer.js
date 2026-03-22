@@ -269,7 +269,7 @@ class MCPToolServer {
     this._toolDefsCache = [
       {
         name: 'web_search',
-        description: 'Search the web for current information using DuckDuckGo. Use for anything current, live, or time-sensitive: prices, weather, news, headlines, scores, events, stock data, documentation lookups.',
+        description: 'Search the web for current information using DuckDuckGo. Use for anything current, live, or time-sensitive: prices, weather, news, headlines, scores, events, stock data, documentation lookups. Format: {"tool":"web_search","params":{"query":"react useState docs"}}',
         parameters: {
           query: { type: 'string', description: 'Search query', required: true },
           maxResults: { type: 'number', description: 'Max results (default 5)', required: false },
@@ -277,14 +277,14 @@ class MCPToolServer {
       },
       {
         name: 'fetch_webpage',
-        description: 'Fetch and extract text content from a webpage URL. Use ONLY to READ information from a web page (articles, documentation, data). Do NOT use to download CSS, fonts, images, or other resources for files you are creating — reference them via CDN links instead.',
+        description: 'Fetch and extract text content from a webpage URL. Use ONLY to READ information from a web page (articles, documentation, data). Do NOT use to download CSS, fonts, images, or other resources for files you are creating — reference them via CDN links instead. Format: {"tool":"fetch_webpage","params":{"url":"https://example.com/docs"}}',
         parameters: {
           url: { type: 'string', description: 'URL to fetch', required: true },
         },
       },
       {
         name: 'read_file',
-        description: 'Read contents of a file from the project. Supports partial reads by line range.',
+        description: 'Read contents of a file from the project. Must be called BEFORE edit_file to get exact text for replacement. Supports partial reads by line range. Format: {"tool":"read_file","params":{"filePath":"src/app.js"}}',
         parameters: {
           filePath: { type: 'string', description: 'Relative or absolute file path', required: true },
           startLine: { type: 'number', description: 'Start line (1-based, optional)', required: false },
@@ -301,7 +301,7 @@ class MCPToolServer {
       },
       {
         name: 'search_codebase',
-        description: 'Search the indexed codebase for relevant code using RAG.',
+        description: 'Search the indexed codebase for relevant code using semantic search (RAG). Use when looking for functions, classes, patterns, or concepts in the project. Format: {"tool":"search_codebase","params":{"query":"authentication middleware"}}',
         parameters: {
           query: { type: 'string', description: 'Search query', required: true },
           maxResults: { type: 'number', description: 'Max results', required: false },
@@ -309,7 +309,7 @@ class MCPToolServer {
       },
       {
         name: 'run_command',
-        description: 'Execute a shell command and return the output. Default timeout 60s, max 5 minutes.',
+        description: 'Execute a shell command and return the output. Default timeout 60s, max 5 minutes. Format: {"tool":"run_command","params":{"command":"npm install"}}',
         parameters: {
           command: { type: 'string', description: 'Command to execute', required: true },
           cwd: { type: 'string', description: 'Working directory', required: false },
@@ -318,7 +318,7 @@ class MCPToolServer {
       },
       {
         name: 'list_directory',
-        description: 'List files and directories at a path. Call this before naming or assuming any files exist — you have no knowledge of what files are in the project until you do. Use "." to list the project root.',
+        description: 'List files and directories at a path. Call this before naming or assuming any files exist — you have no knowledge of what files are in the project until you do. Use "." to list the project root. Format: {"tool":"list_directory","params":{"dirPath":"src"}}',
         parameters: {
           dirPath: { type: 'string', description: 'Directory path — use "." for project root', required: true },
           recursive: { type: 'boolean', description: 'Recursive listing', required: false },
@@ -326,14 +326,14 @@ class MCPToolServer {
       },
       {
         name: 'find_files',
-        description: 'Find files matching a pattern in the project.',
+        description: 'Find files matching a name or glob pattern in the project. Use to locate files when you know part of the filename. Format: {"tool":"find_files","params":{"pattern":"*.config.js"}}',
         parameters: {
           pattern: { type: 'string', description: 'File name or glob pattern', required: true },
         },
       },
       {
         name: 'analyze_error',
-        description: 'Analyze an error message and stack trace against the codebase.',
+        description: 'Analyze an error message and stack trace against the codebase to find the source of the error and suggest fixes. Format: {"tool":"analyze_error","params":{"errorMessage":"Cannot read property x of undefined"}}',
         parameters: {
           errorMessage: { type: 'string', description: 'Error message', required: true },
           stackTrace: { type: 'string', description: 'Stack trace', required: false },
@@ -532,26 +532,26 @@ class MCPToolServer {
       // ── File & Project Tools ──
       {
         name: 'get_project_structure',
-        description: 'Get an overview of the project file structure.',
+        description: 'Get an overview of the project file structure — shows top-level files and directories with sizes. Call this first to understand the project layout. Format: {"tool":"get_project_structure","params":{}}',
         parameters: {},
       },
       {
         name: 'create_directory',
-        description: 'Create a new directory (folder) in the project.',
+        description: 'Create a new directory (folder) in the project. Creates parent directories if needed. Format: {"tool":"create_directory","params":{"path":"src/components"}}',
         parameters: {
           path: { type: 'string', description: 'Directory path to create', required: true },
         },
       },
       {
         name: 'delete_file',
-        description: 'Delete a file OR directory from the project. Directories are removed recursively.',
+        description: 'Delete a file OR directory from the project. Directories are removed recursively. Use with caution — this cannot be undone. Format: {"tool":"delete_file","params":{"filePath":"temp/old-file.js"}}',
         parameters: {
           filePath: { type: 'string', description: 'Path of the file or directory to delete', required: true },
         },
       },
       {
         name: 'rename_file',
-        description: 'Rename or move a file/directory.',
+        description: 'Rename or move a file/directory to a new path. Format: {"tool":"rename_file","params":{"oldPath":"src/old.js","newPath":"src/new.js"}}',
         parameters: {
           oldPath: { type: 'string', description: 'Current file path', required: true },
           newPath: { type: 'string', description: 'New file path', required: true },
@@ -559,16 +559,16 @@ class MCPToolServer {
       },
       {
         name: 'edit_file',
-        description: 'Replace specific text in a file. More efficient than rewriting the whole file. Use for targeted edits.',
+        description: 'Replace specific text in a file — finds oldText and replaces with newText. More efficient than rewriting the whole file. For targeted edits: read_file first to get exact text, then edit_file with the exact oldText string. Format: {"tool":"edit_file","params":{"filePath":"src/app.js","oldText":"...","newText":"..."}}',
         parameters: {
           filePath: { type: 'string', description: 'File to edit', required: true },
-          oldText: { type: 'string', description: 'Exact text to find and replace', required: true },
+          oldText: { type: 'string', description: 'Exact text to find and replace (must match exactly)', required: true },
           newText: { type: 'string', description: 'Replacement text', required: true },
         },
       },
       {
         name: 'get_file_info',
-        description: 'Get file metadata: size, modified date, type.',
+        description: 'Get file metadata: size, modified date, type, and permissions. Format: {"tool":"get_file_info","params":{"filePath":"package.json"}}',
         parameters: {
           filePath: { type: 'string', description: 'Path to the file', required: true },
         },
@@ -576,7 +576,7 @@ class MCPToolServer {
       // ── Memory Tools ──
       {
         name: 'save_memory',
-        description: 'Save a piece of information for future reference across chat sessions.',
+        description: 'Save a piece of information for future reference across chat sessions. Use to remember project context, decisions, or facts. Format: {"tool":"save_memory","params":{"key":"db-schema","value":"Users table has id, name, email columns"}}',
         parameters: {
           key: { type: 'string', description: 'A key/label for this memory', required: true },
           value: { type: 'string', description: 'The information to remember', required: true },
@@ -584,39 +584,39 @@ class MCPToolServer {
       },
       {
         name: 'get_memory',
-        description: 'Recall previously saved information by key.',
+        description: 'Recall previously saved information by key. Format: {"tool":"get_memory","params":{"key":"db-schema"}}',
         parameters: {
           key: { type: 'string', description: 'The key to look up', required: true },
         },
       },
       {
         name: 'list_memories',
-        description: 'List all saved memory keys.',
+        description: 'List all saved memory keys to see what information has been stored. Format: {"tool":"list_memories","params":{}}',
         parameters: {},
       },
       // ── Git Tools ──
       {
         name: 'git_status',
-        description: 'Get current git status: changed files, current branch.',
+        description: 'Get current git status: changed files, staged files, current branch, and untracked files. Format: {"tool":"git_status","params":{}}',
         parameters: {},
       },
       {
         name: 'git_commit',
-        description: 'Stage all changes and create a git commit.',
+        description: 'Stage all changes and create a git commit with the given message. Format: {"tool":"git_commit","params":{"message":"fix: resolve login bug"}}',
         parameters: {
           message: { type: 'string', description: 'Commit message', required: true },
         },
       },
       {
         name: 'git_diff',
-        description: 'Get the diff of a file or all changes.',
+        description: 'Get the diff of a file or all uncommitted changes. Shows exactly what lines changed. Format: {"tool":"git_diff","params":{"filePath":"src/app.js"}}',
         parameters: {
           filePath: { type: 'string', description: 'File to diff (optional, omit for all changes)', required: false },
         },
       },
       {
         name: 'git_log',
-        description: 'View recent git commit history.',
+        description: 'View recent git commit history with messages, dates, and authors. Format: {"tool":"git_log","params":{"maxCount":10}}',
         parameters: {
           maxCount: { type: 'number', description: 'Max commits to show (default 20)', required: false },
           filePath: { type: 'string', description: 'Filter log to a specific file (optional)', required: false },
@@ -624,7 +624,7 @@ class MCPToolServer {
       },
       {
         name: 'git_branch',
-        description: 'List, create, or switch git branches.',
+        description: 'List, create, or switch git branches. Format: {"tool":"git_branch","params":{"action":"create","name":"feature/auth"}}',
         parameters: {
           action: { type: 'string', description: "'list', 'create', or 'switch'", required: true },
           name: { type: 'string', description: 'Branch name (required for create/switch)', required: false },
@@ -632,7 +632,7 @@ class MCPToolServer {
       },
       {
         name: 'git_stash',
-        description: 'Stash or restore uncommitted changes.',
+        description: 'Stash or restore uncommitted changes. Use to temporarily save work. Format: {"tool":"git_stash","params":{"action":"push","message":"wip: auth feature"}}',
         parameters: {
           action: { type: 'string', description: "'push', 'pop', 'list', or 'drop'", required: true },
           message: { type: 'string', description: 'Stash message (for push)', required: false },
@@ -640,7 +640,7 @@ class MCPToolServer {
       },
       {
         name: 'git_reset',
-        description: 'Unstage files or reset changes.',
+        description: 'Unstage files or reset changes. Use hard reset with caution — it discards changes permanently. Format: {"tool":"git_reset","params":{"filePath":"src/app.js"}}',
         parameters: {
           filePath: { type: 'string', description: 'File to unstage (omit for all)', required: false },
           hard: { type: 'boolean', description: 'Hard reset — discard changes (default false)', required: false },
@@ -649,7 +649,7 @@ class MCPToolServer {
       // ── Search Tools ──
       {
         name: 'grep_search',
-        description: 'Search for text or regex patterns across all project files. Returns matching lines with file paths and line numbers.',
+        description: 'Search for text or regex patterns across all project files. Returns matching lines with file paths and line numbers. Use for finding function definitions, variable usage, or any text in the codebase. Format: {"tool":"grep_search","params":{"pattern":"handleSubmit","filePattern":"*.tsx"}}',
         parameters: {
           pattern: { type: 'string', description: 'Text or regex pattern to search for', required: true },
           filePattern: { type: 'string', description: 'Glob to filter files (e.g. "*.ts", "src/**/*.js")', required: false },
@@ -659,7 +659,7 @@ class MCPToolServer {
       },
       {
         name: 'search_in_file',
-        description: 'Search for text within a specific file. Returns all matching lines with line numbers.',
+        description: 'Search for text within a specific file. Returns all matching lines with line numbers. Format: {"tool":"search_in_file","params":{"filePath":"src/app.js","pattern":"useState"}}',
         parameters: {
           filePath: { type: 'string', description: 'File to search in', required: true },
           pattern: { type: 'string', description: 'Text or regex to search for', required: true },
@@ -669,7 +669,7 @@ class MCPToolServer {
       // ── More File Tools ──
       {
         name: 'copy_file',
-        description: 'Copy a file or directory to a new location.',
+        description: 'Copy a file or directory to a new location. Format: {"tool":"copy_file","params":{"source":"src/template.js","destination":"src/new-page.js"}}',
         parameters: {
           source: { type: 'string', description: 'Source path', required: true },
           destination: { type: 'string', description: 'Destination path', required: true },
@@ -677,7 +677,7 @@ class MCPToolServer {
       },
       {
         name: 'append_to_file',
-        description: 'Append content to the end of an existing file WITHOUT overwriting it. Use this when building a large file across multiple tool calls: write_file for the opening section, then append_to_file for every subsequent section. Creates the file if it does not exist.',
+        description: 'Append content to the end of an existing file WITHOUT overwriting it. Use this when building a large file across multiple tool calls: write_file for the opening section, then append_to_file for every subsequent section. Creates the file if it does not exist. Format: {"tool":"append_to_file","params":{"filePath":"src/app.js","content":"..."}}',
         parameters: {
           filePath: { type: 'string', description: 'File path', required: true },
           content: { type: 'string', description: 'Content to append', required: true },
@@ -685,7 +685,7 @@ class MCPToolServer {
       },
       {
         name: 'diff_files',
-        description: 'Compare two files and show their differences.',
+        description: 'Compare two files and show their differences line by line. Format: {"tool":"diff_files","params":{"fileA":"src/old.js","fileB":"src/new.js"}}',
         parameters: {
           fileA: { type: 'string', description: 'First file path', required: true },
           fileB: { type: 'string', description: 'Second file path', required: true },
@@ -693,7 +693,7 @@ class MCPToolServer {
       },
       {
         name: 'http_request',
-        description: 'Make an HTTP/HTTPS request (GET, POST, PUT, DELETE, PATCH). Useful for testing APIs.',
+        description: 'Make an HTTP/HTTPS request (GET, POST, PUT, DELETE, PATCH). Use for testing APIs, webhooks, or fetching data. Format: {"tool":"http_request","params":{"url":"https://api.example.com/users","method":"GET"}}',
         parameters: {
           url: { type: 'string', description: 'Request URL', required: true },
           method: { type: 'string', description: "HTTP method (default 'GET')", required: false },
@@ -703,14 +703,14 @@ class MCPToolServer {
       },
       {
         name: 'check_port',
-        description: 'Check if a network port is in use.',
+        description: 'Check if a network port is in use and what process is using it. Format: {"tool":"check_port","params":{"port":3000}}',
         parameters: {
           port: { type: 'number', description: 'Port number to check', required: true },
         },
       },
       {
         name: 'install_packages',
-        description: 'Install packages using npm, pip, or other package managers.',
+        description: 'Install packages using npm, pip, or other package managers. Auto-detects the manager from your project. Format: {"tool":"install_packages","params":{"packages":"express cors","manager":"npm"}}',
         parameters: {
           packages: { type: 'string', description: 'Space-separated package names', required: true },
           manager: { type: 'string', description: "'npm', 'pip', 'yarn' (default: auto-detect)", required: false },
@@ -718,7 +718,7 @@ class MCPToolServer {
       },
       {
         name: 'undo_edit',
-        description: 'Undo a file change made by a previous tool (write_file, edit_file). Restores the file to its state before the tool modified it.',
+        description: 'Undo a file change made by a previous tool (write_file, edit_file). Restores the file to its state before the tool modified it. Format: {"tool":"undo_edit","params":{"filePath":"src/app.js"}}',
         parameters: {
           filePath: { type: 'string', description: 'Path of the file to undo (use list_undoable to see available files)', required: false },
           all: { type: 'boolean', description: 'Undo ALL file changes at once', required: false },
@@ -726,12 +726,12 @@ class MCPToolServer {
       },
       {
         name: 'list_undoable',
-        description: 'List all files that have undo backups available (files modified by tools that can be restored).',
+        description: 'List all files that have undo backups available (files modified by tools that can be restored). Format: {"tool":"list_undoable","params":{}}',
         parameters: {},
       },
       {
         name: 'replace_in_files',
-        description: 'Find and replace text across multiple files in the project. Useful for bulk renaming, updating imports, or refactoring.',
+        description: 'Find and replace text across multiple files in the project. Useful for bulk renaming, updating imports, or refactoring. Format: {"tool":"replace_in_files","params":{"searchText":"oldName","replaceText":"newName","path":"src/**/*.js"}}',
         parameters: {
           searchText: { type: 'string', description: 'Text or regex pattern to find', required: true },
           replaceText: { type: 'string', description: 'Text to replace matches with', required: true },
@@ -741,14 +741,14 @@ class MCPToolServer {
       },
       {
         name: 'open_file_in_editor',
-        description: 'Open a file in the IDE editor (shows it as a tab). Does not modify the file.',
+        description: 'Open a file in the IDE editor as a new tab. Does not modify the file. Format: {"tool":"open_file_in_editor","params":{"filePath":"src/app.js"}}',
         parameters: {
           filePath: { type: 'string', description: 'Path of the file to open', required: true },
         },
       },
       {
         name: 'generate_image',
-        description: 'Generate an image from a text prompt using AI image generation. Returns base64-encoded image data.',
+        description: 'Generate an image from a text prompt using AI image generation. Returns base64-encoded image data. Format: {"tool":"generate_image","params":{"prompt":"a sunset over mountains","savePath":"output/sunset.png"}}',
         parameters: {
           prompt: { type: 'string', description: 'Description of the image to generate', required: true },
           width: { type: 'number', description: 'Image width in pixels (default 1024)', required: false },
@@ -759,14 +759,14 @@ class MCPToolServer {
       // ── Planning / TODO Tools ──
       {
         name: 'write_todos',
-        description: 'Create a checklist to plan and track multi-step tasks. Use when a task involves multiple steps — building an app, refactoring code, implementing a feature, planning a project.',
+        description: 'Create a checklist to plan and track multi-step tasks. Use when a task involves multiple steps — building an app, refactoring code, implementing a feature. Format: {"tool":"write_todos","params":{"items":["Set up project","Create components","Add routing"]}}',
         parameters: {
           items: { type: 'array', description: 'Array of todo strings or {text,status} objects', required: true },
         },
       },
       {
         name: 'update_todo',
-        description: 'Update a TODO item status: "pending", "in-progress", or "done".',
+        description: 'Update a TODO item status: "pending", "in-progress", or "done". Format: {"tool":"update_todo","params":{"id":1,"status":"done"}}',
         parameters: {
           id: { type: 'number', description: 'Todo ID (from write_todos result)', required: true },
           status: { type: 'string', description: 'New status: pending, in-progress, or done', required: true },
@@ -776,7 +776,7 @@ class MCPToolServer {
       // ── Scratchpad Tools ──
       {
         name: 'write_scratchpad',
-        description: 'Save intermediate data to scratchpad file. Use to avoid filling context with large data.',
+        description: 'Save intermediate data to a named scratchpad file. Use to avoid filling context with large data — store it here and read_scratchpad later. Format: {"tool":"write_scratchpad","params":{"name":"analysis","content":"..."}}',
         parameters: {
           name: { type: 'string', description: 'Scratchpad name (alphanumeric)', required: true },
           content: { type: 'string', description: 'Content to save', required: true },
@@ -784,7 +784,7 @@ class MCPToolServer {
       },
       {
         name: 'read_scratchpad',
-        description: 'Read previously saved scratchpad data.',
+        description: 'Read previously saved scratchpad data by name. Format: {"tool":"read_scratchpad","params":{"name":"analysis"}}',
         parameters: {
           name: { type: 'string', description: 'Scratchpad name to read', required: true },
         },

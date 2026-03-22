@@ -494,17 +494,20 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onOpenFolder, onNe
       </div>
 
       {/* Keyboard hint */}
-      <div className="mt-8 flex items-center gap-1.5 text-[11px]" style={{ color: 'var(--theme-foreground-subtle)' }}>
-        <kbd
-          className="px-1.5 py-0.5 rounded text-[10px]"
-          style={{ backgroundColor: 'var(--theme-bg-tertiary)', border: '1px solid var(--theme-border)', fontFamily: 'monospace' }}
-        >
-          Ctrl+Shift+P
-        </kbd>
-        <span>Command Palette</span>
-        <span className="mx-2" style={{ color: 'var(--theme-foreground-subtle)' }}>·</span>
-        <ArrowRight size={11} />
-        <span>Open a folder to get started</span>
+      <div className="mt-8 flex flex-col gap-1.5 text-[11px]" style={{ color: 'var(--theme-foreground-subtle)' }}>
+        <div className="flex items-center gap-1.5">
+          <kbd
+            className="px-1.5 py-0.5 rounded text-[10px]"
+            style={{ backgroundColor: 'var(--theme-bg-tertiary)', border: '1px solid var(--theme-border)', fontFamily: 'monospace' }}
+          >
+            Ctrl+Shift+P
+          </kbd>
+          <span>Command Palette</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <ArrowRight size={11} />
+          <span>Open a folder to get started</span>
+        </div>
       </div>
 
       {/* Sign-in strip — only shows when authenticated */}

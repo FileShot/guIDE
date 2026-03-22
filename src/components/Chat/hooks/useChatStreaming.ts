@@ -129,7 +129,19 @@ export function useChatStreaming(): ChatStreamingState {
           scheduleStreamUpdate();
           scheduleThinkingUpdate();
         } else {
-          streamBufferRef.current = buf;
+          // <think> found but </think> not yet — partial thinking in progress.
+          // Show partial thinking content in the ThinkingBlock so user sees model reasoning.
+          const partialThink = buf.substring(thinkStart + 7);
+          if (partialThink.trim()) {
+            if (thinkingSegmentsRef.current.length === 0) {
+              thinkingSegmentsRef.current.push(partialThink);
+            } else {
+              // Update the last segment with the latest content
+              thinkingSegmentsRef.current[thinkingSegmentsRef.current.length - 1] = partialThink;
+            }
+            scheduleThinkingUpdate();
+          }
+
           streamDirtyRef.current = true;
           if (!streamRafRef.current) {
             streamRafRef.current = requestAnimationFrame(() => {
@@ -137,7 +149,7 @@ export function useChatStreaming(): ChatStreamingState {
               const b = streamBufferRef.current;
               const ts = b.indexOf('<think>');
               const visibleText = ts !== -1 ? b.substring(0, ts) : b;
-              displayPosRef.current = visibleText.length; // sync so typewriter doesn't jump backward
+              displayPosRef.current = visibleText.length;
               setStreamingText(visibleText);
             });
           }

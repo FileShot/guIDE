@@ -1,0 +1,40 @@
+10:59:34.537 [Settings] IPC handlers registered
+
+  ╔═══════════════════════════════════════════════════╗
+  ║  guIDE Web Server                                 ║
+  ║  http://localhost:3200                           ║
+  ║  Tunnel: https://dev.graysoft.dev                 ║
+  ║  Copyright © 2025-2026 Brendan Gray (FileShot)    ║
+  ╚═══════════════════════════════════════════════════╝
+
+[WEB] Initializing services...
+[WEB] Deferred handlers registered in 15ms
+[WEB] Found 14 model(s)
+[WEB] Auto-loading last used model: Qwen3.5-4B-Q4_K_M
+[WEB] All services ready.
+[WEB-WS] Client connected: u5j1p1
+[LLM] _computeMaxContext: modelSize=0.44GB, freeRam=14.0GB, kvPerToken=0.5KB, availableForKV=12.0GB, maxFromRam=25131344, result=131072
+[LLM] Partial GPU offload: 33/40 layers on GPU, RAM model portion=0.44GB, targetCtx=131072
+[LLM DIAG] Context creation: mode=40, targetCtx=131072, clampedCtx=131072, trainCtx=262144, modelSizeGB=2.52
+[LLM DIAG] Context created: actualSize=131072, mode=40
+10:59:51.591 [Model loaded: Qwen3.5-4B-Q4_K_M.gguf (qwen/medium, ctx=131072, gpu=40, layers=33)]
+10:59:51.591 [Chat wrapper: JinjaTemplateChatWrapper]
+[WEB] Auto-loaded model: Qwen3.5-4B-Q4_K_M
+[WEB-WS] Client disconnected: u5j1p1
+[WEB-WS] Client connected: 507tsa
+11:00:34.367 [Terminal] Created terminal 1 (powershell.exe)
+11:00:34.394 [RAG] Indexed 11 files (21 chunks) in 0.0s
+11:00:34.820 [Settings] Saved
+11:00:54.208 [Settings] Saved
+11:01:39.009 [Settings] Saved
+[LLM] _computeMaxContext: modelSize=0.44GB, freeRam=13.7GB, kvPerToken=0.5KB, availableForKV=11.7GB, maxFromRam=24560832, result=131072
+[LLM] Partial GPU offload: 33/40 layers on GPU, RAM model portion=0.44GB, targetCtx=131072
+[LLM DIAG] Context creation: mode=40, targetCtx=131072, clampedCtx=131072, trainCtx=262144, modelSizeGB=2.52
+[LLM DIAG] Context created: actualSize=131072, mode=40
+11:01:51.034 [Model loaded: Qwen3.5-4B-Q4_K_M.gguf (qwen/medium, ctx=131072, gpu=40, layers=33)]
+11:01:51.035 [Chat wrapper: JinjaTemplateChatWrapper]
+[LLM] Persisted lastUsedModel: Qwen3.5-4B-Q4_K_M.gguf
+[AI Chat] Profile: qwen | ctx=16384 (hw=131072) | sysReserve=2617
+[AI Chat] Model: qwen (undefined qwen) — tools=15, grammar=limited
+[AI Chat] Model: qwen (4B qwen) — tools=15, grammar=limited
+[AI Chat] Agentic iteration 1/50

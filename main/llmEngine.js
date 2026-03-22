@@ -380,10 +380,15 @@ class LLMEngine extends EventEmitter {
             const ramModelGB = gpuConfig.modelSizeGB * (1 - gpuFraction);
             const ramBasedCtx = this._computeMaxContext(ramModelGB);
             // VRAM-based limit: GPU layers still need VRAM for their portion of the KV cache.
+            // The VRAM calculation already conservatively accounts for model weight VRAM,
+            // embedding overhead (25% of model), and padding. It is the correct limiter
+            // for partial offload — the RAM calculation only measures free system RAM
+            // (which is low because the model itself consumes RAM for CPU-side layers)
+            // and produces a floor of 4096 that incorrectly bottlenecks GPU context.
             const vramBasedCtx = gpuConfig.vramGB > 0
               ? this._computeMaxContextGpu(gpuConfig.vramGB, gpuConfig.modelSizeGB, actualGpuLayers, estTotalLayers)
               : ramBasedCtx;
-            targetCtx = Math.min(ramBasedCtx, vramBasedCtx);
+            targetCtx = vramBasedCtx;
             console.log(`[LLM] Partial GPU offload: ${actualGpuLayers}/${estTotalLayers} layers on GPU, RAM model portion=${ramModelGB.toFixed(2)}GB, ramCtx=${ramBasedCtx}, vramCtx=${vramBasedCtx}, targetCtx=${targetCtx}`);
           } else {
             targetCtx = this._computeGpuContextSize(gpuConfig);                // VRAM-based for full GPU

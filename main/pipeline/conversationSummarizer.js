@@ -124,14 +124,25 @@ class ConversationSummarizer {
       const chars = content.length;
       if (filePath) {
         if (!this.fileProgress[filePath]) {
-          this.fileProgress[filePath] = { writtenLines: 0, writtenChars: 0, writes: 0 };
+          this.fileProgress[filePath] = { writtenLines: 0, writtenChars: 0, writes: 0, contentPreview: '' };
+        }
+        // Build a content preview: first 3 + last 3 lines (for rotation summaries)
+        const contentLines = content.split('\n');
+        let preview;
+        if (contentLines.length <= 8) {
+          preview = content.slice(0, 500);
+        } else {
+          const head = contentLines.slice(0, 3).join('\n');
+          const tail = contentLines.slice(-3).join('\n');
+          preview = `${head}\n...(${contentLines.length - 6} lines omitted)...\n${tail}`.slice(0, 500);
         }
         if (toolName === 'write_file') {
-          this.fileProgress[filePath] = { writtenLines: lines, writtenChars: chars, writes: 1 };
+          this.fileProgress[filePath] = { writtenLines: lines, writtenChars: chars, writes: 1, contentPreview: preview };
         } else {
           this.fileProgress[filePath].writtenLines += lines;
           this.fileProgress[filePath].writtenChars += chars;
           this.fileProgress[filePath].writes++;
+          this.fileProgress[filePath].contentPreview = preview; // update to latest
         }
 
         // Update incremental task progress
@@ -183,13 +194,18 @@ class ConversationSummarizer {
     if (this.currentState.lastFile) parts.push(`**Last file:** ${this.currentState.lastFile}`);
     if (this.currentState.page) parts.push(`**Browser page:** ${this.currentState.page}`);
 
-    // File progress
+    // File progress with content summaries
     const fpKeys = Object.keys(this.fileProgress);
     if (fpKeys.length > 0) {
-      parts.push('**File progress:**');
+      parts.push('**File progress (these files exist on disk — do NOT re-read or re-create them):**');
       for (const fp of fpKeys) {
         const f = this.fileProgress[fp];
         parts.push(`- ${fp}: ${f.writtenLines} lines, ${f.writtenChars} chars`);
+        // Include content preview from the last write_file result for this path
+        const lastWrite = this._getLastWriteContent(fp);
+        if (lastWrite) {
+          parts.push(`  Content preview: ${lastWrite}`);
+        }
       }
     }
 
@@ -200,14 +216,14 @@ class ConversationSummarizer {
 
     // Active todos
     if (activeTodos && activeTodos.length > 0) {
-      parts.push('**Plan:**');
+      parts.push('**Plan (already exists — use update_todo to modify individual items, do NOT call write_todos):**');
       for (const todo of activeTodos) {
         const mark = todo.completed ? '[x]' : '[ ]';
         parts.push(`${mark} ${todo.text || todo.description || todo.title || ''}`);
       }
     }
 
-    // Recent tool calls
+    // Recent tool calls with outcomes
     const recent = this.completedSteps.slice(-6);
     if (recent.length > 0) {
       parts.push(`**Recent actions (${this.totalToolCalls} total):**`);
@@ -217,6 +233,15 @@ class ConversationSummarizer {
     }
 
     return parts.join('\n');
+  }
+
+  /**
+   * Get a content preview for a file from fileProgress.
+   * Returns the stored content preview, or null if not available.
+   */
+  _getLastWriteContent(filePath) {
+    const fp = this.fileProgress[filePath];
+    return (fp && fp.contentPreview) ? fp.contentPreview : null;
   }
 }
 

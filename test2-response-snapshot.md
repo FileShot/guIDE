@@ -1,0 +1,344 @@
+- generic [ref=e3]:
+  - generic [ref=e4]:
+    - generic [ref=e5]:
+      - generic "guIDE by Brendan Gray" [ref=e6]:
+        - img "guIDE" [ref=e7]
+      - generic [ref=e8]:
+        - button "File" [ref=e10] [cursor=pointer]
+        - button "Edit" [ref=e12] [cursor=pointer]
+        - button "View" [ref=e14] [cursor=pointer]
+        - button "Terminal" [ref=e16] [cursor=pointer]
+        - button "Help" [ref=e18] [cursor=pointer]
+    - button "Open command palette" [ref=e20] [cursor=pointer]:
+      - img [ref=e21]
+      - generic [ref=e24]: my-blank-apptyhbgyu
+      - generic [ref=e25]: Ctrl+P
+    - generic [ref=e26]:
+      - button "Toggle Primary Sidebar (Ctrl+B)" [ref=e27] [cursor=pointer]:
+        - img [ref=e28]
+      - button "Toggle Panel (Ctrl+J)" [ref=e30] [cursor=pointer]:
+        - img [ref=e31]
+      - button "Toggle Secondary Sidebar (Ctrl+L)" [ref=e33] [cursor=pointer]:
+        - img [ref=e34]
+    - generic "guIDE by Brendan Gray" [ref=e36]: guIDE
+  - generic [ref=e37]:
+    - generic [ref=e38]:
+      - button "Explorer" [ref=e39] [cursor=pointer]:
+        - img [ref=e41]
+      - button "Search" [ref=e45] [cursor=pointer]:
+        - img [ref=e46]
+      - button "Source Control" [ref=e49] [cursor=pointer]:
+        - img [ref=e50]
+      - button "Debug" [ref=e54] [cursor=pointer]:
+        - img [ref=e55]
+      - button "MCP Servers" [ref=e64] [cursor=pointer]:
+        - img [ref=e65]
+      - button "Database" [ref=e68] [cursor=pointer]:
+        - img [ref=e69]
+      - button "More Tools" [ref=e74] [cursor=pointer]:
+        - img [ref=e75]
+      - button "Browser" [ref=e79] [cursor=pointer]:
+        - img [ref=e80]
+      - button "AI Chat" [ref=e83] [cursor=pointer]:
+        - img [ref=e85]
+      - button "Model Benchmark" [ref=e87] [cursor=pointer]:
+        - img [ref=e88]
+      - button "Theme" [ref=e90] [cursor=pointer]:
+        - img [ref=e91]
+      - button "Account & Sign In" [ref=e97] [cursor=pointer]:
+        - img [ref=e99]
+      - button "Advanced Settings" [ref=e104] [cursor=pointer]:
+        - img [ref=e105]
+    - generic [ref=e217]:
+      - generic [ref=e218]: Explorer
+      - generic [ref=e221]:
+        - generic [ref=e222]:
+          - generic [ref=e223]:
+            - generic [ref=e224]:
+              - img [ref=e225]
+              - generic [ref=e227]: my-blank-apptyhbgyu
+            - generic "C:\\Users\\brend\\my-blank-apptyhbgyu" [ref=e228]
+          - generic [ref=e229]:
+            - button "Grid View" [ref=e230] [cursor=pointer]:
+              - img [ref=e231]
+            - button "Refresh" [ref=e233] [cursor=pointer]:
+              - img [ref=e234]
+            - button "New File" [ref=e239] [cursor=pointer]:
+              - img [ref=e240]
+            - button "New Folder" [ref=e243] [cursor=pointer]:
+              - img [ref=e244]
+        - generic [ref=e247]:
+          - generic [ref=e248]:
+            - img [ref=e249]
+            - textbox "Search files..." [ref=e252]
+          - generic [ref=e253]:
+            - button "Hidden" [ref=e254] [cursor=pointer]:
+              - img [ref=e255]
+              - generic [ref=e257]: Hidden
+            - combobox [ref=e258]:
+              - option "Name" [selected]
+              - option "Size"
+              - option "Modified"
+              - option "Type"
+        - generic [ref=e262] [cursor=pointer]:
+          - generic "README.md" [ref=e263]
+          - generic "README.md" [ref=e264]
+    - generic [ref=e266]:
+      - generic [ref=e271]:
+        - generic [ref=e272]:
+          - img "guIDE" [ref=e273]
+          - heading "guIDE" [level=1] [ref=e274]
+          - paragraph [ref=e275]: AI-Powered IDE
+        - generic [ref=e276]:
+          - paragraph [ref=e277]: Recent
+          - generic [ref=e278]:
+            - button "my-blank-apptyhbgyu Users/brend" [ref=e279] [cursor=pointer]:
+              - generic [ref=e280]: my-blank-apptyhbgyu
+              - generic [ref=e281]: Users/brend
+            - button "my-blank-appfghjnb Users/brend" [ref=e282] [cursor=pointer]:
+              - generic [ref=e283]: my-blank-appfghjnb
+              - generic [ref=e284]: Users/brend
+            - button "my-blank-apprtghj Users/brend" [ref=e285] [cursor=pointer]:
+              - generic [ref=e286]: my-blank-apprtghj
+              - generic [ref=e287]: Users/brend
+            - button "See 2 more…" [ref=e288] [cursor=pointer]
+        - generic [ref=e289]:
+          - paragraph [ref=e290]:
+            - generic [ref=e291]: Ctrl+N
+            - generic [ref=e292]: New file
+          - paragraph [ref=e293]:
+            - generic [ref=e294]: Ctrl+Shift+P
+            - generic [ref=e295]: Command palette
+          - paragraph [ref=e296]:
+            - generic [ref=e297]: "Ctrl+`"
+            - generic [ref=e298]: Toggle terminal
+        - generic [ref=e299]: AI-powered • Local LLM • RAG • Web Search
+      - generic [ref=e302]:
+        - generic [ref=e303]:
+          - generic [ref=e304]:
+            - button "terminal" [ref=e305] [cursor=pointer]
+            - generic: /
+            - button "problems" [ref=e306] [cursor=pointer]
+            - generic: /
+            - button "output" [ref=e307] [cursor=pointer]
+          - generic [ref=e309] [cursor=pointer]:
+            - img [ref=e310]
+            - generic [ref=e312]: Terminal 1
+            - button [ref=e313]:
+              - img [ref=e314]
+          - generic [ref=e317]:
+            - button "New Terminal" [ref=e318] [cursor=pointer]:
+              - img [ref=e319]
+            - button "Close Panel" [ref=e320] [cursor=pointer]:
+              - img [ref=e321]
+        - generic [ref=e328]:
+          - generic:
+            - textbox "Terminal input"
+    - generic [ref=e347]:
+      - generic [ref=e348]:
+        - img [ref=e349]
+        - generic [ref=e351]: guIDE AI
+        - generic [ref=e352]:
+          - button "Enable text-to-speech" [ref=e353] [cursor=pointer]:
+            - img [ref=e354]
+          - button "API Keys and License" [ref=e358] [cursor=pointer]:
+            - img [ref=e359]
+          - button "Developer console" [ref=e363] [cursor=pointer]:
+            - img [ref=e364]
+          - button "New conversation" [ref=e366] [cursor=pointer]:
+            - img [ref=e367]
+          - button "Chat history" [ref=e368] [cursor=pointer]:
+            - img [ref=e369]
+          - button "Clear chat" [ref=e371] [cursor=pointer]:
+            - img [ref=e372]
+          - button "Close chat panel" [ref=e376] [cursor=pointer]:
+            - img [ref=e377]
+      - generic [ref=e624]:
+        - generic [ref=e860]: hey so I need your help organizing a conference for about 200 people in Austin TX. it's a 2 day developer conference called "LocalFirst Summit" happening in September. I need you to help me plan out everything - venue requirements, speaker lineup structure, sponsorship tiers, the website content plan, registration system recommendations, and a rough budget breakdown. there's a LOT to keep track of here so please organize this systematically. my name is Tomás btw
+        - generic [ref=e630]:
+          - generic [ref=e861]:
+            - text: That sounds like an exciting initiative, Tomás! Organizing a developer conference is a fantastic way to build community and showcase local talent. Let's break this down systematically into phases so we don't get overwhelmed by the scope. Here’s how I’ll structure our planning for
+            - strong [ref=e862]: LocalFirst Summit 2024
+            - text: "in Austin: ---"
+            - heading "🗓️ Conference Overview" [level=2] [ref=e863]
+            - list [ref=e864]:
+              - listitem [ref=e865]:
+                - strong [ref=e866]: "Name:"
+                - text: LocalFirst Summit
+              - listitem [ref=e867]:
+                - strong [ref=e868]: "Date:"
+                - text: September 6–7, 2025 (tentative)
+              - listitem [ref=e869]:
+                - strong [ref=e870]: "Location:"
+                - text: Austin, TX
+              - listitem [ref=e871]:
+                - strong [ref=e872]: "Capacity:"
+                - text: ~200 attendees
+              - listitem [ref=e873]:
+                - strong [ref=e874]: "Target Audience:"
+                - text: Developers, open-source contributors, tech enthusiasts
+              - listitem [ref=e875]:
+                - strong [ref=e876]: "Theme:"
+                - text: "\"Empowering Locally Built Software\""
+              - listitem [ref=e877]:
+                - strong [ref=e878]: "Format:"
+                - text: Hybrid (in-person + virtual), but focused on in-person networking and workshops
+            - text: "---"
+            - 'heading "✅ Phase 1: Core Planning & Logistics" [level=2] [ref=e879]'
+            - heading "1. Venue Requirements" [level=3] [ref=e880]
+            - text: "We need a space that can handle:"
+            - list [ref=e881]:
+              - listitem [ref=e882]: Main hall for keynotes (~80 seats)
+              - listitem [ref=e883]: Breakout rooms/workshops (~4 rooms of 30–50 each)
+              - listitem [ref=e884]: Networking lounges / coffee areas
+              - listitem [ref=e885]: AV equipment, Wi-Fi, power outlets
+              - listitem [ref=e886]: Accessibility compliance
+              - listitem [ref=e887]: Parking or shuttle access
+              - listitem [ref=e888]: Preferred venues near downtown Austin with good public transit options
+              - listitem [ref=e889]: "Budget range: $6,000–$9,000 (excluding food/AV extras)"
+            - text: "> Let me know if you have any venue preferences in mind! ---"
+            - 'heading "🎤 Phase 2: Speaker Lineup & Program Structure" [level=2] [ref=e890]'
+            - heading "Sample Two-Day Agenda Outline" [level=3] [ref=e891]
+            - heading "Day 1 – September 6" [level=4] [ref=e892]
+            - strong [ref=e893]: "Morning:"
+            - list [ref=e894]:
+              - listitem [ref=e895]: "Opening Keynote: \"The Rise of Local Development\""
+              - listitem [ref=e896]: "Panel: Building Open Source Communities"
+              - listitem [ref=e897]: "Workshop: Writing Maintainable Code"
+              - listitem [ref=e898]: Lunch Break + Networking Session
+            - strong [ref=e899]: "Afternoon:"
+            - list [ref=e900]:
+              - listitem [ref=e901]: "Technical Talk: Rust vs Go for Embedded Systems"
+              - listitem [ref=e902]: Hackathon Kickoff
+              - listitem [ref=e903]: Closing Remarks
+            - heading "Day 2 – September 7" [level=4] [ref=e904]
+            - strong [ref=e905]: "Morning:"
+            - list [ref=e906]:
+              - listitem [ref=e907]: "Keynote: The Future of WebAssembly"
+              - listitem [ref=e908]: Lightning Talks (5-min sessions)
+              - listitem [ref=e909]: Demo Showcase
+              - listitem [ref=e910]: Lunch Break
+            - strong [ref=e911]: "Afternoon:"
+            - list [ref=e912]:
+              - listitem [ref=e913]: Roundtable Discussions
+              - listitem [ref=e914]: Community Build
+              - listitem [ref=e915]: Wrap-up & Feedback Collection
+            - text: "> We can refine this based on speaker availability and themes you want to highlight. ---"
+            - 'heading "💼 Phase 3: Sponsorship Tiers" [level=2] [ref=e916]'
+            - text: "We’ll offer three tiers with increasing benefits:"
+            - list [ref=e917]:
+              - listitem [ref=e918]:
+                - strong [ref=e919]: Silver ($500)
+            - text: "- Logo in website footer - Mention during speeches - Access to attendee list"
+            - list [ref=e920]:
+              - listitem [ref=e921]:
+                - strong [ref=e922]: Gold ($1,500)
+            - text: "- All Silver perks - Dedicated booth space - Speaking opportunity"
+            - list [ref=e923]:
+              - listitem [ref=e924]:
+                - strong [ref=e925]: Platinum ($3,000+)
+            - text: "- All Gold perks - Exclusive branding - VIP seating + swag - Name on poster and program - Priority registration for staff > Total sponsorship goal: ~$45k–60k (based on expected attendance) ---"
+            - 'heading "🌐 Phase 4: Website Content Plan" [level=2] [ref=e926]'
+            - text: "Your website will be the central hub for everything. Here's what we need:"
+            - list [ref=e927]:
+              - listitem [ref=e928]: Homepage with event details
+              - listitem [ref=e929]: About Us / Mission Statement
+              - listitem [ref=e930]: Speaker Bios & Registration
+              - listitem [ref=e931]: Agenda Preview
+              - listitem [ref=e932]: Sponsors Page
+              - listitem [ref=e933]: FAQ Section
+              - listitem [ref=e934]: Contact Form
+              - listitem [ref=e935]: Blog/News Updates
+              - listitem [ref=e936]: Social Media Integration
+              - listitem [ref=e937]: Mobile Responsive Design
+              - listitem [ref=e938]: Accessibility Compliance
+              - listitem [ref=e939]: SEO Optimized
+              - listitem [ref=e940]: Fast Loading Time (<2s average page load)
+              - listitem [ref=e941]: CMS Backend (e.g., WordPress, Ghost, or custom React app)
+              - listitem [ref=e942]: Event Calendar Plugin
+              - listitem [ref=e943]: Newsletter Signup
+              - listitem [ref=e944]: Sponsorship Inquiry Form
+            - text: "---"
+            - 'heading "📝 Phase 5: Registration System" [level=2] [ref=e945]'
+            - text: "Recommended tools/platforms:"
+            - list [ref=e946]:
+              - listitem [ref=e947]:
+                - strong [ref=e948]: Eventbrite
+                - text: – Easy setup, good for small events
+              - listitem [ref=e949]:
+                - strong [ref=e950]: Cvent
+                - text: – More robust but pricier
+              - listitem [ref=e951]:
+                - strong [ref=e952]: Ticketmaster
+                - text: – High traffic handling
+              - listitem [ref=e953]: Custom solution with Stripe + Calendly
+              - listitem [ref=e954]: "Features needed:"
+            - text: "- Single sign-on - Multiple ticket types - Payment gateway - Email confirmations - Post-event analytics - Mobile-friendly check-in - Accessibility support - Refund policy - Group booking option - Early bird discounts - Corporate rates ---"
+            - 'heading "💰 Phase 6: Rough Budget Breakdown" [level=2] [ref=e955]'
+            - text: "Estimated costs (excluding sponsorship): | Item | Estimated Cost | |------|----------------| | Venue Rental | $7,000–$9,000 | | AV Equipment & Setup | $2,500 | | Food & Beverage | $4,000–$6,000 | | Marketing & Promotion | $3,000 | | Website Development | $1,500–$3,000 | | Registration Platform Fees | $500 | | Staffing / Volunteers Coordination | $1,000 | | Contingency Fund | $5,000 | |"
+            - strong [ref=e956]: Total
+            - text: "| ~$27k–$38k (excluding sponsorship) | > With sponsorships totaling ~$50k+, we aim for a net profit or break-even. ---"
+            - heading "🧩 Next Steps" [level=2] [ref=e957]
+            - text: "Let’s start by defining:"
+            - list [ref=e958]:
+              - listitem [ref=e959]: Your vision/goal for the conference
+              - listitem [ref=e960]: Preferred dates
+              - listitem [ref=e961]: Target audience demographics
+              - listitem [ref=e962]: Any existing sponsors or partners
+              - listitem [ref=e963]: Budget constraints
+              - listitem [ref=e964]: Whether you want to handle tech yourself or outsource
+              - listitem [ref=e965]: Marketing channels you plan to use
+            - text: Once I have these answers, I can create more detailed action plans and timelines for each phase! Would you like me to draft a sample timeline? Or perhaps generate a sponsorship pitch deck outline next?
+          - generic [ref=e967]: Qwen3.5-4B-Q4_K_M.gguf
+      - generic [ref=e416]:
+        - textbox "Chat message input" [active] [ref=e417]:
+          - /placeholder: Ask anything (Ctrl+L)
+        - generic [ref=e418]:
+          - generic [ref=e419]:
+            - button "Attach image" [ref=e420] [cursor=pointer]:
+              - img [ref=e421]
+            - button "Voice input" [ref=e423] [cursor=pointer]:
+              - img [ref=e424]
+            - button "Enable auto mode" [ref=e428] [cursor=pointer]:
+              - img [ref=e429]
+              - generic [ref=e431]: Auto
+            - button "Enable plan mode" [ref=e432] [cursor=pointer]:
+              - img [ref=e433]
+              - generic [ref=e438]: Plan
+            - button "Change model" [ref=e440] [cursor=pointer]:
+              - img [ref=e574]
+              - generic [ref=e443]: Qwen3.5-4B
+              - img [ref=e444]
+          - button "Send message" [disabled] [ref=e968]:
+            - img [ref=e969]
+  - generic [ref=e180]:
+    - generic [ref=e181]:
+      - generic [ref=e182] [cursor=pointer]:
+        - img [ref=e183]
+        - generic [ref=e187]: main
+      - generic "Show Problems panel" [ref=e188] [cursor=pointer]:
+        - img [ref=e189]
+        - generic [ref=e191]: "0"
+        - generic [ref=e192]: W
+        - generic [ref=e193]: "0"
+    - generic [ref=e194]:
+      - 'generic "Context: 14,080 / 14,080 tokens (100%)" [ref=e971] [cursor=pointer]':
+        - img [ref=e972]
+        - generic [ref=e975]: 100%
+      - 'generic "NVIDIA GeForce RTX 3050 Ti Laptop GPU CPU: 15% • RAM: 53% Layers: 20 (20)" [ref=e978] [cursor=pointer]':
+        - generic [ref=e451]: GPU
+        - generic [ref=e452]: CPU:15% RAM:53%
+      - generic [ref=e196] [cursor=pointer]: Ln 1, Col 1
+      - generic [ref=e197] [cursor=pointer]: plaintext
+      - 'generic "Qwen3.5-4B-Q4_K_M.gguf Context: 14080 tokens GPU Layers: 20 Backend: ?" [ref=e582] [cursor=pointer]':
+        - img [ref=e583]
+        - generic [ref=e202]: Qwen3.5-4B-Q4_K_M.gguf • 14K • GPU:20L
+      - button "Voice command (Ctrl+Shift+V)" [ref=e204] [cursor=pointer]:
+        - img [ref=e205]
+      - button [ref=e208] [cursor=pointer]:
+        - img [ref=e209]
+      - img [ref=e212] [cursor=pointer]
+      - generic [ref=e215]:
+        - text: by
+        - link "Brendan Gray" [ref=e216] [cursor=pointer]:
+          - /url: "#"

@@ -14,6 +14,7 @@ class StreamHandler {
     this._buffer = '';
     this._sent = 0;
     this._holdingToolCall = false;
+    this._holdingFenced = false;  // D03/D07: true when hold triggered by ```json fence, false for raw JSON
     this._toolCallJson = '';
   }
 
@@ -37,6 +38,20 @@ class StreamHandler {
     // If we've already detected a tool call block, swallow all subsequent tokens
     if (this._holdingToolCall) {
       this._toolCallJson += text;
+
+      // D03/D07: Look-ahead validation for fenced ```json holds.
+      // Real tool calls contain "tool": or "tool_calls": within first ~50 chars.
+      // Code examples (```json blocks with non-tool content) do not.
+      // After 80 chars without a tool call pattern, release as regular text.
+      if (this._holdingFenced && this._toolCallJson.length > 80 && !this._looksLikeToolCall()) {
+        this._send('llm-token', '```json' + this._toolCallJson);
+        this._holdingToolCall = false;
+        this._holdingFenced = false;
+        this._toolCallJson = '';
+        this._sent = this._buffer.length;
+        return;
+      }
+
       this._emitToolProgress();
       return;
     }
@@ -50,6 +65,7 @@ class StreamHandler {
       if (before) this._send('llm-token', before);
       this._sent = this._buffer.length;
       this._holdingToolCall = true;
+      this._holdingFenced = true;
       this._toolCallJson = unsent.substring(jsonIdx + 7);
       this._emitToolProgress();
       return;
@@ -62,6 +78,7 @@ class StreamHandler {
       if (before) this._send('llm-token', before);
       this._sent = this._buffer.length;
       this._holdingToolCall = true;
+      this._holdingFenced = false;
       this._toolCallJson = unsent.substring(rawIdx);
       this._emitToolProgress();
       return;
@@ -131,14 +148,32 @@ class StreamHandler {
     }
   }
 
+  /**
+   * D03/D07: Check if accumulated JSON content looks like a tool call.
+   * Used for look-ahead validation on fenced ```json blocks.
+   */
+  _looksLikeToolCall() {
+    return /"tool"\s*:/.test(this._toolCallJson) ||
+           /"tool_calls"\s*:/.test(this._toolCallJson);
+  }
+
   /** Emit tool-generating progress from accumulated JSON. */
   _emitToolProgress() {
-    const nameMatch = this._toolCallJson.match(/"name"\s*:\s*"([^"]+)"/);
+    // Match both "name": and "tool": patterns (different model output styles)
+    const nameMatch = this._toolCallJson.match(/"(?:name|tool)"\s*:\s*"([^"]+)"/);
     if (nameMatch) {
       this._send('llm-tool-generating', {
         callIndex: 0,
         functionName: nameMatch[1],
-        paramsText: this._toolCallJson.slice(0, 300),
+        paramsText: this._toolCallJson,
+        done: false,
+      });
+    } else if (this._toolCallJson.length > 10) {
+      // Emit progress even before tool name is found (model is generating)
+      this._send('llm-tool-generating', {
+        callIndex: 0,
+        functionName: '...',
+        paramsText: this._toolCallJson,
         done: false,
       });
     }
@@ -147,19 +182,31 @@ class StreamHandler {
   /**
    * Called when generation finishes.
    * If not holding a tool call, flushes remaining buffer.
+   * D03/D07: If holding content that turned out NOT to be a tool call
+   * (false positive — e.g. a ```json code example), flush it to the UI.
    */
   finalize(isToolCall) {
+    // D03/D07: False positive recovery — release held content as regular text
+    if (this._holdingToolCall && !isToolCall) {
+      const prefix = this._holdingFenced ? '```json' : '';
+      this._send('llm-token', prefix + this._toolCallJson);
+      this._holdingToolCall = false;
+      this._holdingFenced = false;
+      this._toolCallJson = '';
+      this._sent = this._buffer.length;
+    }
+
     if (!this._holdingToolCall && !isToolCall) {
       this._flush();
     }
-    // Mark tool call generation as done
+    // Mark tool call generation as done (only for real tool calls still being held)
     if (this._holdingToolCall) {
-      const nameMatch = this._toolCallJson.match(/"name"\s*:\s*"([^"]+)"/);
+      const nameMatch = this._toolCallJson.match(/"(?:name|tool)"\s*:\s*"([^"]+)"/);
       if (nameMatch) {
         this._send('llm-tool-generating', {
           callIndex: 0,
           functionName: nameMatch[1],
-          paramsText: this._toolCallJson.slice(0, 300),
+          paramsText: this._toolCallJson,
           done: true,
         });
       }
@@ -171,7 +218,21 @@ class StreamHandler {
     this._buffer = '';
     this._sent = 0;
     this._holdingToolCall = false;
+    this._holdingFenced = false;
     this._toolCallJson = '';
+  }
+
+  /**
+   * Partial reset for continuation iterations where a tool call is in progress.
+   * Preserves the tool-hold state (_holdingToolCall, _holdingFenced, _toolCallJson)
+   * so that new tokens from the continuation stream directly into the same
+   * tool-generating event — keeping the UI code block alive.
+   * Only resets the buffer position counters for the new generation cycle.
+   */
+  continueToolHold() {
+    this._buffer = '';
+    this._sent = 0;
+    // _holdingToolCall, _holdingFenced, _toolCallJson are intentionally preserved
   }
 
   getFullText()    { return this._buffer; }

@@ -90,7 +90,7 @@ export const FileNodeComponent: React.FC<FileNodeComponentProps> = ({
     <div className="select-none">
       <div
         className={cn(
-          'flex items-center px-1.5 py-[2px] cursor-pointer group transition-colors duration-100',
+          'flex items-center h-[20px] px-1.5 py-[2px] cursor-pointer group transition-colors duration-100',
           'hover:bg-[#2a2d2e]',
           isSelected && 'bg-[#094771] hover:bg-[#094771]',
           dragOverTarget === node.path && node.type === 'directory' && 'bg-[#094771]/50',

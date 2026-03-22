@@ -1,0 +1,65 @@
+00:42:32.905 [CUDA mode loaded 0 layers despite 4.0GB VRAM & 32 estimated layers — trying explicit layer count]
+00:42:34.983 [AUTO mode loaded 0 layers despite 4.0GB VRAM & 32 estimated layers — trying explicit layer count]
+00:44:25.233 [CUDA mode loaded 0 layers despite 4.0GB VRAM & 32 estimated layers — trying explicit layer count]
+00:44:27.397 [AUTO mode loaded 0 layers despite 4.0GB VRAM & 32 estimated layers — trying explicit layer count]
+[LLM] Generation error (non-abort): name=Error, message=The context size is too small to generate a response, stack=Error: The context size is too small to generate a response |     at file:///C:/Users/brend/IDE/node_modules/node-llama-cpp/dist/evaluator/LlamaChat/LlamaChat.js:199:23 |     at async withLock (file:///C:/Users/brend/IDE/node_modules/lifecycle-utils/dist/withLock.js:23:16)
+[LLM] Treating as CONTEXT_OVERFLOW (matched: context)
+[AI Chat] Generation error on iteration 2: CONTEXT_OVERFLOW:Original request: hi
+Follow-ups: write me a html page about poop | 
+[EXECUTION STATE]
+Files created: output.html
+CURRENT TASK: write me a html page about poop
+
+
+## Ses
+Tools used: write_file
+Last response: ```json
+{"tool":"write_file","params":{"filePath":"output.html","content":"<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n    <meta charset=\"UTF-8\">\n    <meta name=\"viewport\" content=\"width=device
+Total exchanges: 3
+[LLM] Generation error (non-abort): name=Error, message=The context size is too small to generate a response, stack=Error: The context size is too small to generate a response |     at file:///C:/Users/brend/IDE/node_modules/node-llama-cpp/dist/evaluator/LlamaChat/LlamaChat.js:199:23 |     at async withLock (file:///C:/Users/brend/IDE/node_modules/lifecycle-utils/dist/withLock.js:23:16)
+[LLM] Treating as CONTEXT_OVERFLOW (matched: context)
+[AI Chat] Generation error on iteration 6: CONTEXT_OVERFLOW:Original request: 
+## TASK GOAL
+write me a html page about poop
+
+## COMPLETED WORK
+✓ write_file: OK
+
+## CURRENT STATE
+Last file: output.html
+
+## PRIOR CONTEXT ROTATIONS
+Rotation 0: 1 tool calls. No key findings.
+
+## RE
+Follow-ups: 
+[EXECUTION STATE]
+Files created: output.html
+CURRENT TASK: write me a html page about poop
+
+
+## TAS | 
+[EXECUTION STATE]
+Files created: output.html
+CURRENT TASK: write me a html page about poop
+
+
+## Ses | 
+[EXECUTION STATE]
+Files created: output.html
+CURRENT TASK: write me a html page about poop
+
+
+## Ses
+Tools used: append_to_file
+Key results: {"tool":"append_to_file","params":{"filePath":"output.html","content": "<p><stro
+Last response: ```json
+{"tool":"append_to_file","params":{"filePath":"output.html","content": "<h3 style=\"color: #e74c3c; margin-top: 2rem;\">Common Food Allergens</h3>\n\n<p>Individuals with food allergies may exp
+Total exchanges: 4
+[LLM] Generation error (non-abort): name=Error, message=The context size is too small to generate a response, stack=Error: The context size is too small to generate a response |     at file:///C:/Users/brend/IDE/node_modules/node-llama-cpp/dist/evaluator/LlamaChat/LlamaChat.js:199:23 |     at async withLock (file:///C:/Users/brend/IDE/node_modules/lifecycle-utils/dist/withLock.js:23:16)
+[LLM] Treating as CONTEXT_OVERFLOW (matched: context)
+00:53:05.122 [CUDA mode loaded 0 layers despite 4.0GB VRAM & 30 estimated layers — trying explicit layer count]
+00:53:07.281 [AUTO mode loaded 0 layers despite 4.0GB VRAM & 30 estimated layers — trying explicit layer count]
+00:53:11.943 [GPU mode 30 context too small (4096), trying next mode]
+00:53:14.636 [GPU mode 15 context too small (4096), trying next mode]
+00:53:17.010 [GPU mode 7 context too small (4096), trying next mode]

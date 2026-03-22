@@ -1,0 +1,852 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Concept 3 — NEXUS — guIDE Design Concept</title>
+<style>
+  /* ── Audiowide font (same as real app index.css) ── */
+  @font-face {
+    font-family: 'Audiowide';
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url('../public/fonts/Audiowide-latin.woff2') format('woff2');
+  }
+  @font-face {
+    font-family: 'Audiowide';
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url('../public/fonts/Audiowide.woff2') format('woff2');
+  }
+  .brand-font { font-family: 'Audiowide', sans-serif; letter-spacing: 0.02em; }
+
+  /* ── Reset ── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; overflow: hidden; }
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    font-size: 12px;
+    background: #1a1a2e;
+    color: #d0d0d8;
+  }
+
+  /* ══════════════════════════════════════════════════════════
+     NEXUS CONCEPT — Refined Evolution of Current Design
+     Takes what works in the current guIDE and elevates it.
+     Key changes from current design:
+     - Same general layout proportions as current app
+     - Activity bar stays 48px left side (proven pattern)
+     - Title bar stays 34px (same as current)
+     - Status bar stays 24px (same as current)
+     - Sidebar default 260px (same as current)
+     - Chat panel default 340px (same as current)
+     - WHAT CHANGES: Visual hierarchy, depth, and polish
+     - Tabs use gradient active indicator instead of top border
+     - Activity bar icons have background indicators on hover
+     - Sidebar uses accordion-style sections with animations
+     - Chat messages use alternating subtle backgrounds
+     - Unified input container gets a subtle inner shadow
+     - Status bar has grouped segments with visual separators
+     - Overall: deeper color palette with teal/cyan accent
+     - Subtle depth with layered backgrounds (no glass/blur)
+     ══════════════════════════════════════════════════════════ */
+
+  :root {
+    --n-bg: #1a1a2e;
+    --n-bg-secondary: #1f1f36;
+    --n-bg-tertiary: #252544;
+    --n-bg-elevated: #2a2a4a;
+    --n-fg: #d0d0d8;
+    --n-fg-muted: #8888a0;
+    --n-fg-subtle: #555570;
+    --n-accent: #00c9a7;
+    --n-accent-hover: #00b396;
+    --n-accent-dim: rgba(0,201,167,0.12);
+    --n-border: #2e2e50;
+    --n-border-subtle: #282848;
+    --n-input-bg: #222240;
+    --n-input-border: #333358;
+    --n-selection: rgba(0,201,167,0.08);
+    --n-sidebar: #1c1c32;
+    --n-title-bar: #16162a;
+    --n-status-bar: #12122a;
+    --n-activity-bar: #161630;
+  }
+
+  .app { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+
+  /* ── Title Bar — 34px (same as current) ── */
+  .title-bar {
+    height: 34px;
+    display: flex;
+    align-items: center;
+    background: var(--n-title-bar);
+    border-bottom: 1px solid var(--n-border);
+    flex-shrink: 0;
+    position: relative;
+    user-select: none;
+  }
+  .title-bar .logo {
+    padding: 0 8px;
+    display: flex; align-items: center;
+  }
+  .title-bar .logo img { width: 20px; height: 20px; filter: brightness(1.2); }
+  .title-bar .menu-items {
+    display: flex; gap: 0;
+    font-size: 12px; color: var(--n-fg-muted);
+  }
+  .title-bar .menu-items span {
+    padding: 5px 10px;
+    cursor: pointer; border-radius: 3px;
+  }
+  .title-bar .menu-items span:hover { background: var(--n-selection); color: var(--n-fg); }
+
+  .title-bar .search-bar {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex; align-items: center; gap: 8px;
+    height: 22px; padding: 0 12px;
+    background: var(--n-input-bg);
+    border: 1px solid var(--n-border);
+    border-radius: 4px;
+    color: var(--n-fg-muted);
+    font-size: 11px;
+    width: clamp(220px, 30vw, 440px);
+  }
+  .title-bar .search-bar:hover { border-color: var(--n-fg-subtle); }
+  .title-bar .search-bar kbd { font-size: 10px; opacity: 0.35; margin-left: auto; font-family: sans-serif; }
+
+  .title-bar .layout-toggles {
+    margin-left: auto;
+    display: flex; gap: 2px; margin-right: 8px;
+  }
+  .title-bar .layout-toggles button {
+    width: 28px; height: 28px;
+    display: flex; align-items: center; justify-content: center;
+    background: none; border: none; color: var(--n-fg-muted); cursor: pointer;
+    border-radius: 4px; font-size: 13px;
+  }
+  .title-bar .layout-toggles button:hover { background: rgba(255,255,255,0.06); }
+  .title-bar .layout-toggles button.active { color: var(--n-fg); }
+  .title-bar .current-file {
+    font-size: 12px; color: var(--n-fg); opacity: 0.4;
+    margin-right: 4px; max-width: 150px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .title-bar .brand-text {
+    font-size: 10px; opacity: 0.2;
+    margin-right: 140px; flex-shrink: 0;
+    color: var(--n-fg);
+  }
+
+  /* ── Main ── */
+  .main { display: flex; flex: 1; min-height: 0; }
+
+  /* ── Activity Bar — 48px (same width as current) ── */
+  .activity-bar {
+    width: 48px;
+    display: flex; flex-direction: column; align-items: center;
+    background: var(--n-activity-bar);
+    border-right: 1px solid var(--n-border);
+    flex-shrink: 0; padding: 0;
+  }
+  .ab-icon {
+    width: 48px; height: 48px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; color: var(--n-fg-subtle); position: relative;
+    font-size: 18px; flex-shrink: 0;
+  }
+  .ab-icon:hover {
+    color: var(--n-fg-muted);
+    background: rgba(0,201,167,0.04);
+  }
+  .ab-icon.active { color: var(--n-fg); }
+  .ab-icon.active::before {
+    content: '';
+    position: absolute; left: 0; top: 25%; width: 2px; height: 50%;
+    background: var(--n-accent); border-radius: 0 2px 2px 0;
+  }
+  .ab-spacer { flex: 1; }
+
+  /* ── Sidebar — 260px (same as current) ── */
+  .sidebar {
+    width: 260px;
+    display: flex; flex-direction: column;
+    background: var(--n-sidebar);
+    border-right: 1px solid var(--n-border);
+    flex-shrink: 0; overflow: hidden;
+    box-shadow: 2px 0 8px rgba(0,0,0,0.2);
+  }
+  /* Sidebar header — 30px (same as current) */
+  .sidebar-header {
+    height: 30px;
+    display: flex; align-items: center;
+    padding: 0 12px;
+    font-size: 11px; font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--n-fg-subtle);
+    border-bottom: 1px solid var(--n-border);
+    flex-shrink: 0;
+  }
+  .sidebar-content { flex: 1; overflow-y: auto; }
+
+  /* Accordion sections */
+  .accordion-section {
+    border-bottom: 1px solid var(--n-border-subtle);
+  }
+  .accordion-header {
+    display: flex; align-items: center; gap: 6px;
+    height: 26px; padding: 0 10px;
+    font-size: 11px; font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: var(--n-fg-muted);
+    cursor: pointer;
+    background: rgba(0,0,0,0.1);
+  }
+  .accordion-header:hover { background: rgba(0,0,0,0.15); }
+  .accordion-header .arrow { font-size: 8px; opacity: 0.6; }
+
+  /* File tree — 22px rows (current-like) */
+  .file-tree .tree-item {
+    display: flex; align-items: center; gap: 5px;
+    height: 22px; padding: 0 10px 0 14px;
+    cursor: pointer; font-size: 12px; color: var(--n-fg);
+    white-space: nowrap;
+  }
+  .file-tree .tree-item:hover { background: var(--n-selection); }
+  .file-tree .tree-item.active {
+    background: var(--n-accent-dim);
+    border-left: 2px solid var(--n-accent);
+    padding-left: 12px;
+  }
+  .file-tree .tree-item .icon { width: 14px; height: 14px; flex-shrink: 0; }
+  .file-tree .tree-item .indent { width: 16px; flex-shrink: 0; }
+
+  /* ── Center ── */
+  .center { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+
+  /* Tab bar — gradient active indicator */
+  .tab-bar {
+    height: 34px;
+    display: flex; align-items: stretch;
+    background: var(--n-bg);
+    border-bottom: 1px solid var(--n-border);
+    flex-shrink: 0; overflow-x: auto;
+  }
+  .tab-bar::-webkit-scrollbar { height: 0; }
+  .tab {
+    display: flex; align-items: center; gap: 6px;
+    padding: 0 14px; font-size: 12px;
+    color: var(--n-fg-muted); cursor: pointer;
+    border-top: 2px solid transparent;
+    white-space: nowrap; flex-shrink: 0;
+    position: relative;
+  }
+  .tab:hover { color: var(--n-fg); background: rgba(255,255,255,0.02); }
+  .tab.active {
+    color: var(--n-fg);
+    background: var(--n-bg-secondary);
+    border-top-color: var(--n-accent);
+  }
+  /* Subtle gradient fade under active tab */
+  .tab.active::after {
+    content: '';
+    position: absolute; bottom: 0; left: 0; right: 0; height: 100%;
+    background: linear-gradient(180deg, var(--n-accent-dim) 0%, transparent 100%);
+    pointer-events: none;
+  }
+  .tab .tab-icon { width: 13px; height: 13px; position: relative; z-index: 1; }
+  .tab span { position: relative; z-index: 1; }
+  .tab .tab-close {
+    font-size: 11px; opacity: 0; width: 16px; height: 16px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 3px; margin-left: 4px; position: relative; z-index: 1;
+  }
+  .tab:hover .tab-close { opacity: 0.5; }
+  .tab .tab-close:hover { opacity: 1; background: rgba(255,255,255,0.1); }
+
+  /* Editor */
+  .editor-area {
+    flex: 1; background: var(--n-bg);
+    position: relative; min-height: 0;
+  }
+  .editor-content {
+    height: 100%; overflow: auto;
+    font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+    font-size: 13px; line-height: 1.55;
+  }
+  .code-line {
+    display: flex; padding: 0 16px 0 0;
+    min-height: 21px; align-items: center;
+  }
+  .code-line:hover { background: rgba(255,255,255,0.015); }
+  .code-line.current { background: rgba(0,201,167,0.05); }
+  .line-numbers {
+    display: inline-block; width: 50px;
+    text-align: right; padding-right: 14px;
+    color: var(--n-fg-subtle); user-select: none; font-size: 12px;
+  }
+
+  .minimap {
+    position: absolute; right: 0; top: 0; bottom: 0;
+    width: 60px; background: var(--n-bg);
+    border-left: 1px solid var(--n-border-subtle);
+    opacity: 0.4;
+  }
+
+  /* Terminal */
+  .terminal-area {
+    height: 220px; background: var(--n-bg);
+    border-top: 1px solid var(--n-border);
+    flex-shrink: 0; display: flex; flex-direction: column;
+  }
+  .terminal-tabs {
+    height: 30px;
+    display: flex; align-items: center; padding: 0 10px;
+    gap: 0;
+    background: var(--n-bg-secondary);
+    border-bottom: 1px solid var(--n-border);
+    flex-shrink: 0;
+  }
+  .terminal-tab {
+    display: flex; align-items: center; gap: 4px;
+    padding: 5px 12px; font-size: 11px;
+    color: var(--n-fg-muted); cursor: pointer;
+    text-transform: uppercase; letter-spacing: 0.3px;
+    border-bottom: 2px solid transparent;
+  }
+  .terminal-tab.active { color: var(--n-fg); border-bottom-color: var(--n-accent); }
+  .terminal-content {
+    flex: 1; padding: 8px 12px;
+    font-family: 'Cascadia Code', 'Fira Code', monospace;
+    font-size: 12px; line-height: 1.45;
+    color: var(--n-fg); overflow: auto;
+  }
+  .terminal-content .prompt { color: var(--n-accent); }
+  .terminal-content .output { color: var(--n-fg-muted); }
+
+  /* ── Chat Panel — 340px (same as current) ── */
+  .chat-panel {
+    width: 340px;
+    display: flex; flex-direction: column;
+    background: var(--n-bg);
+    border-left: 1px solid var(--n-border);
+    flex-shrink: 0; overflow: hidden;
+    box-shadow: -2px 0 8px rgba(0,0,0,0.2);
+  }
+
+  /* Chat header — 38px (same as current) */
+  .chat-header {
+    height: 38px;
+    display: flex; align-items: center;
+    padding: 0 12px 0 10px;
+    background: var(--n-bg-secondary);
+    border-bottom: 1px solid var(--n-border);
+    flex-shrink: 0;
+  }
+  .chat-header .chat-title {
+    font-size: 12px; font-weight: 600;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .chat-header .sparkle { color: var(--n-accent); font-size: 14px; }
+  .chat-header .chat-title .accent { color: var(--n-accent); }
+  .chat-header .chat-title .sub { font-family: sans-serif; font-weight: 500; color: var(--n-fg-muted); font-size: 11px; }
+  .chat-header .header-actions {
+    margin-left: auto;
+    display: flex; gap: 1px;
+  }
+  .chat-header .header-actions button {
+    width: 26px; height: 26px;
+    display: flex; align-items: center; justify-content: center;
+    background: none; border: none; color: var(--n-fg-subtle); cursor: pointer;
+    border-radius: 4px; font-size: 12px;
+  }
+  .chat-header .header-actions button:hover { color: var(--n-fg); background: var(--n-selection); }
+
+  /* Chat messages — alternating backgrounds */
+  .chat-messages { flex: 1; overflow-y: auto; padding: 6px; }
+  .chat-msg {
+    padding: 8px 10px;
+    margin-bottom: 4px;
+    border-radius: 6px;
+    font-size: 12px; line-height: 1.5;
+  }
+  .chat-msg.user {
+    background: rgba(0,201,167,0.05);
+    border-left: 2px solid var(--n-accent);
+    color: var(--n-fg);
+  }
+  .chat-msg.assistant {
+    background: var(--n-bg-secondary);
+    border-left: 2px solid var(--n-border);
+    color: var(--n-fg);
+  }
+  .chat-msg code {
+    background: rgba(0,201,167,0.08);
+    padding: 1px 5px; border-radius: 3px;
+    font-size: 11px; font-family: 'Cascadia Code', 'Fira Code', monospace;
+    color: var(--n-accent);
+  }
+  .chat-msg .msg-meta {
+    display: flex; align-items: center; gap: 6px;
+    margin-top: 6px; padding-top: 5px;
+    border-top: 1px solid var(--n-border-subtle);
+    font-size: 10px; color: var(--n-fg-subtle);
+  }
+
+  /* ──── Unified Input Container (PRESERVED) ──── */
+  .unified-input {
+    padding: 6px 8px;
+    flex-shrink: 0;
+    border-top: 1px solid var(--n-border);
+  }
+  .unified-input-inner {
+    border-radius: 8px;
+    border: 1px solid var(--n-input-border);
+    background: var(--n-input-bg);
+    overflow: hidden;
+    transition: border-color 150ms;
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.15);
+  }
+  .unified-input-inner:focus-within { border-color: var(--n-accent); }
+
+  .todo-panel {
+    padding: 5px 10px;
+    border-bottom: 1px solid var(--n-border-subtle);
+    font-size: 10px;
+    display: flex; align-items: center; gap: 5px;
+    color: var(--n-fg-muted); cursor: pointer;
+  }
+  .todo-panel:hover { background: rgba(255,255,255,0.015); }
+  .todo-panel .todo-icon { color: #c586c0; font-size: 11px; }
+  .todo-panel .todo-count {
+    background: rgba(197,134,192,0.15);
+    color: #c586c0;
+    padding: 0 5px; border-radius: 3px;
+    font-size: 9px; font-weight: 600;
+  }
+
+  .context-indicator {
+    display: flex; align-items: center; gap: 5px;
+    padding: 3px 10px;
+    font-size: 10px; color: var(--n-fg-subtle);
+    border-bottom: 1px solid var(--n-border-subtle);
+  }
+  .context-indicator .ctx-file {
+    background: var(--n-accent-dim);
+    color: var(--n-accent);
+    padding: 0 5px; border-radius: 3px;
+    font-size: 9px;
+  }
+
+  .keep-undo-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 4px 10px;
+    background: rgba(78,201,176,0.03);
+    border-bottom: 1px solid var(--n-border-subtle);
+    font-size: 10px;
+  }
+  .keep-undo-bar .file-change {
+    display: flex; align-items: center; gap: 5px;
+    color: #4ec9b0;
+  }
+  .keep-undo-bar .actions { display: flex; gap: 4px; }
+  .keep-undo-bar .actions button {
+    padding: 2px 7px; border-radius: 4px; font-size: 9px;
+    border: 1px solid var(--n-border); background: transparent;
+    color: var(--n-fg-muted); cursor: pointer;
+  }
+  .keep-undo-bar .actions button:first-child { color: #4ec9b0; border-color: rgba(78,201,176,0.3); }
+
+  .input-textarea {
+    width: 100%; resize: none; border: none;
+    background: transparent; color: var(--n-fg);
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    font-size: 12px; padding: 7px 10px;
+    min-height: 30px; max-height: 200px;
+    outline: none; line-height: 1.4;
+  }
+  .input-textarea::placeholder { color: var(--n-fg-subtle); }
+
+  .input-toolbar {
+    display: flex; align-items: center;
+    padding: 2px 6px 5px; gap: 2px;
+  }
+  .toolbar-btn {
+    display: flex; align-items: center; gap: 3px;
+    padding: 2px 6px; border-radius: 3px;
+    font-size: 10px; font-weight: 500;
+    background: transparent; border: none;
+    color: var(--n-fg-subtle); cursor: pointer;
+  }
+  .toolbar-btn:hover { color: var(--n-fg); background: var(--n-selection); }
+  .toolbar-btn.active { background: var(--n-accent); color: #000; font-weight: 600; }
+  .toolbar-btn.plan-active { background: #c586c0; color: #fff; }
+  .toolbar-sep { width: 1px; height: 14px; background: var(--n-border); margin: 0 2px; }
+  .send-btn {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: var(--n-accent);
+    border: none; color: var(--n-bg);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; font-size: 12px; font-weight: bold;
+  }
+
+  /* ── Status Bar — 24px (same as current) ── */
+  .status-bar {
+    height: 24px;
+    display: flex; align-items: center;
+    justify-content: space-between;
+    padding: 0 8px;
+    background: var(--n-status-bar);
+    border-top: 1px solid var(--n-border);
+    font-size: 11px; color: var(--n-fg-muted);
+    flex-shrink: 0; user-select: none;
+  }
+  .status-bar .status-left,
+  .status-bar .status-right { display: flex; align-items: center; gap: 6px; }
+  .status-bar .status-item {
+    display: flex; align-items: center; gap: 3px;
+    padding: 0 5px; border-radius: 3px; cursor: pointer;
+  }
+  .status-bar .status-item:hover { background: rgba(255,255,255,0.06); }
+  .status-bar .status-sep { width: 1px; height: 12px; background: rgba(255,255,255,0.08); }
+  .status-bar .ctx-ring {
+    width: 12px; height: 12px; border-radius: 50%;
+    border: 1.5px solid #89d185;
+  }
+  .status-bar .gpu-active { color: #89d185; font-weight: 600; font-size: 10px; }
+  .status-bar .tok-speed { color: #4fc1ff; }
+
+  /* ── Concept Label ── */
+  .concept-label {
+    position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%);
+    background: var(--n-accent); color: #000; padding: 4px 18px;
+    border-radius: 6px; font-size: 11px; font-weight: 700;
+    letter-spacing: 1px; text-transform: uppercase; z-index: 100;
+    box-shadow: 0 2px 12px rgba(0,201,167,0.35);
+  }
+
+  /* Syntax colors */
+  .syn-keyword { color: #c586c0; }
+  .syn-string { color: #ce9178; }
+  .syn-function { color: #dcdcaa; }
+  .syn-type { color: #4ec9b0; }
+  .syn-comment { color: #555570; font-style: italic; }
+  .syn-number { color: #b5cea8; }
+  .syn-variable { color: #9cdcfe; }
+  .syn-operator { color: var(--n-fg-muted); }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- ═══ Title Bar (34px — same as current) ═══ -->
+  <div class="title-bar">
+    <div class="logo">
+      <img src="../public/zzz.png" alt="guIDE">
+    </div>
+    <div class="menu-items">
+      <span>File</span><span>Edit</span><span>View</span><span>Go</span><span>Run</span><span>Help</span>
+    </div>
+    <div class="search-bar">
+      <span style="opacity:.5">&#128269;</span>
+      <span>my-project</span>
+      <kbd>Ctrl+P</kbd>
+    </div>
+    <div class="layout-toggles">
+      <button class="active" title="Toggle Sidebar">&#9776;</button>
+      <button class="active" title="Toggle Panel">&#9604;</button>
+      <button class="active" title="Toggle Chat">&#9641;</button>
+    </div>
+    <span class="current-file">Layout.tsx</span>
+    <span class="brand-font brand-text">guIDE</span>
+  </div>
+
+  <div class="main">
+    <!-- Activity Bar (48px — same as current) -->
+    <div class="activity-bar">
+      <div class="ab-icon active" title="Explorer">&#128193;</div>
+      <div class="ab-icon" title="Search">&#128269;</div>
+      <div class="ab-icon" title="Source Control">&#9879;</div>
+      <div class="ab-icon" title="Debug">&#128028;</div>
+      <div class="ab-icon" title="MCP Servers">&#9881;</div>
+      <div class="ab-icon" title="More">&middot;&middot;&middot;</div>
+      <div class="ab-spacer"></div>
+      <div class="ab-icon" title="Browser">&#127760;</div>
+      <div class="ab-icon" title="AI Chat">&#128172;</div>
+      <div class="ab-icon" title="Benchmark">&#128202;</div>
+      <div class="ab-icon" title="Theme">&#127912;</div>
+      <div class="ab-icon" title="Account">&#128100;</div>
+      <div class="ab-icon" title="Settings">&#9881;</div>
+    </div>
+
+    <!-- Sidebar (260px) -->
+    <div class="sidebar">
+      <div class="sidebar-header">Explorer</div>
+      <div class="sidebar-content">
+        <!-- Accordion sections -->
+        <div class="accordion-section">
+          <div class="accordion-header">
+            <span class="arrow">&#9660;</span>
+            My-Project
+          </div>
+          <div class="file-tree">
+            <div class="tree-item">
+              <img class="icon" src="../public/icons/folder.svg" alt="">
+              <span>&#9660; src</span>
+            </div>
+            <div class="tree-item">
+              <span class="indent"></span>
+              <img class="icon" src="../public/icons/folder.svg" alt="">
+              <span>&#9660; components</span>
+            </div>
+            <div class="tree-item active">
+              <span class="indent"></span><span class="indent"></span>
+              <img class="icon" src="../public/icons/tsx.svg" onerror="this.src='../public/icons/jsx.svg'" alt="">
+              <span>Layout.tsx</span>
+            </div>
+            <div class="tree-item">
+              <span class="indent"></span><span class="indent"></span>
+              <img class="icon" src="../public/icons/tsx.svg" onerror="this.src='../public/icons/jsx.svg'" alt="">
+              <span>ChatPanel.tsx</span>
+            </div>
+            <div class="tree-item">
+              <span class="indent"></span><span class="indent"></span>
+              <img class="icon" src="../public/icons/tsx.svg" onerror="this.src='../public/icons/jsx.svg'" alt="">
+              <span>Editor.tsx</span>
+            </div>
+            <div class="tree-item">
+              <span class="indent"></span>
+              <img class="icon" src="../public/icons/css.svg" alt="">
+              <span>index.css</span>
+            </div>
+            <div class="tree-item">
+              <span class="indent"></span>
+              <img class="icon" src="../public/icons/ts.svg" alt="">
+              <span>main.ts</span>
+            </div>
+            <div class="tree-item">
+              <img class="icon" src="../public/icons/json.svg" alt="">
+              <span>package.json</span>
+            </div>
+            <div class="tree-item">
+              <img class="icon" src="../public/icons/json.svg" alt="">
+              <span>tsconfig.json</span>
+            </div>
+            <div class="tree-item">
+              <img class="icon" src="../public/icons/md.svg" alt="">
+              <span>README.md</span>
+            </div>
+            <div class="tree-item">
+              <img class="icon" src="../public/icons/gitignore.svg" alt="">
+              <span>.gitignore</span>
+            </div>
+          </div>
+        </div>
+        <div class="accordion-section">
+          <div class="accordion-header">
+            <span class="arrow">&#9654;</span>
+            Outline
+          </div>
+        </div>
+        <div class="accordion-section">
+          <div class="accordion-header">
+            <span class="arrow">&#9654;</span>
+            Timeline
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Center -->
+    <div class="center">
+      <!-- Tab bar — gradient active -->
+      <div class="tab-bar">
+        <div class="tab active">
+          <img class="tab-icon" src="../public/icons/tsx.svg" onerror="this.src='../public/icons/jsx.svg'" alt="">
+          <span>Layout.tsx</span>
+          <span class="tab-close">&times;</span>
+        </div>
+        <div class="tab">
+          <img class="tab-icon" src="../public/icons/css.svg" alt="">
+          <span>index.css</span>
+          <span class="tab-close">&times;</span>
+        </div>
+        <div class="tab">
+          <img class="tab-icon" src="../public/icons/ts.svg" alt="">
+          <span>helpers.ts</span>
+          <span class="tab-close">&times;</span>
+        </div>
+      </div>
+
+      <!-- Editor -->
+      <div class="editor-area">
+        <div class="editor-content">
+          <div class="code-line"><span class="line-numbers">1</span><span class="syn-keyword">import</span> <span class="syn-variable">React</span> <span class="syn-keyword">from</span> <span class="syn-string">'react'</span>;</div>
+          <div class="code-line"><span class="line-numbers">2</span><span class="syn-keyword">import</span> { <span class="syn-variable">Files</span>, <span class="syn-variable">Search</span>, <span class="syn-variable">GitBranch</span> } <span class="syn-keyword">from</span> <span class="syn-string">'lucide-react'</span>;</div>
+          <div class="code-line"><span class="line-numbers">3</span></div>
+          <div class="code-line current"><span class="line-numbers">4</span><span class="syn-keyword">export const</span> <span class="syn-function">Layout</span>: <span class="syn-type">React.FC</span> <span class="syn-operator">=</span> () <span class="syn-operator">=&gt;</span> {</div>
+          <div class="code-line"><span class="line-numbers">5</span>  <span class="syn-keyword">const</span> [<span class="syn-variable">sidebarView</span>, <span class="syn-function">setSidebarView</span>] <span class="syn-operator">=</span> <span class="syn-function">useState</span>(<span class="syn-string">'explorer'</span>);</div>
+          <div class="code-line"><span class="line-numbers">6</span>  <span class="syn-keyword">const</span> [<span class="syn-variable">chatVisible</span>, <span class="syn-function">setChatVisible</span>] <span class="syn-operator">=</span> <span class="syn-function">useState</span>(<span class="syn-keyword">true</span>);</div>
+          <div class="code-line"><span class="line-numbers">7</span>  <span class="syn-keyword">const</span> [<span class="syn-variable">terminalVisible</span>, <span class="syn-function">setTerminalVisible</span>] <span class="syn-operator">=</span> <span class="syn-function">useState</span>(<span class="syn-keyword">true</span>);</div>
+          <div class="code-line"><span class="line-numbers">8</span></div>
+          <div class="code-line"><span class="line-numbers">9</span>  <span class="syn-keyword">return</span> (</div>
+          <div class="code-line"><span class="line-numbers">10</span>    <span class="syn-operator">&lt;</span><span class="syn-type">div</span> <span class="syn-variable">className</span><span class="syn-operator">=</span><span class="syn-string">"flex h-screen"</span><span class="syn-operator">&gt;</span></div>
+          <div class="code-line"><span class="line-numbers">11</span>      <span class="syn-comment">{'// Refined evolution of current layout'}</span></div>
+          <div class="code-line"><span class="line-numbers">12</span>    <span class="syn-operator">&lt;/</span><span class="syn-type">div</span><span class="syn-operator">&gt;</span></div>
+          <div class="code-line"><span class="line-numbers">13</span>  );</div>
+          <div class="code-line"><span class="line-numbers">14</span>};</div>
+        </div>
+        <div class="minimap"></div>
+      </div>
+
+      <!-- Terminal -->
+      <div class="terminal-area">
+        <div class="terminal-tabs">
+          <div class="terminal-tab active">Terminal</div>
+          <div class="terminal-tab">Problems</div>
+          <div class="terminal-tab">Output</div>
+        </div>
+        <div class="terminal-content">
+          <div><span class="prompt">PS C:\my-project&gt;</span> npm run dev</div>
+          <div class="output">  VITE v5.4.2  ready in 342 ms</div>
+          <div class="output">  &#10132;  Local:   http://localhost:5173/</div>
+          <div class="output">  &#10132;  Network: http://192.168.1.100:5173/</div>
+          <div><span class="prompt">PS C:\my-project&gt;</span> <span style="opacity:.5">&#9646;</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Chat Panel (340px — same as current) -->
+    <div class="chat-panel">
+      <div class="chat-header">
+        <div class="chat-title">
+          <span class="sparkle">&#10024;</span>
+          <span class="brand-font">gu<span class="accent">IDE</span></span>
+          <span class="sub">AI</span>
+        </div>
+        <div class="header-actions">
+          <button title="TTS">&#128264;</button>
+          <button title="API Keys">&#128273;</button>
+          <button title="Dev Console">&#9000;</button>
+          <button title="New Chat">&#10010;</button>
+          <button title="History">&#128196;</button>
+          <button title="Clear">&#128465;</button>
+          <div style="width:1px;height:16px;background:var(--n-border);margin:0 2px"></div>
+          <button title="Close">&times;</button>
+        </div>
+      </div>
+
+      <div class="chat-messages">
+        <div class="chat-msg user">
+          Can you explain how the Layout component works?
+        </div>
+        <div class="chat-msg assistant">
+          The <code>Layout</code> component is the main shell of guIDE. It renders the full IDE frame:
+
+          <br><br>&bull; <strong>Title bar</strong> (34px) — logo, menu, search input, layout toggles
+          <br>&bull; <strong>Activity bar</strong> (48px) — left side, icon navigation
+          <br>&bull; <strong>Sidebar</strong> (260px) — file explorer, search, git, etc.
+          <br>&bull; <strong>Editor</strong> — center, with tab bar and Monaco
+          <br>&bull; <strong>Terminal</strong> — bottom of center, resizable
+          <br>&bull; <strong>Chat panel</strong> (340px) — this panel, on the right
+
+          <br><br>All dimensions are resizable via mouse drag. Panel visibility uses <code>useState</code> toggles.
+          <div class="msg-meta">
+            <span>Qwen3.5-4B</span>
+            <span style="color:#89d185">&#128218;</span>
+            <span>RAG</span>
+          </div>
+        </div>
+        <div class="chat-msg user">
+          How do file icons work?
+        </div>
+        <div class="chat-msg assistant">
+          The <code>FileIcon</code> component in <code>FileExplorer/FileIcon.tsx</code> maps file extensions to SVG icons from <code>public/icons/</code> (364 icons, file-icon-vectors vivid set).
+          <br><br>It has an <code>EXTENSION_ALIASES</code> map for alternate extensions (e.g. <code>tsx</code> &rarr; <code>jsx</code>, <code>mjs</code> &rarr; <code>js</code>) and falls back to <code>blank.svg</code> if no icon matches.
+          <div class="msg-meta">
+            <span>Qwen3.5-4B</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Unified Input Container -->
+      <div class="unified-input">
+        <div class="unified-input-inner">
+          <div class="todo-panel">
+            <span class="todo-icon">&#9998;</span>
+            Plan / Todo
+            <span class="todo-count">1 item</span>
+            <span style="margin-left:auto;font-size:9px">&#9660;</span>
+          </div>
+          <div class="context-indicator">
+            <span style="font-size:10px">&#128196;</span>
+            Referencing:
+            <span class="ctx-file">Layout.tsx</span>
+            <span class="ctx-file" style="color:#89d185;background:rgba(78,201,176,0.08)">lines 375-441</span>
+          </div>
+          <div class="keep-undo-bar">
+            <div class="file-change">
+              <img src="../public/icons/tsx.svg" onerror="this.src='../public/icons/jsx.svg'" style="width:12px;height:12px" alt="">
+              <span>StatusBar.tsx</span>
+              <span style="font-size:9px;color:var(--n-fg-subtle)">+4 -1</span>
+            </div>
+            <div class="actions">
+              <button>Keep All</button>
+              <button>Undo All</button>
+            </div>
+          </div>
+          <textarea class="input-textarea" placeholder="Ask anything... (Enter to send)" rows="1"></textarea>
+          <div class="input-toolbar">
+            <div style="display:flex;align-items:center;gap:2px">
+              <button class="toolbar-btn" title="Attach">&#128206;</button>
+              <button class="toolbar-btn" title="Voice">&#127908;</button>
+              <div class="toolbar-sep"></div>
+              <button class="toolbar-btn active">&#9889; Auto</button>
+              <button class="toolbar-btn plan-active">&#128196; Plan</button>
+              <div class="toolbar-sep"></div>
+              <button class="toolbar-btn">&#128187; Qwen3.5-4B &#9662;</button>
+            </div>
+            <div style="margin-left:auto">
+              <button class="send-btn" title="Send">&#8593;</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Status Bar (24px — same as current) -->
+  <div class="status-bar">
+    <div class="status-left">
+      <div class="status-item"><span>&#9739;</span> main</div>
+      <div class="status-item"><span style="color:#f48771">&#9888;</span> 0 <span style="color:#dcdcaa">W</span> 2</div>
+    </div>
+    <div class="status-right">
+      <span class="tok-speed">&#9889; 18 tok/s</span>
+      <div class="status-sep"></div>
+      <div class="status-item">
+        <span class="ctx-ring"></span>
+        42%
+      </div>
+      <div class="status-item">
+        <span class="gpu-active">GPU</span>
+        6.2/8.0G
+      </div>
+      <div class="status-sep"></div>
+      <div class="status-item">Ln 4, Col 18</div>
+      <div class="status-item">TypeScript React</div>
+      <div class="status-sep"></div>
+      <div class="status-item"><span style="color:#89d185">&#9679;</span> AI Ready &bull; Qwen3.5-4B &bull; 16K &bull; GPU:33L</div>
+    </div>
+  </div>
+</div>
+
+<div class="concept-label">CONCEPT 3 — NEXUS</div>
+</body>
+</html>

@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Concept 2 — AETHER — guIDE Design Concept</title>
+<style>
+  /* ── Audiowide font (same as real app index.css) ── */
+  @font-face {
+    font-family: 'Audiowide';
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url('../public/fonts/Audiowide-latin.woff2') format('woff2');
+  }
+  @font-face {
+    font-family: 'Audiowide';
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url('../public/fonts/Audiowide.woff2') format('woff2');
+  }
+  .brand-font { font-family: 'Audiowide', sans-serif; letter-spacing: 0.02em; }
+
+  /* ── Reset ── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; overflow: hidden; }
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    font-size: 13px;
+    background: #0f111a;
+    color: #d4d4dc;
+  }
+
+  /* ══════════════════════════════════════════════════════════
+     AETHER CONCEPT — Spacious, Modern, Breathable
+     Inspired by Zed editor + Linear's design sensibility.
+     Key changes from current design:
+     - Activity bar moved to BOTTOM (horizontal, 36px)
+     - No traditional title bar — window controls float
+     - Larger text sizes (+1px across the board)
+     - More padding and whitespace throughout
+     - Panels have rounded corners + subtle shadows
+     - File tree rows are 26px with more padding
+     - Chat messages use card-style with rounded corners
+     - Sidebar header is 36px with a bolder presence
+     - 8px gap between major panels (breathing room)
+     - Soft gradient accents instead of flat colors
+     ══════════════════════════════════════════════════════════ */
+
+  :root {
+    --a-bg: #0f111a;
+    --a-bg-secondary: #151722;
+    --a-bg-tertiary: #1a1d2b;
+    --a-bg-elevated: #1e2132;
+    --a-fg: #d4d4dc;
+    --a-fg-muted: #8b8fa3;
+    --a-fg-subtle: #555a70;
+    --a-accent: #6c5ce7;
+    --a-accent-hover: #5b4bd6;
+    --a-accent-glow: rgba(108,92,231,0.15);
+    --a-border: #252840;
+    --a-border-subtle: #1e2035;
+    --a-input-bg: #1a1d2b;
+    --a-input-border: #2a2e45;
+    --a-selection: rgba(108,92,231,0.1);
+    --a-surface: #171a28;
+    --a-surface-hover: #1e2133;
+  }
+
+  .app { display: flex; flex-direction: column; height: 100vh; overflow: hidden; background: var(--a-bg); }
+
+  /* ── Top Bar: Minimal, floating window controls style (32px) ── */
+  .top-bar {
+    height: 32px;
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    flex-shrink: 0;
+    position: relative;
+    background: transparent;
+  }
+  .top-bar .logo-area {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .top-bar .logo-area img { width: 18px; height: 18px; filter: brightness(1.2); }
+  .top-bar .brand-title {
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .top-bar .brand-title .accent { color: var(--a-accent); }
+  .top-bar .brand-title .sub { color: var(--a-fg-muted); font-family: sans-serif; font-weight: 500; font-size: 11px; margin-left: 4px; }
+  
+  /* Center search — larger and more prominent */
+  .top-bar .search-container {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+  .top-bar .search-pill {
+    display: flex; align-items: center; gap: 8px;
+    height: 26px; padding: 0 14px;
+    background: var(--a-bg-tertiary);
+    border: 1px solid var(--a-border);
+    border-radius: 8px;
+    color: var(--a-fg-muted);
+    font-size: 12px;
+    width: clamp(240px, 32vw, 480px);
+    cursor: pointer;
+  }
+  .top-bar .search-pill:hover { border-color: var(--a-fg-subtle); }
+  .top-bar .search-pill kbd { font-size: 10px; opacity: 0.35; margin-left: auto; font-family: sans-serif; }
+  
+  .top-bar .top-actions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+  }
+  .top-bar .top-actions button {
+    width: 26px; height: 26px;
+    display: flex; align-items: center; justify-content: center;
+    background: none; border: none; color: var(--a-fg-muted); cursor: pointer;
+    border-radius: 6px; font-size: 13px;
+  }
+  .top-bar .top-actions button:hover { background: var(--a-selection); color: var(--a-fg); }
+  .top-bar .top-actions button.active { color: var(--a-fg); }
+
+  /* ── Content Area (sidebar + editor + chat) ── */
+  .content { display: flex; flex: 1; min-height: 0; padding: 0 6px 6px; gap: 6px; }
+
+  /* ── Sidebar — 260px, with rounded panel treatment ── */
+  .sidebar {
+    width: 260px;
+    display: flex;
+    flex-direction: column;
+    background: var(--a-bg-secondary);
+    border-radius: 10px;
+    border: 1px solid var(--a-border-subtle);
+    flex-shrink: 0;
+    overflow: hidden;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+  }
+  .sidebar-header {
+    height: 36px;
+    display: flex;
+    align-items: center;
+    padding: 0 14px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--a-fg-muted);
+    border-bottom: 1px solid var(--a-border-subtle);
+    flex-shrink: 0;
+  }
+  .sidebar-header .header-actions {
+    margin-left: auto;
+    display: flex; gap: 2px;
+  }
+  .sidebar-header .header-actions button {
+    width: 20px; height: 20px;
+    display: flex; align-items: center; justify-content: center;
+    background: none; border: none; color: var(--a-fg-subtle); cursor: pointer;
+    border-radius: 4px; font-size: 11px;
+  }
+  .sidebar-header .header-actions button:hover { color: var(--a-fg-muted); background: var(--a-selection); }
+  .sidebar-content { flex: 1; overflow-y: auto; padding: 4px 0; }
+  
+  /* File tree — 26px rows, generous padding */
+  .file-tree .tree-item {
+    display: flex; align-items: center; gap: 6px;
+    height: 26px; padding: 0 12px 0 14px;
+    cursor: pointer; font-size: 12px; color: var(--a-fg);
+    white-space: nowrap; border-radius: 4px;
+    margin: 0 6px;
+  }
+  .file-tree .tree-item:hover { background: var(--a-surface-hover); }
+  .file-tree .tree-item.active { background: var(--a-accent-glow); color: var(--a-fg); }
+  .file-tree .tree-item .icon { width: 15px; height: 15px; flex-shrink: 0; }
+  .file-tree .tree-item .indent { width: 16px; flex-shrink: 0; }
+  .file-tree .tree-section {
+    display: flex; align-items: center; gap: 6px;
+    height: 28px; padding: 0 14px;
+    font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.5px; color: var(--a-fg-subtle);
+    cursor: pointer; margin: 0 6px;
+  }
+  .file-tree .tree-section:hover { background: var(--a-surface-hover); border-radius: 4px; }
+
+  /* ── Center Panel (editor + terminal) — rounded ── */
+  .center-panel {
+    flex: 1; display: flex; flex-direction: column;
+    min-width: 0; overflow: hidden;
+    background: var(--a-bg-secondary);
+    border-radius: 10px;
+    border: 1px solid var(--a-border-subtle);
+    box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+  }
+
+  /* Tab bar — pill-style tabs */
+  .tab-bar {
+    height: 36px;
+    display: flex;
+    align-items: center;
+    padding: 4px 8px;
+    gap: 4px;
+    background: var(--a-bg-secondary);
+    border-bottom: 1px solid var(--a-border-subtle);
+    border-radius: 10px 10px 0 0;
+    flex-shrink: 0;
+  }
+  .tab {
+    display: flex; align-items: center; gap: 6px;
+    padding: 4px 12px; font-size: 12px;
+    color: var(--a-fg-muted); cursor: pointer;
+    border-radius: 6px; white-space: nowrap;
+    transition: all 150ms;
+  }
+  .tab:hover { background: var(--a-surface-hover); color: var(--a-fg); }
+  .tab.active {
+    background: var(--a-accent-glow);
+    color: var(--a-fg);
+    box-shadow: 0 0 0 1px rgba(108,92,231,0.2);
+  }
+  .tab .tab-icon { width: 13px; height: 13px; }
+  .tab .tab-close { font-size: 10px; opacity: 0; width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; border-radius: 3px; margin-left: 2px; }
+  .tab:hover .tab-close { opacity: 0.5; }
+  .tab .tab-close:hover { opacity: 1; background: rgba(255,255,255,0.1); }
+
+  /* Editor */
+  .editor-area {
+    flex: 1; background: var(--a-bg);
+    position: relative; overflow: hidden; min-height: 0;
+  }
+  .editor-content {
+    height: 100%; overflow: auto; padding: 8px 0;
+    font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+    font-size: 13.5px; line-height: 1.6;
+  }
+  .code-line {
+    display: flex; padding: 0 16px 0 0;
+    min-height: 22px; align-items: center;
+  }
+  .code-line:hover { background: rgba(255,255,255,0.015); }
+  .code-line.current { background: rgba(108,92,231,0.06); }
+  .line-numbers {
+    display: inline-block; width: 52px;
+    text-align: right; padding-right: 16px;
+    color: var(--a-fg-subtle); user-select: none; font-size: 12px;
+  }
+
+  /* Terminal — rounded bottom corners */
+  .terminal-area {
+    height: 180px; background: var(--a-bg);
+    border-top: 1px solid var(--a-border-subtle);
+    flex-shrink: 0; display: flex; flex-direction: column;
+    border-radius: 0 0 10px 10px;
+  }
+  .terminal-tabs {
+    height: 30px;
+    display: flex; align-items: center; padding: 0 12px;
+    gap: 2px; flex-shrink: 0;
+    background: var(--a-bg-secondary);
+    border-bottom: 1px solid var(--a-border-subtle);
+  }
+  .terminal-tab {
+    display: flex; align-items: center; gap: 4px;
+    padding: 4px 10px; font-size: 11px;
+    color: var(--a-fg-muted); cursor: pointer;
+    border-radius: 4px;
+  }
+  .terminal-tab.active { background: var(--a-selection); color: var(--a-fg); }
+  .terminal-content {
+    flex: 1; padding: 8px 14px;
+    font-family: 'Cascadia Code', 'Fira Code', monospace;
+    font-size: 12px; line-height: 1.5;
+    color: var(--a-fg); overflow: auto;
+  }
+  .terminal-content .prompt { color: var(--a-accent); }
+  .terminal-content .output { color: var(--a-fg-muted); }
+
+  /* ── Chat Panel — 350px, rounded ── */
+  .chat-panel {
+    width: 350px;
+    display: flex; flex-direction: column;
+    background: var(--a-bg-secondary);
+    border-radius: 10px;
+    border: 1px solid var(--a-border-subtle);
+    flex-shrink: 0; overflow: hidden;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+  }
+
+  /* Chat header — 38px */
+  .chat-header {
+    height: 38px;
+    display: flex; align-items: center; padding: 0 12px;
+    border-bottom: 1px solid var(--a-border-subtle);
+    flex-shrink: 0;
+  }
+  .chat-header .chat-title {
+    font-size: 12px; font-weight: 600;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .chat-header .sparkle { color: var(--a-accent); font-size: 14px; }
+  .chat-header .chat-title .accent { color: var(--a-accent); }
+  .chat-header .chat-title .sub { font-family: sans-serif; font-weight: 500; color: var(--a-fg-muted); font-size: 11px; }
+  .chat-header .header-actions {
+    margin-left: auto;
+    display: flex; gap: 1px;
+  }
+  .chat-header .header-actions button {
+    width: 24px; height: 24px;
+    display: flex; align-items: center; justify-content: center;
+    background: none; border: none; color: var(--a-fg-subtle); cursor: pointer;
+    border-radius: 5px; font-size: 12px;
+  }
+  .chat-header .header-actions button:hover { color: var(--a-fg); background: var(--a-selection); }
+
+  /* Chat messages — card style */
+  .chat-messages { flex: 1; overflow-y: auto; padding: 8px; }
+  .chat-msg {
+    padding: 10px 12px;
+    margin-bottom: 6px;
+    border-radius: 8px;
+    font-size: 12.5px;
+    line-height: 1.5;
+  }
+  .chat-msg.user {
+    background: var(--a-accent-glow);
+    border: 1px solid rgba(108,92,231,0.15);
+    color: var(--a-fg);
+  }
+  .chat-msg.assistant {
+    background: var(--a-surface);
+    border: 1px solid var(--a-border-subtle);
+    color: var(--a-fg);
+  }
+  .chat-msg code {
+    background: rgba(108,92,231,0.1);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 11.5px;
+    font-family: 'Cascadia Code', 'Fira Code', monospace;
+  }
+  .chat-msg .msg-meta {
+    display: flex; align-items: center; gap: 6px;
+    margin-top: 6px; padding-top: 6px;
+    border-top: 1px solid var(--a-border-subtle);
+    font-size: 10px; color: var(--a-fg-subtle);
+  }
+
+  /* ──── Unified Input Container (PRESERVED) ──── */
+  .unified-input {
+    padding: 8px 10px;
+    flex-shrink: 0;
+    border-top: 1px solid var(--a-border-subtle);
+  }
+  .unified-input-inner {
+    border-radius: 10px;
+    border: 1px solid var(--a-input-border);
+    background: var(--a-input-bg);
+    overflow: hidden;
+    transition: border-color 150ms;
+  }
+  .unified-input-inner:focus-within { border-color: var(--a-accent); box-shadow: 0 0 0 3px var(--a-accent-glow); }
+
+  .todo-panel {
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--a-border-subtle);
+    font-size: 11px;
+    display: flex; align-items: center; gap: 5px;
+    color: var(--a-fg-muted); cursor: pointer;
+  }
+  .todo-panel:hover { background: rgba(255,255,255,0.02); }
+  .todo-panel .todo-icon { color: #c586c0; }
+  .todo-panel .todo-count {
+    background: rgba(197,134,192,0.15);
+    color: #c586c0;
+    padding: 1px 6px; border-radius: 4px;
+    font-size: 9px; font-weight: 600;
+  }
+
+  .context-indicator {
+    display: flex; align-items: center; gap: 5px;
+    padding: 4px 10px;
+    font-size: 10px; color: var(--a-fg-subtle);
+    border-bottom: 1px solid var(--a-border-subtle);
+  }
+  .context-indicator .ctx-file {
+    background: var(--a-accent-glow);
+    color: var(--a-accent);
+    padding: 1px 6px; border-radius: 4px;
+    font-size: 10px;
+  }
+
+  .keep-undo-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 5px 10px;
+    background: rgba(78,201,176,0.03);
+    border-bottom: 1px solid var(--a-border-subtle);
+    font-size: 11px;
+  }
+  .keep-undo-bar .file-change {
+    display: flex; align-items: center; gap: 5px;
+    color: #4ec9b0;
+  }
+  .keep-undo-bar .actions { display: flex; gap: 4px; }
+  .keep-undo-bar .actions button {
+    padding: 2px 8px; border-radius: 5px; font-size: 10px;
+    border: 1px solid var(--a-border); background: transparent;
+    color: var(--a-fg-muted); cursor: pointer;
+  }
+  .keep-undo-bar .actions button:first-child { color: #4ec9b0; border-color: rgba(78,201,176,0.3); }
+
+  .input-textarea {
+    width: 100%; resize: none; border: none;
+    background: transparent; color: var(--a-fg);
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    font-size: 12.5px; padding: 8px 10px;
+    min-height: 32px; max-height: 200px;
+    outline: none; line-height: 1.45;
+  }
+  .input-textarea::placeholder { color: var(--a-fg-subtle); }
+
+  .input-toolbar {
+    display: flex; align-items: center;
+    padding: 3px 8px 6px; gap: 2px;
+  }
+  .toolbar-btn {
+    display: flex; align-items: center; gap: 3px;
+    padding: 3px 7px; border-radius: 5px;
+    font-size: 10px; font-weight: 500;
+    background: transparent; border: none;
+    color: var(--a-fg-subtle); cursor: pointer;
+  }
+  .toolbar-btn:hover { color: var(--a-fg); background: var(--a-selection); }
+  .toolbar-btn.active { background: var(--a-accent); color: #fff; }
+  .toolbar-btn.plan-active { background: #c586c0; color: #fff; }
+  .toolbar-sep { width: 1px; height: 14px; background: var(--a-border); margin: 0 3px; }
+  .send-btn {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: var(--a-accent);
+    border: none; color: white;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; font-size: 12px; font-weight: bold;
+    box-shadow: 0 2px 8px rgba(108,92,231,0.3);
+  }
+
+  /* ── Bottom Bar: Activity icons (horizontal) + status ── */
+  .bottom-bar {
+    height: 36px;
+    display: flex;
+    align-items: center;
+    padding: 0 8px;
+    background: var(--a-bg);
+    border-top: 1px solid var(--a-border-subtle);
+    flex-shrink: 0;
+  }
+
+  /* Activity icons — horizontal row */
+  .bottom-bar .activity-row {
+    display: flex;
+    align-items: center;
+    gap: 0;
+  }
+  .bottom-bar .ab-icon {
+    width: 32px; height: 28px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; color: var(--a-fg-subtle);
+    border-radius: 5px; font-size: 14px; position: relative;
+  }
+  .bottom-bar .ab-icon:hover { color: var(--a-fg-muted); background: var(--a-selection); }
+  .bottom-bar .ab-icon.active { color: var(--a-fg); }
+  .bottom-bar .ab-icon.active::after {
+    content: '';
+    position: absolute; bottom: 0; left: 25%; width: 50%; height: 2px;
+    background: var(--a-accent); border-radius: 1px 1px 0 0;
+  }
+
+  /* Status info — right side */
+  .bottom-bar .status-info {
+    margin-left: auto;
+    display: flex; align-items: center; gap: 8px;
+    font-size: 11px; color: var(--a-fg-muted);
+  }
+  .bottom-bar .status-info .status-item {
+    display: flex; align-items: center; gap: 3px;
+    padding: 2px 6px; border-radius: 4px; cursor: pointer;
+  }
+  .bottom-bar .status-info .status-item:hover { background: var(--a-selection); }
+  .bottom-bar .status-sep { width: 1px; height: 12px; background: rgba(255,255,255,0.06); }
+  .bottom-bar .ctx-ring {
+    width: 11px; height: 11px; border-radius: 50%;
+    border: 1.5px solid #89d185;
+  }
+  .bottom-bar .gpu-active { color: #89d185; font-weight: 600; font-size: 10px; }
+  .bottom-bar .tok-speed { color: #4fc1ff; }
+
+  /* Concept label */
+  .concept-label {
+    position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%);
+    background: var(--a-accent); color: #fff; padding: 5px 18px;
+    border-radius: 8px; font-size: 11px; font-weight: 700;
+    letter-spacing: 1px; text-transform: uppercase; z-index: 100;
+    box-shadow: 0 2px 16px rgba(108,92,231,0.4);
+  }
+
+  /* Syntax colors */
+  .syn-keyword { color: #c792ea; }
+  .syn-string { color: #c3e88d; }
+  .syn-function { color: #82aaff; }
+  .syn-type { color: #ffcb6b; }
+  .syn-comment { color: #555a70; font-style: italic; }
+  .syn-number { color: #f78c6c; }
+  .syn-variable { color: #89ddff; }
+  .syn-operator { color: var(--a-fg-muted); }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- ═══ Top Bar (32px — minimal, floating) ═══ -->
+  <div class="top-bar">
+    <div class="logo-area">
+      <img src="../public/zzz.png" alt="guIDE">
+      <span class="brand-font brand-title">gu<span class="accent">IDE</span><span class="sub">AI</span></span>
+    </div>
+    <div class="search-container">
+      <div class="search-pill">
+        <span style="opacity:.5">&#128269;</span>
+        <span>Search files, commands...</span>
+        <kbd>Ctrl+P</kbd>
+      </div>
+    </div>
+    <div class="top-actions">
+      <button class="active" title="Toggle Sidebar">&#9776;</button>
+      <button class="active" title="Toggle Panel">&#9604;</button>
+      <button class="active" title="Toggle Chat">&#9641;</button>
+    </div>
+  </div>
+
+  <!-- ═══ Content Area (with gaps between panels) ═══ -->
+  <div class="content">
+    <!-- Sidebar (260px, rounded) -->
+    <div class="sidebar">
+      <div class="sidebar-header">
+        Explorer
+        <div class="header-actions">
+          <button title="New File">+</button>
+          <button title="Collapse All">&darr;</button>
+          <button title="Refresh">&#8635;</button>
+        </div>
+      </div>
+      <div class="sidebar-content">
+        <div class="file-tree">
+          <div class="tree-section">&#9660; My-Project</div>
+          <div class="tree-item">
+            <img class="icon" src="../public/icons/folder.svg" alt="">
+            <span>&#9660; src</span>
+          </div>
+          <div class="tree-item">
+            <span class="indent"></span>
+            <img class="icon" src="../public/icons/folder.svg" alt="">
+            <span>&#9660; components</span>
+          </div>
+          <div class="tree-item active">
+            <span class="indent"></span><span class="indent"></span>
+            <img class="icon" src="../public/icons/tsx.svg" onerror="this.src='../public/icons/jsx.svg'" alt="">
+            <span>Layout.tsx</span>
+          </div>
+          <div class="tree-item">
+            <span class="indent"></span><span class="indent"></span>
+            <img class="icon" src="../public/icons/tsx.svg" onerror="this.src='../public/icons/jsx.svg'" alt="">
+            <span>ChatPanel.tsx</span>
+          </div>
+          <div class="tree-item">
+            <span class="indent"></span><span class="indent"></span>
+            <img class="icon" src="../public/icons/tsx.svg" onerror="this.src='../public/icons/jsx.svg'" alt="">
+            <span>Editor.tsx</span>
+          </div>
+          <div class="tree-item">
+            <span class="indent"></span>
+            <img class="icon" src="../public/icons/css.svg" alt="">
+            <span>index.css</span>
+          </div>
+          <div class="tree-item">
+            <span class="indent"></span>
+            <img class="icon" src="../public/icons/ts.svg" alt="">
+            <span>main.ts</span>
+          </div>
+          <div class="tree-item">
+            <img class="icon" src="../public/icons/json.svg" alt="">
+            <span>package.json</span>
+          </div>
+          <div class="tree-item">
+            <img class="icon" src="../public/icons/json.svg" alt="">
+            <span>tsconfig.json</span>
+          </div>
+          <div class="tree-item">
+            <img class="icon" src="../public/icons/md.svg" alt="">
+            <span>README.md</span>
+          </div>
+          <div class="tree-item">
+            <img class="icon" src="../public/icons/gitignore.svg" alt="">
+            <span>.gitignore</span>
+          </div>
+          <div class="tree-section" style="margin-top:6px">&#9654; Outline</div>
+          <div class="tree-section">&#9654; Timeline</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Center Panel (rounded) -->
+    <div class="center-panel">
+      <!-- Pill-style tab bar -->
+      <div class="tab-bar">
+        <div class="tab active">
+          <img class="tab-icon" src="../public/icons/tsx.svg" onerror="this.src='../public/icons/jsx.svg'" alt="">
+          Layout.tsx
+          <span class="tab-close">&times;</span>
+        </div>
+        <div class="tab">
+          <img class="tab-icon" src="../public/icons/css.svg" alt="">
+          index.css
+          <span class="tab-close">&times;</span>
+        </div>
+        <div class="tab">
+          <img class="tab-icon" src="../public/icons/ts.svg" alt="">
+          helpers.ts
+          <span class="tab-close">&times;</span>
+        </div>
+      </div>
+
+      <!-- Editor -->
+      <div class="editor-area">
+        <div class="editor-content">
+          <div class="code-line"><span class="line-numbers">1</span><span class="syn-keyword">import</span> <span class="syn-variable">React</span> <span class="syn-keyword">from</span> <span class="syn-string">'react'</span>;</div>
+          <div class="code-line"><span class="line-numbers">2</span><span class="syn-keyword">import</span> { <span class="syn-variable">Files</span>, <span class="syn-variable">Search</span>, <span class="syn-variable">GitBranch</span> } <span class="syn-keyword">from</span> <span class="syn-string">'lucide-react'</span>;</div>
+          <div class="code-line"><span class="line-numbers">3</span></div>
+          <div class="code-line current"><span class="line-numbers">4</span><span class="syn-keyword">export const</span> <span class="syn-function">Layout</span>: <span class="syn-type">React.FC</span> <span class="syn-operator">=</span> () <span class="syn-operator">=&gt;</span> {</div>
+          <div class="code-line"><span class="line-numbers">5</span>  <span class="syn-keyword">const</span> [<span class="syn-variable">sidebarView</span>, <span class="syn-function">setSidebarView</span>] <span class="syn-operator">=</span> <span class="syn-function">useState</span>(<span class="syn-string">'explorer'</span>);</div>
+          <div class="code-line"><span class="line-numbers">6</span>  <span class="syn-keyword">const</span> [<span class="syn-variable">chatVisible</span>, <span class="syn-function">setChatVisible</span>] <span class="syn-operator">=</span> <span class="syn-function">useState</span>(<span class="syn-keyword">true</span>);</div>
+          <div class="code-line"><span class="line-numbers">7</span>  <span class="syn-keyword">const</span> [<span class="syn-variable">terminalVisible</span>, <span class="syn-function">setTerminalVisible</span>] <span class="syn-operator">=</span> <span class="syn-function">useState</span>(<span class="syn-keyword">true</span>);</div>
+          <div class="code-line"><span class="line-numbers">8</span></div>
+          <div class="code-line"><span class="line-numbers">9</span>  <span class="syn-keyword">return</span> (</div>
+          <div class="code-line"><span class="line-numbers">10</span>    <span class="syn-operator">&lt;</span><span class="syn-type">div</span> <span class="syn-variable">className</span><span class="syn-operator">=</span><span class="syn-string">"flex h-screen"</span><span class="syn-operator">&gt;</span></div>
+          <div class="code-line"><span class="line-numbers">11</span>      <span class="syn-comment">{'// Spacious layout with rounded panels'}</span></div>
+          <div class="code-line"><span class="line-numbers">12</span>    <span class="syn-operator">&lt;/</span><span class="syn-type">div</span><span class="syn-operator">&gt;</span></div>
+          <div class="code-line"><span class="line-numbers">13</span>  );</div>
+          <div class="code-line"><span class="line-numbers">14</span>};</div>
+        </div>
+      </div>
+
+      <!-- Terminal -->
+      <div class="terminal-area">
+        <div class="terminal-tabs">
+          <div class="terminal-tab active">Terminal</div>
+          <div class="terminal-tab">Problems</div>
+          <div class="terminal-tab">Output</div>
+        </div>
+        <div class="terminal-content">
+          <div><span class="prompt">PS C:\my-project&gt;</span> npm run dev</div>
+          <div class="output">  VITE v5.4.2  ready in 342 ms</div>
+          <div class="output">  &#10132;  Local:   http://localhost:5173/</div>
+          <div><span class="prompt">PS C:\my-project&gt;</span> <span style="opacity:.5">&#9646;</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Chat Panel (350px, rounded) -->
+    <div class="chat-panel">
+      <div class="chat-header">
+        <div class="chat-title">
+          <span class="sparkle">&#10024;</span>
+          <span class="brand-font">gu<span class="accent">IDE</span></span>
+          <span class="sub">AI</span>
+        </div>
+        <div class="header-actions">
+          <button title="TTS">&#128264;</button>
+          <button title="API Keys">&#128273;</button>
+          <button title="Dev Console">&#9000;</button>
+          <button title="New Chat">&#10010;</button>
+          <button title="History">&#128196;</button>
+          <button title="Clear">&#128465;</button>
+          <div style="width:1px;height:16px;background:var(--a-border);margin:0 2px"></div>
+          <button title="Close">&times;</button>
+        </div>
+      </div>
+
+      <div class="chat-messages">
+        <div class="chat-msg user">
+          Can you explain how the Layout component works?
+        </div>
+        <div class="chat-msg assistant">
+          The <code>Layout</code> component is the main shell. It manages the entire IDE layout:
+
+          <br><br>&bull; Top bar with logo, search, and layout toggles
+          <br>&bull; Sidebar with file explorer (rounded panel)
+          <br>&bull; Center editor with pill-style tabs
+          <br>&bull; Terminal panel at the bottom
+          <br>&bull; Chat panel on the right (this panel)
+
+          <br><br>Panels have rounded corners and subtle shadows, creating visual separation and a modern feel.
+          <div class="msg-meta">
+            <span>Qwen3.5-4B</span>
+            <span style="color:#89d185">&#128218;</span>
+            <span>RAG</span>
+          </div>
+        </div>
+        <div class="chat-msg user">
+          Looks clean. How does toolbar state persist?
+        </div>
+        <div class="chat-msg assistant">
+          Panel visibility is managed via <code>useState</code> hooks:
+          <br><code>sidebarVisible</code>, <code>chatVisible</code>, <code>terminalVisible</code>.
+          <br><br>Dimensions (widths, heights) also use state and are updated via mouse drag handlers during resize operations.
+          <div class="msg-meta">
+            <span>Qwen3.5-4B</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Unified Input Container -->
+      <div class="unified-input">
+        <div class="unified-input-inner">
+          <div class="todo-panel">
+            <span class="todo-icon">&#9998;</span>
+            Plan / Todo
+            <span class="todo-count">2 items</span>
+            <span style="margin-left:auto;font-size:9px">&#9660;</span>
+          </div>
+          <div class="context-indicator">
+            <span style="font-size:10px">&#128196;</span>
+            Referencing:
+            <span class="ctx-file">Layout.tsx</span>
+          </div>
+          <div class="keep-undo-bar">
+            <div class="file-change">
+              <img src="../public/icons/tsx.svg" onerror="this.src='../public/icons/jsx.svg'" style="width:13px;height:13px" alt="">
+              <span>Layout.tsx</span>
+              <span style="font-size:9px;color:var(--a-fg-subtle)">+8 -2</span>
+            </div>
+            <div class="actions">
+              <button>Keep All</button>
+              <button>Undo All</button>
+            </div>
+          </div>
+          <textarea class="input-textarea" placeholder="Ask anything... (Enter to send)" rows="1"></textarea>
+          <div class="input-toolbar">
+            <div style="display:flex;align-items:center;gap:2px">
+              <button class="toolbar-btn" title="Attach">&#128206;</button>
+              <button class="toolbar-btn" title="Voice">&#127908;</button>
+              <div class="toolbar-sep"></div>
+              <button class="toolbar-btn active">&#9889; Auto</button>
+              <button class="toolbar-btn plan-active">&#128196; Plan</button>
+              <div class="toolbar-sep"></div>
+              <button class="toolbar-btn">&#128187; Qwen3.5-4B &#9662;</button>
+            </div>
+            <div style="margin-left:auto">
+              <button class="send-btn" title="Send">&#8593;</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ Bottom Bar: Horizontal Activity + Status (36px) ═══ -->
+  <div class="bottom-bar">
+    <div class="activity-row">
+      <div class="ab-icon active" title="Explorer">&#128193;</div>
+      <div class="ab-icon" title="Search">&#128269;</div>
+      <div class="ab-icon" title="Source Control">&#9879;</div>
+      <div class="ab-icon" title="Debug">&#128028;</div>
+      <div class="ab-icon" title="MCP Servers">&#9881;</div>
+      <div class="ab-icon" title="More">&middot;&middot;&middot;</div>
+      <div style="width:1px;height:16px;background:var(--a-border);margin:0 4px"></div>
+      <div class="ab-icon" title="Browser">&#127760;</div>
+      <div class="ab-icon" title="AI Chat">&#128172;</div>
+      <div class="ab-icon" title="Benchmark">&#128202;</div>
+      <div class="ab-icon" title="Theme">&#127912;</div>
+      <div class="ab-icon" title="Account">&#128100;</div>
+      <div class="ab-icon" title="Settings">&#9881;</div>
+    </div>
+    <div class="status-info">
+      <div class="status-item"><span>&#9739;</span> main</div>
+      <div class="status-item"><span style="color:#f48771">&#9888;</span> 0 <span style="color:#dcdcaa">W</span> 2</div>
+      <div class="status-sep"></div>
+      <span class="tok-speed">&#9889; 18 tok/s</span>
+      <div class="status-item">
+        <span class="ctx-ring"></span>
+        42%
+      </div>
+      <div class="status-item">
+        <span class="gpu-active">GPU</span>
+        6.2/8.0G
+      </div>
+      <div class="status-sep"></div>
+      <div class="status-item">Ln 4, Col 18</div>
+      <div class="status-item">TypeScript React</div>
+      <div class="status-sep"></div>
+      <div class="status-item"><span style="color:#89d185">&#9679;</span> AI Ready</div>
+    </div>
+  </div>
+</div>
+
+<div class="concept-label">CONCEPT 2 — AETHER</div>
+</body>
+</html>

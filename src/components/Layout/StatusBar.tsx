@@ -79,7 +79,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({
     return () => { cleanup?.(); };
   }, []);
 
-  // Measure tokens/sec from streaming
+  // Measure tokens/sec from streaming (including tool call generation)
   useEffect(() => {
     const api = window.electronAPI;
     if (!api) return;
@@ -88,8 +88,14 @@ export const StatusBar: React.FC<StatusBarProps> = ({
       tokenCountRef.current++;
     };
 
+    // Track tool call params as token activity (just 1 token per event to show the model is active)
+    const toolGeneratingHandler = (_data: { paramsText?: string }) => {
+      tokenCountRef.current++;
+    };
+
     // Secondary listener just for speed measurement
-    api.onLlmToken?.(tokenHandler);
+    const cleanupToken = api.onLlmToken?.(tokenHandler);
+    const cleanupTool = api.onLlmToolGenerating?.(toolGeneratingHandler);
 
     // Sample every second
     tokenTimerRef.current = setInterval(() => {
@@ -106,6 +112,8 @@ export const StatusBar: React.FC<StatusBarProps> = ({
 
     return () => {
       if (tokenTimerRef.current) clearInterval(tokenTimerRef.current);
+      if (typeof cleanupToken === 'function') cleanupToken();
+      if (typeof cleanupTool === 'function') cleanupTool();
     };
   }, []);
 
@@ -186,87 +194,92 @@ export const StatusBar: React.FC<StatusBarProps> = ({
 
   return (
     <div className="h-[20px] flex items-center justify-between px-1.5 text-[10px] select-none flex-shrink-0 overflow-hidden" style={{ backgroundColor: 'var(--theme-status-bar)', borderTop: '1px solid var(--theme-border)', color: 'var(--theme-status-bar-fg)' }}>
-      {/* Left */}
-      <div className="flex items-center gap-2 flex-shrink-0">
-        {/* Git branch */}
-        <div className="flex items-center gap-1 cursor-pointer hover:bg-[#ffffff10] px-1 rounded">
-          <GitBranch size={12} />
+      {/* Left — git branch + errors/warnings */}
+      <div className="flex items-center gap-1.5 flex-shrink-0">
+        <div className="flex items-center gap-1 cursor-pointer hover:bg-[rgba(0,0,0,0.15)] px-0.5 rounded">
+          <GitBranch size={10} />
           <span>main</span>
         </div>
-
-        {/* Errors/Warnings */}
         <div
-          className="flex items-center gap-1 cursor-pointer hover:bg-[#ffffff10] px-1 rounded"
+          className="flex items-center gap-1 cursor-pointer hover:bg-[rgba(0,0,0,0.15)] px-0.5 rounded"
           onClick={() => onShowProblems?.()}
           title="Show Problems panel"
         >
-          <AlertCircle size={12} className={errorCount > 0 ? 'text-[#f48771]' : ''} />
+          <AlertCircle size={10} className={errorCount > 0 ? 'text-[#f48771]' : ''} />
           <span className={errorCount > 0 ? 'text-[#f48771]' : ''}>{errorCount}</span>
           <span className="mx-0.5" style={{ color: warningCount > 0 ? '#dcdcaa' : undefined }}>W</span>
           <span style={{ color: warningCount > 0 ? '#dcdcaa' : undefined }}>{warningCount}</span>
         </div>
       </div>
 
-      {/* Right */}
+      {/* Right — tok/s, context%, GPU, cursor, language, AI status */}
       <div className="flex items-center gap-1.5 min-w-0 overflow-hidden flex-nowrap">
         {/* RAG indexing */}
         {ragStatus.isIndexing && (
           <div className="flex items-center gap-1 animate-pulse text-[#dcdcaa]">
-            <Loader2 size={12} className="animate-spin" />
+            <Loader2 size={10} className="animate-spin" />
             <span>Indexing {ragStatus.progress}%</span>
           </div>
         )}
 
-        {/* Tokens/sec speed indicator */}
+        {/* Tokens/sec */}
         {tokensPerSec > 0 && (
-          <div className="flex items-center gap-1 text-[#4fc1ff]" title="Generation speed">
+          <div className="flex items-center gap-1 cursor-pointer hover:bg-[rgba(0,0,0,0.15)] px-0.5 rounded" title="Generation speed">
             <Zap size={10} />
-            <span className="text-[11px]">{tokensPerSec} tok/s</span>
+            <span>{tokensPerSec} tok/s</span>
           </div>
         )}
 
-        {/* Context usage ring */}
+        {/* Context usage % (no ring, just number like concept) */}
         {contextUsage.total > 0 && (
-          <div className="flex items-center gap-1 cursor-pointer hover:bg-[#ffffff10] px-1 rounded"
+          <div className="flex items-center gap-1 cursor-pointer hover:bg-[rgba(0,0,0,0.15)] px-0.5 rounded"
                title={`Context: ${contextUsage.used.toLocaleString()} / ${contextUsage.total.toLocaleString()} tokens (${ctxPct}%)`}>
             <ContextRing used={contextUsage.used} total={contextUsage.total} />
-            <span className="text-[11px]">{ctxPct}%</span>
+            <span>{ctxPct}%</span>
           </div>
         )}
 
-        {/* Compact GPU/CPU indicator — tooltip has full details */}
+        {/* GPU memory inline (concept: "GPU 6.2/8.0G") */}
         {gpuInfo && (
-          <div className="flex items-center gap-1 cursor-pointer hover:bg-[#ffffff10] px-1 rounded flex-shrink-0"
+          <div className="flex items-center gap-1 cursor-pointer hover:bg-[rgba(0,0,0,0.15)] px-0.5 rounded flex-shrink-0"
                title={`${gpuInfo.name || 'GPU'}${gpuInfo.vramUsedGB != null && gpuInfo.vramTotalGB != null ? `\nVRAM: ${gpuInfo.vramUsedGB}/${gpuInfo.vramTotalGB} GB (${gpuInfo.vramUsagePercent ?? 0}%)` : ''}${gpuInfo.utilizationPercent != null ? `\nGPU Util: ${gpuInfo.utilizationPercent}%` : ''}${gpuInfo.temperatureC != null ? ` • Temp: ${gpuInfo.temperatureC}°C` : ''}\nCPU: ${systemResources?.cpu || 0}% • RAM: ${systemResources?.ram?.percent || 0}%${gpuInfo.gpuLayers != null ? `\nLayers: ${gpuInfo.gpuLayers}` : ''}${gpuInfo.backend ? ` (${gpuInfo.backend})` : ''}`}>
-            <span className={`text-[10px] font-medium ${gpuInfo.isActive ? 'text-[#89d185]' : 'text-[#f48771]'}`}>{gpuInfo.isActive ? 'GPU' : 'CPU'}</span>
-            {gpuInfo.vramUsagePercent != null && !isNaN(gpuInfo.vramUsagePercent) && (
-              <ProgressRing percent={gpuInfo.vramUsagePercent} size={12} strokeWidth={1.5} />
-            )}
             {gpuInfo.vramUsedGB != null && gpuInfo.vramTotalGB != null ? (
-              <span className="text-[10px] text-[#858585]">{gpuInfo.vramUsedGB}/{gpuInfo.vramTotalGB}G</span>
-            ) : systemResources ? (
-              <span className="text-[10px] text-[#858585]">CPU:{systemResources.cpu}% RAM:{systemResources.ram?.percent}%</span>
-            ) : null}
+              <span>GPU {gpuInfo.vramUsedGB}/{gpuInfo.vramTotalGB}G</span>
+            ) : (
+              <span>{gpuInfo.isActive ? 'GPU' : 'CPU'}</span>
+            )}
           </div>
         )}
 
-        {/* Editor info group separator */}
-        <div className="w-px h-3 flex-shrink-0 mx-0.5" style={{ backgroundColor: 'rgba(255,255,255,0.10)' }} />
+        {/* System resources fallback when no GPU */}
+        {!gpuInfo && systemResources && (
+          <div className="flex items-center gap-1 cursor-pointer hover:bg-[rgba(0,0,0,0.15)] px-0.5 rounded flex-shrink-0"
+               title={`CPU: ${systemResources.cpu}% • RAM: ${systemResources.ram?.percent}%`}>
+            <span>CPU:{systemResources.cpu}% RAM:{systemResources.ram?.percent}%</span>
+          </div>
+        )}
+
+        {/* Separator */}
+        <div className="w-px h-2.5 flex-shrink-0" style={{ backgroundColor: 'rgba(0,0,0,0.2)' }} />
+
         {/* Cursor position */}
-        <div className="cursor-pointer hover:bg-[#ffffff10] px-1 rounded flex-shrink-0 whitespace-nowrap">
+        <div className="cursor-pointer hover:bg-[rgba(0,0,0,0.15)] px-0.5 rounded flex-shrink-0 whitespace-nowrap">
           Ln {cursorPosition.line}, Col {cursorPosition.column}
         </div>
+
         {/* Language */}
-        <div className="cursor-pointer hover:bg-[#ffffff10] px-1 rounded capitalize flex-shrink-0">
+        <div className="cursor-pointer hover:bg-[rgba(0,0,0,0.15)] px-0.5 rounded capitalize flex-shrink-0">
           {language}
         </div>
-        {/* AI status group separator */}
-        <div className="w-px h-3 flex-shrink-0 mx-0.5" style={{ backgroundColor: 'rgba(255,255,255,0.10)' }} />
-        {/* LLM Status */}
-        <div className="flex items-center gap-1 cursor-pointer hover:bg-[#ffffff10] px-1 rounded min-w-0 flex-shrink"
+
+        {/* Separator */}
+        <div className="w-px h-2.5 flex-shrink-0" style={{ backgroundColor: 'rgba(0,0,0,0.2)' }} />
+
+        {/* AI status — compact like concept */}
+        <div className="flex items-center gap-1 cursor-pointer hover:bg-[rgba(0,0,0,0.15)] px-0.5 rounded min-w-0 flex-shrink-0"
              title={llmStatus.modelInfo ? `${llmStatus.modelInfo.name}\nContext: ${llmStatus.modelInfo.contextSize || '?'} tokens\nGPU Layers: ${llmStatus.modelInfo.gpuLayers || '?'}\nBackend: ${llmStatus.modelInfo.gpuBackend || '?'}${llmStatus.modelInfo.flashAttention ? '\nFlash Attention: ON' : ''}` : llmStatus.message}>
           {getStatusIcon()}
-          <span className="max-w-[250px] truncate">{getStatusText()}</span>
+          <span>{llmStatus.state === 'ready' ? (llmStatus.modelInfo?.name ? llmStatus.modelInfo.name : 'AI Ready') : getStatusText()}</span>
           {llmStatus.state === 'loading' && typeof llmStatus.progress === 'number' && llmStatus.progress > 0 && (
             <div className="w-[60px] h-[3px] bg-[#3c3c3c] rounded-full overflow-hidden flex-shrink-0">
               <div className="h-full bg-[#dcdcaa] rounded-full transition-all duration-300" style={{ width: `${Math.round(llmStatus.progress * 100)}%` }} />
@@ -274,29 +287,28 @@ export const StatusBar: React.FC<StatusBarProps> = ({
           )}
         </div>
 
-        {/* Actions group separator */}
-        <div className="w-px h-3 flex-shrink-0 mx-0.5" style={{ backgroundColor: 'rgba(255,255,255,0.10)' }} />
-        {/* Voice Command */}
+        {/* Voice Command — kept for functionality */}
         {onAction && (
           <VoiceCommandButton onAction={onAction} onChatMessage={onChatMessage} />
         )}
 
         {/* Terminal toggle */}
         <button
-          className="flex items-center gap-1 hover:bg-[#ffffff10] px-1 rounded flex-shrink-0"
+          className="flex items-center gap-1 hover:bg-[rgba(0,0,0,0.15)] px-0.5 rounded flex-shrink-0"
           onClick={onToggleTerminal}
+          title="Toggle Terminal"
         >
-          <Terminal size={12} />
+          <Terminal size={10} />
         </button>
 
         {/* Notifications */}
-        <div className="cursor-pointer hover:bg-[#ffffff10] px-1 rounded flex-shrink-0">
-          <Bell size={12} />
+        <div className="cursor-pointer hover:bg-[rgba(0,0,0,0.15)] px-0.5 rounded flex-shrink-0">
+          <Bell size={10} />
         </div>
 
         {/* Credit */}
-        <div className="text-[10px] text-[#858585]/40 pl-1 border-l border-[#858585]/10 flex-shrink-0 whitespace-nowrap">
-          by <a href="#" onClick={(e) => { e.preventDefault(); window.electronAPI?.openExternal?.('https://github.com/sponsors/FileShot'); }} className="hover:text-[#cccccc]/70 transition-colors cursor-pointer" title="Support Brendan Gray on GitHub Sponsors">Brendan Gray</a>
+        <div className="text-[10px] pl-0.5 flex-shrink-0 whitespace-nowrap" style={{ opacity: 0.25 }}>
+          by <a href="#" onClick={(e) => { e.preventDefault(); window.electronAPI?.openExternal?.('https://github.com/sponsors/FileShot'); }} className="hover:opacity-70 transition-opacity cursor-pointer" title="Support Brendan Gray on GitHub Sponsors">Brendan Gray</a>
         </div>
       </div>
     </div>

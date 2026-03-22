@@ -461,10 +461,8 @@ export const CodeBlock: React.FC<{ code: string; language: string; onApply: () =
   const [copied, setCopied] = useState(false);
   const lineCount = code.split('\n').length;
   const isLong = lineCount > COLLAPSE_LINE_THRESHOLD;
-  // Default to collapsed for long blocks; keep streaming blocks expanded so users can watch generation
-  // defaultCollapsed forces collapsed on first render (used for live tool call generation bubbles)
-  // startExpanded overrides collapse for just-finalized messages to prevent height jump on finalization
-  const [expanded, setExpanded] = useState(defaultCollapsed ? false : !!isStreaming || !!startExpanded || !isLong);
+  // Default to collapsed for ALL code blocks. Only keep expanded while actively streaming.
+  const [expanded, setExpanded] = useState(!!isStreaming);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(code);
@@ -476,17 +474,14 @@ export const CodeBlock: React.FC<{ code: string; language: string; onApply: () =
   const displayCode = expanded ? code : code.split('\n').slice(0, COLLAPSE_LINE_THRESHOLD).join('\n');
 
   return (
-    <div className="mt-1.5 mb-3 rounded-lg overflow-hidden" style={{ border: '1px solid var(--theme-border)' }}>
+    <div className="mt-3 mb-3 rounded-lg overflow-hidden" style={{ border: '1px solid var(--theme-border)' }}>
       <div className="flex items-center justify-between px-2.5 py-1" style={{ backgroundColor: 'var(--theme-bg-secondary)', borderBottom: '1px solid var(--theme-border)' }}>
         <div className="flex items-center gap-2">
           <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded" style={{ backgroundColor: 'color-mix(in srgb, var(--theme-accent) 15%, transparent)', color: 'var(--theme-accent)' }}>{language || 'code'}</span>
-          {(isLong || defaultCollapsed) && (
-            <span className="text-[9px]" style={{ color: 'var(--theme-foreground-muted)' }}>({lineCount} lines)</span>
-          )}
+          <span className="text-[9px]" style={{ color: 'var(--theme-foreground-muted)' }}>({lineCount} lines)</span>
         </div>
         <div className="flex items-center gap-0.5">
-          {(isLong || defaultCollapsed) && (
-            <button
+          <button
               className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-md transition-colors"
               style={{ color: 'var(--theme-foreground-muted)' }}
               onClick={() => setExpanded(!expanded)}
@@ -495,7 +490,6 @@ export const CodeBlock: React.FC<{ code: string; language: string; onApply: () =
             >
               {expanded ? '▼ Collapse' : '▶ Expand'}
             </button>
-          )}
           <button
             className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-md transition-colors"
             style={{ color: 'var(--theme-foreground-muted)' }}
@@ -545,7 +539,7 @@ export const CodeBlock: React.FC<{ code: string; language: string; onApply: () =
         <pre className={`px-2.5 py-2 overflow-x-auto text-[12px] font-mono leading-relaxed ${!expanded ? 'max-h-[100px] overflow-hidden' : ''}`} style={{ backgroundColor: 'var(--theme-bg)' }}>
           <code style={{ color: 'var(--theme-foreground)' }}>{displayCode}</code>
         </pre>
-        {isLong && !expanded && (
+        {!expanded && (
           <div
             className="absolute bottom-0 left-0 right-0 h-8 flex items-end justify-center pb-1 cursor-pointer"
             style={{ background: 'linear-gradient(to top, var(--theme-bg), transparent)' }}

@@ -264,15 +264,18 @@ export const useTheme = () => useContext(ThemeContext);
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [theme, setTheme] = useState<Theme>(() => {
-    const saved = localStorage.getItem('guIDE-theme');
-    return themes.find(t => t.id === saved) || themes.find(t => t.id === 'monolith') || themes[0];
+    // v2 design system — monolith is the canonical default.
+    // Only respect a saved theme if the user explicitly chose it after monolith shipped
+    // (indicated by the 'guIDE-theme-v2' key). Legacy 'guIDE-theme' keys are ignored.
+    const savedV2 = localStorage.getItem('guIDE-theme-v2');
+    return themes.find(t => t.id === savedV2) || themes.find(t => t.id === 'monolith') || themes[0];
   });
 
   const setThemeById = useCallback((id: string) => {
     const t = themes.find(t => t.id === id);
     if (t) {
       setTheme(t);
-      localStorage.setItem('guIDE-theme', id);
+      localStorage.setItem('guIDE-theme-v2', id);
     }
   }, []);
 

@@ -413,7 +413,7 @@ export const Layout: React.FC = () => {
         {/* VS Code–style layout toggle buttons */}
         <div className="flex items-center gap-0.5 mr-2" style={{ WebkitAppRegion: 'no-drag' } as any}>
           <button
-            className="w-[24px] h-[24px] flex items-center justify-center rounded hover:bg-[#ffffff15] transition-colors"
+            className="w-[24px] h-[24px] flex items-center justify-center rounded hover:bg-[rgba(255,255,255,0.06)] transition-colors"
             style={{ color: sidebarVisible ? 'var(--theme-foreground)' : 'var(--theme-foreground-muted)' }}
             onClick={() => setSidebarVisible(v => !v)}
             title="Toggle Primary Sidebar (Ctrl+B)"
@@ -421,7 +421,7 @@ export const Layout: React.FC = () => {
             <PanelLeft size={13} />
           </button>
           <button
-            className="w-[24px] h-[24px] flex items-center justify-center rounded hover:bg-[#ffffff15] transition-colors"
+            className="w-[24px] h-[24px] flex items-center justify-center rounded hover:bg-[rgba(255,255,255,0.06)] transition-colors"
             style={{ color: terminalVisible ? 'var(--theme-foreground)' : 'var(--theme-foreground-muted)' }}
             onClick={() => setTerminalVisible(v => !v)}
             title="Toggle Panel (Ctrl+J)"
@@ -429,7 +429,7 @@ export const Layout: React.FC = () => {
             <PanelBottom size={13} />
           </button>
           <button
-            className="w-[24px] h-[24px] flex items-center justify-center rounded hover:bg-[#ffffff15] transition-colors"
+            className="w-[24px] h-[24px] flex items-center justify-center rounded hover:bg-[rgba(255,255,255,0.06)] transition-colors"
             style={{ color: chatVisible ? 'var(--theme-foreground)' : 'var(--theme-foreground-muted)' }}
             onClick={() => setChatVisible(v => !v)}
             title="Toggle Secondary Sidebar (Ctrl+L)"

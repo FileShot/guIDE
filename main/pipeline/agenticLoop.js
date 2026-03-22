@@ -32,6 +32,8 @@ const { ConversationSummarizer } = require('./conversationSummarizer');
 // ─── Constants ──────────────────────────────────────────────
 const WALL_CLOCK_MS   = 30 * 60 * 1000; // 30 min hard limit
 const MAX_CONTEXT_ROTATIONS = 6; // Max rotations per request
+const STUCK_THRESHOLD = 3;       // Same tool+params N times in a row = stuck
+const CYCLE_MIN_REPEATS = 3;     // Pattern repeating N times = cycle
 
 /**
  * Handle a local model agentic chat request.
@@ -170,6 +172,9 @@ async function handleLocalChat(ctx, message, context, helpers) {
   const allToolResults = [];
   let pendingToolCallBuffer = null;  // Accumulates raw text for tool calls spanning continuations
   let tokensSinceLastCtxEmit = 0;    // Throttle live context ring updates
+  const recentToolSigs = [];         // Track tool call signatures for stuck/cycle detection
+  const toolExecCache = new Map();   // Cross-iteration dedup: signature → { iteration, resultSummary }
+  const DEDUP_EXEMPT_TOOLS = new Set(['write_file', 'append_to_file', 'edit_file', 'write_todos', 'update_todo', 'run_command', 'web_search', 'browser_navigate', 'browser_click', 'browser_type']);
 
   // ═══ THE AGENTIC LOOP ═══════════════════════════════════
   for (let iteration = 1; iteration <= MAX_AGENTIC_ITERATIONS; iteration++) {
@@ -214,6 +219,9 @@ async function handleLocalChat(ctx, message, context, helpers) {
       llmEngine.chatHistory = [{ type: 'system', text: preCheck.prompt.systemContext }];
 
       if (preCheck.clearContinuation) continuationCount = 0;
+
+      // Clear dedup cache — rotation means fresh context
+      toolExecCache.clear();
     }
 
     // ── Emit iteration events ─────────────────────────────
@@ -227,7 +235,14 @@ async function handleLocalChat(ctx, message, context, helpers) {
     }
 
     // ── Generate response ─────────────────────────────────
-    stream.reset();
+    // When accumulating a tool call across continuations, preserve the stream's
+    // tool-hold state so new tokens feed into the same llm-tool-generating event.
+    // This keeps the UI code block alive across continuation boundaries.
+    if (pendingToolCallBuffer !== null) {
+      stream.continueToolHold();
+    } else {
+      stream.reset();
+    }
     tokensSinceLastCtxEmit = 0;
     let result;
     try {
@@ -289,13 +304,17 @@ async function handleLocalChat(ctx, message, context, helpers) {
         nextUserMessage = `${rotationSummary}\n\n${rollingCtx}\n\n` +
           `Context was rotated due to overflow. Previous summary: ${overflowSummary.slice(0, 500)}\n\n` +
           `Continue the task. Original request: ${message.substring(0, 300)}\n` +
-          `Do NOT output any acknowledgment or summary — make forward progress immediately.`;
+          `Do NOT output any acknowledgment or summary — make forward progress immediately.\n` +
+          `Do NOT redo completed work. Files listed in progress exist on disk. If a plan exists, it is already active — use update_todo, do NOT call write_todos.`;
 
         // Prepend any partial response from before the overflow
         if (err.partialResponse) {
           fullResponseText += err.partialResponse;
           displayResponseText += err.partialResponse;
         }
+
+        // Clear dedup cache — overflow rotation means fresh context
+        toolExecCache.clear();
 
         continue; // Retry generation with rotated context
       }
@@ -362,7 +381,8 @@ async function handleLocalChat(ctx, message, context, helpers) {
           continuationCount++;
           console.log(`[AgenticLoop]   Continuation (tool call accumulation, ${pendingToolCallBuffer.length} chars)`);
           nextUserMessage = continuationMessage({ lastText: pendingToolCallBuffer, toolInProgress: true });
-          stream.finalize(false);
+          // Do NOT finalize the stream — keep tool-hold state alive so the UI
+          // code block continues receiving live content across continuations
           continue;
         }
       } else {
@@ -387,7 +407,8 @@ async function handleLocalChat(ctx, message, context, helpers) {
         pendingToolCallBuffer = rawText;
         continuationCount++;
         nextUserMessage = continuationMessage({ lastText: rawText, toolInProgress: true });
-        stream.finalize(false);
+        // Do NOT finalize — stream is holding the tool call content and should
+        // keep emitting llm-tool-generating events across continuation boundaries
         continue;
       }
 
@@ -408,6 +429,25 @@ async function handleLocalChat(ctx, message, context, helpers) {
 
         console.log(`[AgenticLoop]   Tool: ${toolCall.name}(${JSON.stringify(toolCall.arguments).slice(0, 100)})`);
 
+        // ── Cross-iteration dedup: skip if same tool+params ran within last 2 iterations ──
+        let dedupHit = false;
+        if (!DEDUP_EXEMPT_TOOLS.has(toolCall.name)) {
+          const sig = `${toolCall.name}:${JSON.stringify(toolCall.arguments)}`;
+          const cached = toolExecCache.get(sig);
+          if (cached && (iteration - cached.iteration) <= 2) {
+            console.log(`[AgenticLoop]   Dedup: ${toolCall.name} already ran in iteration ${cached.iteration} — returning cached summary`);
+            const entry = {
+              tool: toolCall.name,
+              params: toolCall.arguments,
+              result: { content: `(Previously executed in iteration ${cached.iteration}. Result: ${cached.resultSummary})` },
+            };
+            toolResultEntries.push(entry);
+            rollingSummary.recordToolCall(toolCall.name, toolCall.arguments, iteration);
+            dedupHit = true;
+          }
+        }
+        if (dedupHit) continue;
+
         try {
           const toolResult = await mcpToolServer.executeTool(toolCall.name, toolCall.arguments);
           const entry = {
@@ -416,6 +456,14 @@ async function handleLocalChat(ctx, message, context, helpers) {
             result: toolResult,
           };
           toolResultEntries.push(entry);
+
+          // Cache result for cross-iteration dedup
+          if (!DEDUP_EXEMPT_TOOLS.has(toolCall.name)) {
+            const sig = `${toolCall.name}:${JSON.stringify(toolCall.arguments)}`;
+            const summary = typeof toolResult === 'string' ? toolResult.slice(0, 200) :
+              (toolResult?.content ? String(toolResult.content).slice(0, 200) : 'OK');
+            toolExecCache.set(sig, { iteration, resultSummary: summary });
+          }
 
           // Record in tracking systems
           rollingSummary.recordToolCall(toolCall.name, toolCall.arguments, iteration);
@@ -444,9 +492,52 @@ async function handleLocalChat(ctx, message, context, helpers) {
       // Emit tool results to UI
       stream.toolResults(toolResultEntries);
 
+      // ── Stuck/cycle detection ───────────────────────────
+      // Track tool call signatures and detect repetitive patterns
+      for (const tr of toolResultEntries) {
+        const paramsHash = JSON.stringify(tr.params || {}).substring(0, 400);
+        recentToolSigs.push({ tool: tr.tool, paramsHash });
+      }
+      if (recentToolSigs.length > 20) recentToolSigs.splice(0, recentToolSigs.length - 20);
+
+      let stuckDetected = false;
+      if (recentToolSigs.length >= STUCK_THRESHOLD) {
+        const last = recentToolSigs[recentToolSigs.length - 1];
+        const tail = recentToolSigs.slice(-STUCK_THRESHOLD);
+        if (tail.every(tc => tc.tool === last.tool && tc.paramsHash === last.paramsHash)) {
+          console.log(`[AgenticLoop] Stuck: ${last.tool} called ${STUCK_THRESHOLD}+ times with identical params`);
+          stuckDetected = true;
+        }
+      }
+
+      if (!stuckDetected && recentToolSigs.length >= 8) {
+        for (let cycleLen = 2; cycleLen <= 4; cycleLen++) {
+          if (recentToolSigs.length < cycleLen * CYCLE_MIN_REPEATS) continue;
+          const sigs = recentToolSigs.map(tc => `${tc.tool}:${tc.paramsHash}`);
+          const lastCycle = sigs.slice(-cycleLen);
+          let repeats = 0;
+          for (let pos = sigs.length - cycleLen; pos >= 0; pos -= cycleLen) {
+            const segment = sigs.slice(pos, pos + cycleLen);
+            if (segment.join(',') === lastCycle.join(',')) repeats++;
+            else break;
+          }
+          if (repeats >= CYCLE_MIN_REPEATS) {
+            const sig = recentToolSigs.slice(-cycleLen).map(tc => tc.tool).join(' → ');
+            console.log(`[AgenticLoop] Cycle detected: [${sig}] x${repeats}`);
+            stuckDetected = true;
+            break;
+          }
+        }
+      }
+
       // ── Budget-aware tool result assembly ────────────────
       // Use formatToolResults with context-size awareness
       const formattedResults = formatToolResults(toolResultEntries, { totalCtx });
+
+      // If stuck/cycle detected, append redirect instruction
+      const stuckSuffix = stuckDetected
+        ? '\n\nWARNING: You are repeating the same tool calls in a loop. Stop and assess: is the task complete? If so, provide your final response without tool calls. If not, try a DIFFERENT approach.'
+        : '';
 
       // Use tiered context assembly if we have enough history
       const contextPct = ctxUsed / totalCtx;
@@ -457,7 +548,7 @@ async function handleLocalChat(ctx, message, context, helpers) {
           iteration,
           formattedResults
         );
-        nextUserMessage = `${assembledContext}\n\nContinue with the task based on these results.`;
+        nextUserMessage = `${assembledContext}\n\nContinue with the task based on these results.${stuckSuffix}`;
       } else {
         // Early iterations: just use formatted results directly
         // But cap to prevent overflow
@@ -466,8 +557,12 @@ async function handleLocalChat(ctx, message, context, helpers) {
         const cappedResults = formattedResults.length > maxResultChars
           ? formattedResults.slice(0, maxResultChars) + '\n...(results truncated)'
           : formattedResults;
-        nextUserMessage = `Tool execution results:\n\n${cappedResults}\n\nContinue with the task based on these results.`;
+        nextUserMessage = `Tool execution results:\n\n${cappedResults}\n\nContinue with the task based on these results.${stuckSuffix}`;
       }
+
+      // If stuck detected, also clear the recent sigs so detection resets
+      if (stuckDetected) recentToolSigs.length = 0;
+
       continue;
     }
 

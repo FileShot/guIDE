@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>guIDE Design Concepts — Compare</title>
+<style>
+  @font-face {
+    font-family: 'Audiowide';
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url('../public/fonts/Audiowide-latin.woff2') format('woff2');
+  }
+  @font-face {
+    font-family: 'Audiowide';
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url('../public/fonts/Audiowide.woff2') format('woff2');
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: #0a0a0f;
+    color: #d0d0d8;
+    overflow-x: hidden;
+  }
+
+  .page-header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    padding: 28px 32px 14px;
+    flex-direction: column;
+  }
+  .page-header .logo-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .page-header .logo-row img { width: 28px; height: 28px; filter: brightness(1.2); }
+  .page-header h1 {
+    font-family: 'Audiowide', sans-serif;
+    font-size: 22px;
+    font-weight: 400;
+    letter-spacing: 0.03em;
+  }
+  .page-header h1 span { color: #7c6cf6; }
+  .page-header p {
+    color: #6a6a80;
+    font-size: 13px;
+    max-width: 600px;
+    text-align: center;
+    line-height: 1.5;
+  }
+
+  .controls {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    padding: 12px 32px 20px;
+    flex-wrap: wrap;
+  }
+  .controls button {
+    padding: 8px 20px;
+    border-radius: 6px;
+    border: 1px solid #2a2a45;
+    background: #14142a;
+    color: #8888a0;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 150ms;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+    font-family: inherit;
+  }
+  .controls button:hover { background: #1e1e38; color: #c0c0d0; border-color: #3a3a58; }
+  .controls button.active { background: #7c6cf6; color: #fff; border-color: #7c6cf6; }
+  .controls button.active:nth-child(1) { background: #e07b39; border-color: #e07b39; }
+  .controls button.active:nth-child(2) { background: #6c5ce7; border-color: #6c5ce7; }
+  .controls button.active:nth-child(3) { background: #00c9a7; border-color: #00c9a7; color: #000; }
+
+  .view-wrapper { padding: 0 24px 30px; }
+
+  /* Side-by-side mode */
+  .grid-view {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+  }
+  .grid-view .concept-card {
+    border-radius: 10px;
+    border: 1px solid #1e1e38;
+    overflow: hidden;
+    background: #0f0f1a;
+    transition: border-color 200ms;
+  }
+  .grid-view .concept-card:hover { border-color: #3a3a58; }
+  .grid-view .concept-card .card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    border-bottom: 1px solid #1e1e38;
+  }
+  .grid-view .concept-card .card-header h3 {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+  }
+  .grid-view .concept-card:nth-child(1) .card-header h3 { color: #e07b39; }
+  .grid-view .concept-card:nth-child(2) .card-header h3 { color: #6c5ce7; }
+  .grid-view .concept-card:nth-child(3) .card-header h3 { color: #00c9a7; }
+  .grid-view .concept-card .expand-btn {
+    padding: 3px 10px;
+    border-radius: 4px;
+    border: 1px solid #2a2a45;
+    background: transparent;
+    color: #6a6a80;
+    font-size: 10px;
+    cursor: pointer;
+  }
+  .grid-view .concept-card .expand-btn:hover { background: #1a1a30; color: #c0c0d0; }
+  .grid-view iframe {
+    width: 100%;
+    height: 65vh;
+    border: none;
+    display: block;
+  }
+
+  /* Focus (single) mode */
+  .focus-view { display: none; }
+  .focus-view.visible { display: block; }
+  .focus-view iframe {
+    width: 100%;
+    height: calc(100vh - 200px);
+    border: none;
+    border-radius: 10px;
+    border: 1px solid #2a2a45;
+    display: block;
+  }
+
+  /* Summary table */
+  .summary-section { padding: 20px 24px 40px; }
+  .summary-section h2 {
+    font-size: 15px;
+    font-weight: 600;
+    color: #a0a0b8;
+    margin-bottom: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .summary-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  .summary-table th,
+  .summary-table td {
+    text-align: left;
+    padding: 8px 14px;
+    border-bottom: 1px solid #1a1a30;
+  }
+  .summary-table th {
+    color: #6a6a80;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    font-size: 10px;
+    position: sticky; top: 0;
+    background: #0a0a0f;
+  }
+  .summary-table th:nth-child(2) { color: #e07b39; }
+  .summary-table th:nth-child(3) { color: #6c5ce7; }
+  .summary-table th:nth-child(4) { color: #00c9a7; }
+  .summary-table td { color: #b0b0c0; }
+  .summary-table tr:hover td { background: rgba(255,255,255,0.015); }
+  .summary-table td:first-child { color: #8888a0; font-weight: 500; }
+
+  @media (max-width: 1200px) {
+    .grid-view { grid-template-columns: 1fr; }
+    .grid-view iframe { height: 55vh; }
+  }
+</style>
+</head>
+<body>
+  <div class="page-header">
+    <div class="logo-row">
+      <img src="../public/zzz.png" alt="guIDE logo">
+      <h1>gu<span>IDE</span> Design Concepts</h1>
+    </div>
+    <p>Three distinct design directions for the guIDE IDE. Each concept uses the same real components, file icons, logo, and unified input container. The difference is layout philosophy, proportions, visual hierarchy, and interaction patterns.</p>
+  </div>
+
+  <div class="controls">
+    <button class="active" onclick="showAll()" id="btnAll">All Concepts</button>
+    <button onclick="showOne(0)" id="btn0">Monolith</button>
+    <button onclick="showOne(1)" id="btn1">Aether</button>
+    <button onclick="showOne(2)" id="btn2">Nexus</button>
+  </div>
+
+  <div class="view-wrapper">
+    <!-- Grid (all 3) -->
+    <div class="grid-view" id="gridView">
+      <div class="concept-card">
+        <div class="card-header">
+          <h3>MONOLITH</h3>
+          <button class="expand-btn" onclick="showOne(0)">Expand</button>
+        </div>
+        <iframe src="preview-monolith.html" loading="lazy"></iframe>
+      </div>
+      <div class="concept-card">
+        <div class="card-header">
+          <h3>AETHER</h3>
+          <button class="expand-btn" onclick="showOne(1)">Expand</button>
+        </div>
+        <iframe src="preview-aether.html" loading="lazy"></iframe>
+      </div>
+      <div class="concept-card">
+        <div class="card-header">
+          <h3>NEXUS</h3>
+          <button class="expand-btn" onclick="showOne(2)">Expand</button>
+        </div>
+        <iframe src="preview-nexus.html" loading="lazy"></iframe>
+      </div>
+    </div>
+
+    <!-- Focus (single concept at a time) -->
+    <div class="focus-view" id="focusView">
+      <iframe id="focusFrame" src="" loading="lazy"></iframe>
+    </div>
+  </div>
+
+  <!-- Comparison table -->
+  <div class="summary-section">
+    <h2>At a Glance</h2>
+    <table class="summary-table">
+      <thead>
+        <tr>
+          <th>Attribute</th>
+          <th>Monolith</th>
+          <th>Aether</th>
+          <th>Nexus</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Design Philosophy</td>
+          <td>Dense, professional, max screen real estate</td>
+          <td>Spacious, modern, breathable</td>
+          <td>Refined evolution of current design</td>
+        </tr>
+        <tr>
+          <td>Inspiration</td>
+          <td>JetBrains / IntelliJ</td>
+          <td>Zed / Linear / Raycast</td>
+          <td>VS Code (polished) / Cursor</td>
+        </tr>
+        <tr>
+          <td>Activity Bar</td>
+          <td>40px left (compact)</td>
+          <td>Moved to bottom (horizontal, 36px)</td>
+          <td>48px left (same as current)</td>
+        </tr>
+        <tr>
+          <td>Title Bar</td>
+          <td>28px (ultra-compact)</td>
+          <td>32px (minimal floating)</td>
+          <td>34px (same as current)</td>
+        </tr>
+        <tr>
+          <td>Status Bar</td>
+          <td>20px (minimal)</td>
+          <td>28px (spacious)</td>
+          <td>24px (same as current)</td>
+        </tr>
+        <tr>
+          <td>Sidebar Width</td>
+          <td>240px (narrow)</td>
+          <td>260px (rounded panels)</td>
+          <td>260px (accordion sections)</td>
+        </tr>
+        <tr>
+          <td>Chat Panel</td>
+          <td>320px (compact)</td>
+          <td>350px (rounded, card messages)</td>
+          <td>340px (alternating msg bgs)</td>
+        </tr>
+        <tr>
+          <td>Tab Indicator</td>
+          <td>Bottom underline (orange bar)</td>
+          <td>Pill shape with glow</td>
+          <td>Top border + gradient fade-down</td>
+        </tr>
+        <tr>
+          <td>Panel Borders</td>
+          <td>Flat, opaque, sharp</td>
+          <td>10px radius, gaps, shadows</td>
+          <td>Standard borders, layered depths</td>
+        </tr>
+        <tr>
+          <td>Accent Color</td>
+          <td>#e07b39 (amber/orange)</td>
+          <td>#6c5ce7 (purple)</td>
+          <td>#00c9a7 (teal/cyan)</td>
+        </tr>
+        <tr>
+          <td>Background</td>
+          <td>#0d0d0d (ultra dark)</td>
+          <td>#0f111a (deep blue-black)</td>
+          <td>#1a1a2e (deep navy)</td>
+        </tr>
+        <tr>
+          <td>Glass / Blur</td>
+          <td>None (flat opaque)</td>
+          <td>None (shadows instead)</td>
+          <td>None (layered depth)</td>
+        </tr>
+        <tr>
+          <td>Input Container</td>
+          <td>Same real structure (preserved)</td>
+          <td>Same + focus-within glow</td>
+          <td>Same + inner shadow depth</td>
+        </tr>
+        <tr>
+          <td>File Tree Rows</td>
+          <td>20px (dense)</td>
+          <td>26px (comfortable)</td>
+          <td>22px (same as current)</td>
+        </tr>
+        <tr>
+          <td>Logo</td>
+          <td>zzz.png (16px)</td>
+          <td>zzz.png (18px)</td>
+          <td>zzz.png (20px, same as current)</td>
+        </tr>
+        <tr>
+          <td>Brand Font</td>
+          <td>Audiowide</td>
+          <td>Audiowide</td>
+          <td>Audiowide</td>
+        </tr>
+        <tr>
+          <td>Integration Risk</td>
+          <td>Medium — resizes many components</td>
+          <td>High — moves activity bar, new panel shape</td>
+          <td>Low — same proportions, visual refresh only</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+<script>
+  const urls = ['preview-monolith.html', 'preview-aether.html', 'preview-nexus.html'];
+  const btnAll = document.getElementById('btnAll');
+  const btns = [document.getElementById('btn0'), document.getElementById('btn1'), document.getElementById('btn2')];
+  const gridView = document.getElementById('gridView');
+  const focusView = document.getElementById('focusView');
+  const focusFrame = document.getElementById('focusFrame');
+
+  function clearActive() {
+    btnAll.classList.remove('active');
+    btns.forEach(b => b.classList.remove('active'));
+  }
+
+  function showAll() {
+    clearActive();
+    btnAll.classList.add('active');
+    gridView.style.display = 'grid';
+    focusView.classList.remove('visible');
+  }
+
+  function showOne(idx) {
+    clearActive();
+    btns[idx].classList.add('active');
+    gridView.style.display = 'none';
+    focusView.classList.add('visible');
+    focusFrame.src = urls[idx];
+  }
+</script>
+</body>
+</html>

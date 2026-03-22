@@ -1,0 +1,36 @@
+12:27:56.021 [Settings] IPC handlers registered
+
+  ╔═══════════════════════════════════════════════════╗
+  ║  guIDE Web Server                                 ║
+  ║  http://localhost:3200                           ║
+  ║  Tunnel: https://dev.graysoft.dev                 ║
+  ║  Copyright © 2025-2026 Brendan Gray (FileShot)    ║
+  ╚═══════════════════════════════════════════════════╝
+
+[WEB] Initializing services...
+[WEB] Deferred handlers registered in 11ms
+[WEB] Found 14 model(s)
+[WEB] Auto-loading last used model: Qwen3.5-4B-Q8_0
+[WEB] All services ready.
+12:28:01.184 [CUDA mode loaded 0 layers despite 4.0GB VRAM & 30 estimated layers — trying explicit layer count]
+12:28:03.672 [AUTO mode loaded 0 layers despite 4.0GB VRAM & 30 estimated layers — trying explicit layer count]
+[LLM] _computeMaxContext: modelSize=1.04GB, freeRam=5.2GB, kvPerToken=0.5KB, availableForKV=3.2GB, maxFromRam=6704920, result=131072
+[LLM] _computeMaxContextGpu: totalVram=4.00GB, modelGPU=3.13GB, embeddingOverhead=1.04GB, freeForKV=0.00GB, kvKBPerToken=100, result=4096
+[LLM] Partial GPU offload: 30/40 layers on GPU, RAM model portion=1.04GB, ramCtx=131072, vramCtx=4096, targetCtx=4096
+[LLM DIAG] Context creation: mode=30, targetCtx=4096, clampedCtx=4096, trainCtx=262144, modelSizeGB=4.17
+[LLM DIAG] Context created: actualSize=4096, mode=30
+12:28:09.054 [GPU mode 30 context too small (4096), trying next mode]
+[LLM] _computeMaxContext: modelSize=2.61GB, freeRam=7.1GB, kvPerToken=1KB, availableForKV=5.1GB, maxFromRam=5363564, result=131072
+[LLM] _computeMaxContextGpu: totalVram=4.00GB, modelGPU=1.57GB, embeddingOverhead=1.04GB, freeForKV=0.61GB, kvKBPerToken=100, result=6392
+[LLM] Partial GPU offload: 15/40 layers on GPU, RAM model portion=2.61GB, ramCtx=131072, vramCtx=6392, targetCtx=6392
+[LLM DIAG] Context creation: mode=15, targetCtx=6392, clampedCtx=6392, trainCtx=262144, modelSizeGB=4.17
+[LLM DIAG] Context created: actualSize=6400, mode=15
+12:28:12.405 [GPU mode 15 context too small (6400), trying next mode]
+[LLM] _computeMaxContext: modelSize=3.44GB, freeRam=8.5GB, kvPerToken=1KB, availableForKV=6.5GB, maxFromRam=6856720, result=131072
+[LLM] _computeMaxContextGpu: totalVram=4.00GB, modelGPU=0.73GB, embeddingOverhead=1.04GB, freeForKV=1.44GB, kvKBPerToken=100, result=15147
+[LLM] Partial GPU offload: 7/40 layers on GPU, RAM model portion=3.44GB, ramCtx=131072, vramCtx=15147, targetCtx=15147
+[LLM DIAG] Context creation: mode=7, targetCtx=15147, clampedCtx=15147, trainCtx=262144, modelSizeGB=4.17
+[LLM DIAG] Context created: actualSize=15360, mode=7
+12:28:16.922 [Model loaded: Qwen3.5-4B-Q8_0.gguf (qwen/medium, ctx=15360, gpu=7, layers=7)]
+12:28:16.922 [Chat wrapper: JinjaTemplateChatWrapper]
+[WEB] Auto-loaded model: Qwen3.5-4B-Q8_0

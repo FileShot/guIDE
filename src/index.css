@@ -158,6 +158,16 @@
   }
 }
 
+/* ── Chat message inline code styling ── */
+.chat-message-content code:not(pre code) {
+  background: rgba(224, 123, 57, 0.08);
+  color: var(--theme-accent, #e07b39);
+  font-size: 11px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+}
+
 /*
  * ═══════════════════════════════════════════════════════════════════
  *  THEME OVERRIDES — Map hardcoded Tailwind arbitrary color classes

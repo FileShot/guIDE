@@ -334,19 +334,17 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({ cwd, onClose }) =>
   return (
     <div className="h-full flex flex-col" style={{ backgroundColor: 'var(--theme-bg)' }}>
       {/* Tab bar */}
-      <div className="h-[32px] flex items-center flex-shrink-0" style={{ backgroundColor: 'var(--theme-bg-secondary)', borderBottom: '1px solid var(--theme-border)' }}>
+      <div className="h-[28px] flex items-center flex-shrink-0" style={{ backgroundColor: 'var(--theme-bg-secondary)', borderBottom: '1px solid var(--theme-border)' }}>
         {/* Panel tabs */}
         <div className="flex items-center h-full">
           {(['terminal', 'problems', 'output'] as const).map((tab, i) => (
             <React.Fragment key={tab}>
-              {i > 0 && (
-                <span className="text-[11px] select-none pointer-events-none px-0.5" style={{ color: 'var(--theme-foreground-subtle)' }}>/</span>
-              )}
               <button
-                className="px-2.5 h-full text-[11px] uppercase tracking-wider font-medium transition-colors"
+                className="px-2.5 h-full text-[10px] uppercase tracking-wider font-medium transition-colors"
                 style={{
                   color: bottomTab === tab ? 'var(--theme-foreground)' : 'var(--theme-foreground-subtle)',
                   borderBottom: bottomTab === tab ? '2px solid var(--theme-accent)' : '2px solid transparent',
+                  letterSpacing: '0.3px',
                 }}
                 onClick={() => setBottomTab(tab)}
                 onMouseEnter={e => { if (bottomTab !== tab) e.currentTarget.style.color = 'var(--theme-foreground)'; }}

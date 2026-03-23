@@ -38,8 +38,6 @@ interface SettingsState {
   cloudProvider: string;
   cloudApiKey: string;
   cloudModel: string;
-  // Tools
-  disabledTools: string[];
 }
 
 const DEFAULTS: SettingsState = {
@@ -74,26 +72,6 @@ const DEFAULTS: SettingsState = {
   cloudProvider: 'none',
   cloudApiKey: '',
   cloudModel: '',
-  disabledTools: [
-    'delete_file', 'rename_file', 'copy_file', 'create_directory', 'get_file_info',
-    'open_file_in_editor', 'diff_files',
-    'search_in_file', 'replace_in_files',
-    'check_port', 'install_packages',
-    'http_request',
-    'browser_fill_form', 'browser_select_option', 'browser_evaluate',
-    'browser_scroll', 'browser_back', 'browser_press_key', 'browser_hover',
-    'browser_drag', 'browser_screenshot', 'browser_get_content',
-    'browser_get_url', 'browser_get_links', 'browser_tabs',
-    'browser_handle_dialog', 'browser_console_messages', 'browser_file_upload',
-    'browser_resize', 'browser_wait', 'browser_wait_for', 'browser_close',
-    'git_status', 'git_commit', 'git_diff', 'git_log', 'git_branch',
-    'git_stash', 'git_reset',
-    'analyze_error',
-    'undo_edit', 'list_undoable',
-    'list_memories',
-    'write_scratchpad', 'read_scratchpad',
-    'generate_image',
-  ],
 };
 
 const CLOUD_PROVIDERS = [
@@ -624,96 +602,6 @@ export const AdvancedSettingsPanel: React.FC = () => {
           <ToggleField label="Bracket Pair Colorization" value={settings.bracketPairColorization} onChange={v => update('bracketPairColorization', v)} />
           <ToggleField label="Format on Paste" value={settings.formatOnPaste} onChange={v => update('formatOnPaste', v)} />
           <ToggleField label="Format on Type" value={settings.formatOnType} onChange={v => update('formatOnType', v)} />
-        </Section>
-
-        {/* ── Tools ───────────────────────────── */}
-        <Section title="Tools" defaultOpen={false}>
-          <p className="text-[10px] mb-2" style={{ color: 'var(--theme-foreground-muted)' }}>
-            Toggle which tools the AI can use. Disabled tools are hidden from the model. {66 - settings.disabledTools.length}/66 enabled.
-          </p>
-          {(() => {
-            const toolCategories: Record<string, string[]> = {
-              'File Operations': ['read_file', 'write_file', 'edit_file', 'append_to_file', 'delete_file', 'rename_file', 'copy_file', 'list_directory', 'find_files', 'create_directory', 'get_project_structure', 'get_file_info', 'open_file_in_editor', 'diff_files'],
-              'Search': ['grep_search', 'search_in_file', 'search_codebase', 'replace_in_files'],
-              'Terminal': ['run_command', 'check_port', 'install_packages'],
-              'Web': ['web_search', 'fetch_webpage', 'http_request'],
-              'Browser': ['browser_navigate', 'browser_snapshot', 'browser_click', 'browser_type', 'browser_fill_form', 'browser_select_option', 'browser_evaluate', 'browser_scroll', 'browser_back', 'browser_press_key', 'browser_hover', 'browser_drag', 'browser_screenshot', 'browser_get_content', 'browser_get_url', 'browser_get_links', 'browser_tabs', 'browser_handle_dialog', 'browser_console_messages', 'browser_file_upload', 'browser_resize', 'browser_wait', 'browser_wait_for', 'browser_close'],
-              'Git': ['git_status', 'git_commit', 'git_diff', 'git_log', 'git_branch', 'git_stash', 'git_reset'],
-              'Code Analysis': ['analyze_error'],
-              'Undo': ['undo_edit', 'list_undoable'],
-              'Memory': ['save_memory', 'get_memory', 'list_memories'],
-              'Planning': ['write_todos', 'update_todo'],
-              'Scratchpad': ['write_scratchpad', 'read_scratchpad'],
-              'Image Generation': ['generate_image'],
-            };
-            return (
-              <div className="space-y-0.5 max-h-[300px] overflow-auto">
-                {Object.entries(toolCategories).map(([category, tools]) => {
-                  const enabledInCat = tools.filter(t => !settings.disabledTools.includes(t)).length;
-                  const allEnabled = enabledInCat === tools.length;
-                  return (
-                    <details key={category} className="group">
-                      <summary className="flex items-center gap-1.5 py-0.5 cursor-pointer select-none text-[10px] list-none" style={{ color: 'var(--theme-foreground)' }}>
-                        <span style={{ transition: 'transform 0.15s', display: 'inline-block', transform: 'rotate(-90deg)' }} className="group-open:!rotate-0">
-                          <ChevronDown size={10} />
-                        </span>
-                        <span className="flex-1">{category} <span style={{ color: 'var(--theme-foreground-muted)' }}>({enabledInCat}/{tools.length})</span></span>
-                        <button
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            if (allEnabled) {
-                              update('disabledTools', [...new Set([...settings.disabledTools, ...tools])]);
-                            } else {
-                              update('disabledTools', settings.disabledTools.filter(t => !tools.includes(t)));
-                            }
-                          }}
-                          className="text-[9px] px-1.5 py-0 rounded transition-colors"
-                          style={{ color: allEnabled ? 'var(--theme-foreground-muted)' : 'var(--theme-accent)', backgroundColor: 'transparent' }}
-                        >
-                          {allEnabled ? 'Disable all' : 'Enable all'}
-                        </button>
-                      </summary>
-                      <div className="pl-4 pb-1 space-y-0">
-                        {tools.map(toolName => {
-                          const isEnabled = !settings.disabledTools.includes(toolName);
-                          return (
-                            <label key={toolName} className="flex items-center gap-1.5 py-[1px] cursor-pointer text-[10px] rounded px-1 -mx-1" style={{ color: isEnabled ? 'var(--theme-foreground)' : 'var(--theme-foreground-muted)' }}>
-                              <div
-                                onClick={() => {
-                                  const newDisabled = isEnabled
-                                    ? [...settings.disabledTools, toolName]
-                                    : settings.disabledTools.filter(t => t !== toolName);
-                                  update('disabledTools', newDisabled);
-                                }}
-                                className="w-[26px] h-[13px] rounded-full relative transition-colors flex-shrink-0 cursor-pointer"
-                                style={{ backgroundColor: isEnabled ? 'var(--theme-accent)' : 'var(--theme-bg-tertiary, #3c3c3c)' }}
-                              >
-                                <div
-                                  className="w-[9px] h-[9px] rounded-full bg-white absolute top-[2px] transition-all"
-                                  style={{ left: isEnabled ? '15px' : '2px' }}
-                                />
-                              </div>
-                              <span>{toolName}</span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </details>
-                  );
-                })}
-                {settings.disabledTools.length > 0 && (
-                  <button
-                    onClick={() => update('disabledTools', [])}
-                    className="text-[9px] hover:underline mt-1 cursor-pointer"
-                    style={{ color: 'var(--theme-accent)' }}
-                  >
-                    Enable all tools
-                  </button>
-                )}
-              </div>
-            );
-          })()}
         </Section>
 
         {/* Footer spacer */}

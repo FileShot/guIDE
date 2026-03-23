@@ -67,27 +67,7 @@ export function useChatSettings(): ChatSettings & ChatSettingsActions {
   const [ttsEnabled, setTtsEnabled] = useState(false);
   const [autoMode, setAutoMode] = useState(false);
   const [planMode, setPlanMode] = useState(false);
-  const [disabledTools, setDisabledTools] = useState<string[]>([
-    // Non-essential tools disabled by default — users can enable in Settings > Tools
-    'delete_file', 'rename_file', 'copy_file', 'create_directory', 'get_file_info',
-    'open_file_in_editor', 'diff_files',
-    'search_in_file', 'replace_in_files',
-    'check_port', 'install_packages',
-    'http_request',
-    'browser_fill_form', 'browser_select_option', 'browser_evaluate',
-    'browser_scroll', 'browser_back', 'browser_press_key', 'browser_hover',
-    'browser_drag', 'browser_screenshot', 'browser_get_content',
-    'browser_get_url', 'browser_get_links', 'browser_tabs',
-    'browser_handle_dialog', 'browser_console_messages', 'browser_file_upload',
-    'browser_resize', 'browser_wait', 'browser_wait_for', 'browser_close',
-    'git_status', 'git_commit', 'git_diff', 'git_log', 'git_branch',
-    'git_stash', 'git_reset',
-    'analyze_error',
-    'undo_edit', 'list_undoable',
-    'list_memories',
-    'write_scratchpad', 'read_scratchpad',
-    'generate_image',
-  ]);
+  const [disabledTools, setDisabledTools] = useState<string[]>([]);
   const [cloudProvider, setCloudProvider] = useState<string | null>(() => {
     try { return localStorage.getItem('guide-cloud-provider') || null; } catch { return null; }
   });
@@ -214,26 +194,7 @@ export function useChatSettings(): ChatSettings & ChatSettingsActions {
     setReasoningEffort('medium');
     setThinkingBudget(0);
     setMaxIterations(100);
-    setDisabledTools([
-      'delete_file', 'rename_file', 'copy_file', 'create_directory', 'get_file_info',
-      'open_file_in_editor', 'diff_files',
-      'search_in_file', 'replace_in_files',
-      'check_port', 'install_packages',
-      'http_request',
-      'browser_fill_form', 'browser_select_option', 'browser_evaluate',
-      'browser_scroll', 'browser_back', 'browser_press_key', 'browser_hover',
-      'browser_drag', 'browser_screenshot', 'browser_get_content',
-      'browser_get_url', 'browser_get_links', 'browser_tabs',
-      'browser_handle_dialog', 'browser_console_messages', 'browser_file_upload',
-      'browser_resize', 'browser_wait', 'browser_wait_for', 'browser_close',
-      'git_status', 'git_commit', 'git_diff', 'git_log', 'git_branch',
-      'git_stash', 'git_reset',
-      'analyze_error',
-      'undo_edit', 'list_undoable',
-      'list_memories',
-      'write_scratchpad', 'read_scratchpad',
-      'generate_image',
-    ]);
+    setDisabledTools([]);
     (window as any).electronAPI?.llmSetContextSize?.(0);
     (window as any).electronAPI?.llmSetReasoningEffort?.('medium');
   }, []);

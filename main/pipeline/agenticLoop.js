@@ -89,18 +89,16 @@ async function handleLocalChat(ctx, message, context, helpers) {
 
   // Calculate budget splits
   const maxResponseTokens = Math.min(Math.floor(totalCtx * 0.25), 4096);
+  const toolCount = typeof mcpToolServer.getToolDefinitions === 'function' ? mcpToolServer.getToolDefinitions().length : 20;
+  const sysPromptReserve = Math.max(500, toolCount * 55);
+  let maxPromptTokens = Math.max(totalCtx - sysPromptReserve - maxResponseTokens, 256);
 
-  // Get compact tool hint FIRST so we can measure its actual size for budget
+  console.log(`[AgenticLoop] Context budget: total=${totalCtx}, sysReserve=${sysPromptReserve}, maxPrompt=${maxPromptTokens}, maxResponse=${maxResponseTokens}`);
+
+  // Get compact tool hint
   const toolHint = typeof mcpToolServer.getCompactToolHint === 'function'
     ? mcpToolServer.getCompactToolHint('general')
     : '';
-
-  // Compute sysPromptReserve from ACTUAL measured sizes (not per-tool estimate)
-  const toolHintTokens = estimateTokens(toolHint);
-  const sysPromptReserve = Math.max(500, toolHintTokens + 600); // +600 for preamble + project context + buffer
-  let maxPromptTokens = Math.max(totalCtx - sysPromptReserve - maxResponseTokens, 256);
-
-  console.log(`[AgenticLoop] Context budget: total=${totalCtx}, sysReserve=${sysPromptReserve} (toolHint=${toolHintTokens}tok), maxPrompt=${maxPromptTokens}, maxResponse=${maxResponseTokens}`);
 
   // Select preamble based on model size/context
   const contextIsConstrained = totalCtx < 8192;

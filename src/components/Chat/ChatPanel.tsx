@@ -2452,16 +2452,18 @@ ${e.message}`,
         />
       ) : (
       <>
-      {/* Header — justify-between puts title left, buttons right */}
+      {/* Header — spacer pushes buttons to right edge */}
       <div
-        className={`h-[32px] flex items-center justify-between px-2 ${navigator.userAgent.includes('Electron') ? 'pr-[140px]' : 'pr-2'} flex-shrink-0`}
+        className={`h-[32px] flex items-center px-2 ${navigator.userAgent.includes('Electron') ? 'pr-[140px]' : 'pr-2'} flex-shrink-0`}
         style={{ backgroundColor: 'var(--theme-bg-secondary)', borderBottom: '1px solid var(--theme-border)' }}
       >
         <div className="flex items-center flex-shrink-0">
           <Sparkles size={14} className="mr-2 flex-shrink-0" style={{ color: 'var(--theme-accent)' }} />
           <span className="text-[12px] font-semibold whitespace-nowrap brand-font" style={{ color: 'var(--theme-foreground)' }}>gu<span style={{ color: 'var(--theme-accent)' }}>IDE</span></span>
         </div>
-        {/* Action buttons — justify-between places these at right edge */}
+        {/* Spacer — pushes action buttons to the right */}
+        <div className="flex-1 min-w-0" />
+        {/* Action buttons — pinned right by spacer */}
         <div className="flex items-center gap-[1px] flex-shrink-0 chat-header-buttons">
 
           <button
@@ -2835,98 +2837,6 @@ ${e.message}`,
               {licenseMessage}
             </p>
           )}
-
-          {/* Tool Toggles */}
-          <div className="border-t border-[#3c3c3c] my-2" />
-          <p className="text-[10px] text-[#858585] mb-1 uppercase tracking-wider flex items-center gap-1.5">
-            <Settings size={10} /> Tools
-            <span className="ml-auto text-[9px] text-[#585858] normal-case tracking-normal">
-              {66 - disabledTools.length}/{66} enabled
-            </span>
-          </p>
-          <p className="text-[10px] text-[#585858] mb-2">Toggle tools the AI can use. Disabled tools are hidden from the model and rejected at execution.</p>
-          {(() => {
-            const toolCategories: Record<string, string[]> = {
-              'File Operations': ['read_file', 'write_file', 'edit_file', 'append_to_file', 'delete_file', 'rename_file', 'copy_file', 'list_directory', 'find_files', 'create_directory', 'get_project_structure', 'get_file_info', 'open_file_in_editor', 'diff_files'],
-              'Search': ['grep_search', 'search_in_file', 'search_codebase', 'replace_in_files'],
-              'Terminal': ['run_command', 'check_port', 'install_packages'],
-              'Web': ['web_search', 'fetch_webpage', 'http_request'],
-              'Browser': ['browser_navigate', 'browser_snapshot', 'browser_click', 'browser_type', 'browser_fill_form', 'browser_select_option', 'browser_evaluate', 'browser_scroll', 'browser_back', 'browser_press_key', 'browser_hover', 'browser_drag', 'browser_screenshot', 'browser_get_content', 'browser_get_url', 'browser_get_links', 'browser_tabs', 'browser_handle_dialog', 'browser_console_messages', 'browser_file_upload', 'browser_resize', 'browser_wait', 'browser_wait_for', 'browser_close'],
-              'Git': ['git_status', 'git_commit', 'git_diff', 'git_log', 'git_branch', 'git_stash', 'git_reset'],
-              'Code Analysis': ['analyze_error'],
-              'Undo': ['undo_edit', 'list_undoable'],
-              'Memory': ['save_memory', 'get_memory', 'list_memories'],
-              'Planning': ['write_todos', 'update_todo'],
-              'Scratchpad': ['write_scratchpad', 'read_scratchpad'],
-              'Image Generation': ['generate_image'],
-            };
-            const allToolNames = Object.values(toolCategories).flat();
-            return (
-              <div className="space-y-0.5 max-h-[200px] overflow-auto">
-                {Object.entries(toolCategories).map(([category, tools]) => {
-                  const enabledInCat = tools.filter(t => !disabledTools.includes(t)).length;
-                  const allEnabled = enabledInCat === tools.length;
-                  const noneEnabled = enabledInCat === 0;
-                  return (
-                    <details key={category} className="group">
-                      <summary className="flex items-center gap-1.5 py-0.5 cursor-pointer select-none text-[10px] text-[#cccccc] hover:text-white list-none">
-                        <ChevronDown size={10} className="transition-transform group-open:rotate-0 -rotate-90 text-[#585858]" />
-                        <span className="flex-1">{category} <span className="text-[#585858]">({enabledInCat}/{tools.length})</span></span>
-                        <button
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            if (allEnabled) {
-                              setDisabledTools(prev => [...new Set([...prev, ...tools])]);
-                            } else {
-                              setDisabledTools(prev => prev.filter(t => !tools.includes(t)));
-                            }
-                          }}
-                          className="text-[9px] px-1.5 py-0 rounded transition-colors"
-                          style={{
-                            color: allEnabled ? '#585858' : '#3794ff',
-                            backgroundColor: 'transparent',
-                          }}
-                          onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#ffffff10'; }}
-                          onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; }}
-                        >
-                          {allEnabled ? 'Disable all' : 'Enable all'}
-                        </button>
-                      </summary>
-                      <div className="pl-4 pb-1 space-y-0">
-                        {tools.map(toolName => {
-                          const isEnabled = !disabledTools.includes(toolName);
-                          return (
-                            <label key={toolName} className="flex items-center gap-1.5 py-[1px] cursor-pointer text-[10px] hover:bg-[#ffffff06] rounded px-1 -mx-1">
-                              <div
-                                onClick={() => toggleTool(toolName)}
-                                className="w-[26px] h-[13px] rounded-full relative transition-colors flex-shrink-0 cursor-pointer"
-                                style={{ backgroundColor: isEnabled ? '#007acc' : '#3c3c3c' }}
-                              >
-                                <div
-                                  className="w-[9px] h-[9px] rounded-full bg-white absolute top-[2px] transition-all"
-                                  style={{ left: isEnabled ? '15px' : '2px' }}
-                                />
-                              </div>
-                              <span style={{ color: isEnabled ? '#cccccc' : '#585858' }}>{toolName}</span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </details>
-                  );
-                })}
-                {disabledTools.length > 0 && (
-                  <button
-                    onClick={() => setDisabledTools([])}
-                    className="text-[9px] text-[#3794ff] hover:text-[#4da6ff] hover:underline mt-1 cursor-pointer"
-                  >
-                    Enable all tools
-                  </button>
-                )}
-              </div>
-            );
-          })()}
         </div>
       )}
 

@@ -842,16 +842,25 @@ class LLMEngine extends EventEmitter {
         });
         if (retryResult?.lastEvaluation) {
           this.lastEvaluation = retryResult.lastEvaluation;
-          this.chatHistory = this._stripThinkSegments(retryResult.lastEvaluation.cleanHistory) || this.chatHistory;
         }
       } else if (result?.lastEvaluation) {
         this.lastEvaluation = result.lastEvaluation;
-        this.chatHistory = this._stripThinkSegments(result.lastEvaluation.cleanHistory) || this.chatHistory;
       }
+
+      // Preserve canonical chatHistory — do NOT replace with cleanHistory.
+      // node-llama-cpp's cleanHistory reflects the post-context-shift state:
+      // entries shifted out of the KV cache are silently dropped.  Replacing
+      // chatHistory with cleanHistory permanently loses those conversation
+      // entries, causing the model to "forget" earlier messages.  Instead,
+      // strip accumulated think segments in-place and push the model response
+      // explicitly.
+      this.chatHistory = this._stripThinkSegments(this.chatHistory);
 
       if (this._kvReuseCooldown > 0) this._kvReuseCooldown--;
 
       const sanitized = this._sanitizeResponse(fullResponse);
+      // Add model response to canonical chatHistory
+      this.chatHistory.push({ type: 'model', response: [sanitized] });
       // Pass through node-llama-cpp's stopReason when it indicates maxTokens
       let finalStopReason = detectedToolBlock ? 'tool_call' : 'natural';
       if (result?.metadata?.stopReason === 'maxTokens') {
@@ -987,6 +996,9 @@ class LLMEngine extends EventEmitter {
     if (isAbort) {
       const partial = this._sanitizeResponse(fullResponse) || '[Generation cancelled]';
       this.chatHistory.push({ type: 'model', response: [partial] });
+      // Ensure KV cache is invalidated after abort — cancelGeneration() may not
+      // have run yet if the abort was triggered by timeout or internal logic
+      this.lastEvaluation = null;
       return {
         text: partial,
         rawText: fullResponse,
@@ -1305,6 +1317,11 @@ class LLMEngine extends EventEmitter {
       this.abortController.abort();
       this.abortController = null;
     }
+    // Clear KV cache state — the aborted generation leaves the sequence in an
+    // indeterminate state.  Reusing that stale lastEvaluation on the next turn
+    // causes context corruption → degenerate single-char / emoji output.
+    this.lastEvaluation = null;
+    this._kvReuseCooldown = KV_REUSE_COOLDOWN_TURNS;
   }
 
   // ─── Conversation Summary ───

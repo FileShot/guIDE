@@ -337,3 +337,115 @@ Phase 3 compaction in `contextManager.js` runs "aggressive" compression on tool 
 
 ### Regarding D08 (Code Blocks Default Collapsed)
 Confirmed from [`ChatWidgets.tsx:465`]: `useState(!!isStreaming)` means streaming=true → expanded=true. The fix is one line: change to `useState(false)`. This is the simplest fix in the entire list and should be done immediately.
+
+---
+
+## SESSION 6 WEB TESTING DEFECTS (2026-03-22)
+
+### D27 — Tool Call Badge Shows [FAIL] But Operation Succeeded [AGENT] [P2]
+**Observed (Session 6 Turn 3):** The `write_file` tool badge displayed `[FAIL]` in red, but inside the expanded details, it showed `write_file: hello.py [OK]` and the file was actually created correctly in the filesystem.
+
+**Root cause to investigate:** The badge rendering logic is checking a different status flag than the actual execution result. The tool executed successfully (file created, content correct) but the UI badge displays failure.
+
+**Files to investigate:**
+- `src/components/Chat/ChatWidgets.tsx` — tool badge status rendering
+- The `status` field vs `result.success` field in tool call state
+
+---
+
+### D28 — Same Tool Call Appears Twice in Response (write_file Duplication) [AGENT] [P1]
+**Observed (Session 6 Turn 3):** The `write_file` tool call for `hello.py` appeared TWICE in the assistant's response bubble, both showing the same content (`print('Hello World')`). The model called write_file once, but the UI rendered two identical tool cards.
+
+**Root cause to investigate:** Possible race condition in tool call state accumulation. The same tool call is being added to the render array twice, possibly once during streaming and once during completion.
+
+**Files to investigate:**
+- `src/components/Chat/ChatPanel.tsx` — tool card rendering in streaming bubble
+- State updates that may double-add the same tool result
+
+---
+
+### D29 — Markdown Table Rows Render as Raw Pipe Syntax [AGENT] [P2]
+**Observed (Session 6 Turn 2):** In the response comparing Python lists vs tuples, markdown table content rendered correctly for some rows but others appeared as raw syntax: `| Performance Slightly slower slightly faster`
+
+The markdown parser is parsing SOME table rows correctly (rendered as actual `<table>` elements) but missing others which display as literal pipe characters.
+
+**Root cause to investigate:** The markdown-to-HTML conversion in `chatContentParser.ts` is inconsistent with table parsing. Possible causes: malformed table input from model, or table rows without proper header/delimiter rows.
+
+**Files to investigate:**
+- `src/utils/chatContentParser.ts` — markdown parsing functions
+- Markdown table syntax validation
+
+---
+
+### D30 — read_file Tool Called With Empty Parameters ({}) [AGENT] [P0]
+**Observed (Session 6 Session 2 Turn 1):** Model called `read_file({})` with an empty object — no `filePath` parameter provided. The log showed `Tool: read_file({})` multiple times. The model then hallucinated that files don't exist, claiming "File not found" when the actual error was "Missing required parameter: filePath".
+
+**Root cause:** The model is not inferring the file path from context. When given a relative filename like "README.md", the model should either:
+1. Construct the full path from the project_path in context
+2. Call the tool with a relative path that the tool resolves
+
+Neither is happening — the model generates an empty params object.
+
+**System prompt gap:** The system prompt does not explicitly tell the model how to derive file paths from the project context. The model has project_path available but doesn't combine it with the filename to build a valid filePath argument.
+
+**Files to fix:**
+- `main/constants.js` — both preambles need clearer instruction on constructing tool call arguments from context
+- `main/mcpToolServer.js` — read_file tool description could include example JSON like `{"filePath": "<project_path>/filename"}`
+
+---
+
+### D31 — Model Hallucinates Bug on Nonexistent Line Number [AGENT] [P1]
+**Observed (Session 6 Session 2 Turn 2):** When asked to check server.js for syntax errors, the model claimed: "On line 104, the code references `deletedTodos` which was never defined." However, server.js only has 101 lines — line 104 does not exist.
+
+**Root cause:** The model may be confabulating from general JavaScript patterns it's seen, or it may have read partial content and extrapolated. The model should only report issues it can directly cite from the actual file content.
+
+**System prompt consideration:** Add instruction: "Only report bugs or issues you can cite by exact line number and quote from the actual file content."
+
+---
+
+### D32 — Tool Call Deduplication Returns Cached Placeholder Instead of Result [AGENT] [P2]
+**Observed (Session 6 Session 2 Turn 1):** Deduped read_file calls returned `"(Previously executed in iteration 1. Result: OK)"` as the result content instead of the actual file content. If the model needs to re-use the file content, it gets a placeholder message instead.
+
+**Root cause:** `agenticLoop.js` dedup guard returns a summary string rather than the cached actual result. For read_file, the result should be the file content, but the dedup returns a description of the cached state.
+
+**Files to fix:**
+- `main/pipeline/agenticLoop.js` — dedup cache should store and return the actual result, not a placeholder message
+
+---
+
+## UPDATED SUMMARY TABLE (Including Session 6 Defects)
+
+| ID | Severity | Status | Source | Title |
+|----|----------|--------|--------|-------|
+| D01 | P0 | OPEN | USER | Code blocks disappear after response finalizes |
+| D02 | P1 | OPEN | USER | Tool chips render out of chronological order |
+| D03 | P0 | OPEN | USER | Tokens generated but not live-streamed |
+| D04 | P1 | OPEN | USER | Single web search per response (multi-search ignored) |
+| D05 | P1 | OPEN | USER | Model forgets context after ~3 messages |
+| D06 | P0 | OPEN | USER | Model responds with emoji only |
+| D07 | P0 | OPEN | USER | Code generation stops at line 7, mid-generation cutoff |
+| D08 | P2 | OPEN | USER | Code blocks expanded by default (should be collapsed) |
+| D09 | P1 | OPEN | USER | Cancellation replaces entire response with error |
+| D10 | P1 | OPEN | AGENT | write_todos creates duplicates across rotations |
+| D11 | P1 | OPEN | AGENT | write_file called without content param |
+| D12 | P1 | OPEN | AGENT | read_file called with empty params post-rotation |
+| D13 | P2 | OPEN | AGENT | Dedup guard fires after 3rd call, not 2nd |
+| D14 | P0 | OPEN | AGENT | Context rotation spiral — infinite loop on simple task |
+| D15 | P1 | OPEN | AGENT | Model re-reads and re-writes files it already created |
+| D16 | P3 | OPEN | USER | "Model loaded" message — confusing to user |
+| D17 | P1 | OPEN | USER | Context usage increases rapidly on short messages |
+| D18 | P1 | OPEN | AGENT | Todo widget accumulates duplicate items |
+| D19 | P2 | OPEN | AGENT | Stale "Creating X..." spinner after write succeeds |
+| D20 | P2 | OPEN | AGENT | Non-write tool chips show raw JSON result |
+| D21 | P2 | OPEN | AGENT | Dedup circumvented by slight arg variation |
+| D22 | P1 | OPEN | AGENT | Post-rotation model re-reads all files |
+| D23 | P1 | OPEN | AGENT | Seamless continuation not observed in testing |
+| D24 | P0 | OPEN | AGENT | Model doesn't call finish_task when done |
+| D25 | P1 | OPEN | USER | Multi-step web searches — only first executed |
+| D26 | P1 | OPEN | USER | Context exhausted despite low percentage shown |
+| D27 | P2 | OPEN | AGENT | Tool badge shows [FAIL] but operation succeeded |
+| D28 | P1 | OPEN | AGENT | Same tool call appears twice in response |
+| D29 | P2 | OPEN | AGENT | Markdown table rows render as raw pipe syntax |
+| D30 | P0 | OPEN | AGENT | read_file called with empty params {} |
+| D31 | P1 | OPEN | AGENT | Model hallucinates bug on nonexistent line |
+| D32 | P2 | OPEN | AGENT | Dedup returns placeholder instead of actual result |

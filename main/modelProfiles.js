@@ -97,6 +97,11 @@ const FAMILY_PROFILES = {
       context: { effectiveContextSize: 16384 },
       prompt: { style: 'full' },
       generation: { maxToolsPerTurn: 15 },
+      // FIX: qwen.base sets thinkTokens.mode='none' with no _thinkBudgetWhenActive.
+      // Without this field the /qwen3/ filename override in _getModelSpecificParams
+      // has nothing to set, so thoughtTokenBudget stays 0 and node-llama-cpp
+      // disables thinking entirely — the thinking dropdown never appears in the UI.
+      thinkTokens: { mode: 'none', budget: 0, _thinkBudgetWhenActive: 2048 },
     },
     large: {
       context: { effectiveContextSize: 32768, maxResponseTokens: 8192 },

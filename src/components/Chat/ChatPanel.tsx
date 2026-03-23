@@ -56,6 +56,12 @@ interface AttachedImage {
 
 type CheckpointData = { turnId: string; timestamp: number; userMessage: string; files: { filePath: string; fileName: string; isNew: boolean }[] };
 
+// S7-9A: Pattern matching text strongly indicative of code (not prose).
+// Used by both renderContentParts and renderStreamingContent to detect false
+// fence closures from inner triple-backtick sequences (template literals,
+// continuation artifacts from seamless continuation/rotation).
+const STRONG_CODE_RE = /^(?:\s{2,}\S|\s*(?:\/\/|\/\*|\*\/)|\s*(?:import|export|from|class|function|const|let|var|return|if|else|for|while|do|switch|case|break|continue|try|catch|finally|throw|new|this|async|await|def|elif|except|with|yield|super|extends|implements)\b|\s*[})\];]|\s*\.[a-zA-Z_$]|\s*[`"']|\s*@[a-zA-Z]|\s*(?:=>|->)|\s*<[a-zA-Z/!]|\s*[a-zA-Z_$][a-zA-Z0-9_$.]*\s*[({\[:=])/;
+
 const CheckpointDivider: React.FC<{
   checkpoint: CheckpointData;
   isRestoring: boolean;
@@ -95,13 +101,15 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [pendingModelName, setPendingModelName] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
-  const [executingTools, setExecutingTools] = useState<Array<{tool: string; params: any}>>([]);
-  const [completedStreamingTools, setCompletedStreamingTools] = useState<Array<{tool: string; params: any}>>([]);
+  const [executingTools, setExecutingTools] = useState<Array<{tool: string; params: any; textPosition?: number}>>([]);
+  const [completedStreamingTools, setCompletedStreamingTools] = useState<Array<{tool: string; params: any; textPosition?: number}>>([]);
   // Ref so IPC callbacks (closed over at mount) can always read the latest executing list
-  const executingToolsRef = useRef<Array<{tool: string; params: any}>>([]);
+  const executingToolsRef = useRef<Array<{tool: string; params: any; textPosition?: number}>>([]);
   // Live tool-generation streaming bubbles (shown while model is writing tool call JSON)
-  const [generatingToolCalls, setGeneratingToolCalls] = useState<Array<{callIndex: number; functionName: string; paramsText: string; lineCount?: number}>>([]);
-  const generatingToolCallsRef = useRef<Array<{callIndex: number; functionName: string; paramsText: string; lineCount?: number}>>([]);
+  const [generatingToolCalls, setGeneratingToolCalls] = useState<Array<{callIndex: number; functionName: string; paramsText: string; lineCount?: number; textPosition?: number}>>([]);
+  const generatingToolCallsRef = useRef<Array<{callIndex: number; functionName: string; paramsText: string; lineCount?: number; textPosition?: number}>>([]);
+  // D02: Track text positions where each tool call was detected for inline rendering
+  const toolTextPositionsRef = useRef<number[]>([]);
   const [agenticProgress, setAgenticProgress] = useState<{ iteration: number; maxIterations: number } | null>(null);
   const [agenticPhases, setAgenticPhases] = useState<Array<{ phase: string; label: string; status: 'running' | 'done' }>>([]);
   // Fix 30D: File content accumulator — tracks completed file content per filePath
@@ -156,9 +164,9 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   const { temperature, maxTokens, contextSize, topP, topK, repeatPenalty, seed,
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     reasoningEffort: _reasoningEffort, thinkingBudget: _thinkingBudget, maxIterations, gpuPreference: _gpuPreference, useWebSearch, useRAG: _useRAG,
-    ttsEnabled, autoMode, planMode, cloudProvider, cloudModel,
+    ttsEnabled, autoMode, planMode, cloudProvider, cloudModel, disabledTools,
     setUseWebSearch: _setUseWebSearch, setUseRAG: _setUseRAG, setTtsEnabled, setAutoMode, setPlanMode,
-    setCloudProvider, setCloudModel,
+    setCloudProvider, setCloudModel, toggleTool, setDisabledTools,
   } = settings;
 
   const streaming = useChatStreaming();
@@ -427,10 +435,12 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     let executingTimeout: ReturnType<typeof setTimeout> | null = null;
 
     const cleanupExecuting = api.onToolExecuting?.((data: { tool: string; params: any; result?: any }) => {
+      // D02: Carry text position from generating tool call to executing tool
+      const textPosition = generatingToolCallsRef.current[0]?.textPosition ?? (streamBufferRef.current?.length ?? 0);
       // Tool is now executing — clear the generating-phase bubble
       generatingToolCallsRef.current = [];
       setGeneratingToolCalls([]);
-      const updated = [...executingToolsRef.current, { tool: data.tool, params: data.params, result: data.result }];
+      const updated = [...executingToolsRef.current, { tool: data.tool, params: data.params, result: data.result, textPosition }];
       executingToolsRef.current = updated;
       setExecutingTools(updated);
       // Safety timeout: clear executing status after 60s in case mcp-tool-results is missed
@@ -513,10 +523,16 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     });
 
     const cleanupToolGenerating = api.onLlmToolGenerating?.((data: { callIndex: number; functionName: string; paramsText: string; done: boolean; lineCount?: number }) => {
+      // D02: Record text position when a NEW tool call is first detected
+      const isNewTool = generatingToolCallsRef.current.length === 0 && !data.done;
+      const textPosition = isNewTool ? (streamBufferRef.current?.length ?? 0) : (generatingToolCallsRef.current[0]?.textPosition ?? 0);
+      if (isNewTool) {
+        toolTextPositionsRef.current.push(textPosition);
+      }
       // Update or remove the entry for this callIndex
       const filtered = generatingToolCallsRef.current.filter(t => t.callIndex !== data.callIndex);
       if (!data.done) {
-        filtered.push({ callIndex: data.callIndex, functionName: data.functionName, paramsText: data.paramsText, lineCount: data.lineCount });
+        filtered.push({ callIndex: data.callIndex, functionName: data.functionName, paramsText: data.paramsText, lineCount: data.lineCount, textPosition });
       }
       generatingToolCallsRef.current = filtered;
       setGeneratingToolCalls([...filtered]);
@@ -872,6 +888,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     setThinkingSegments([]);
     setCompletedStreamingTools([]);
     fileContentAccRef.current.clear(); // Fix 30D: Clear accumulator on new generation
+    toolTextPositionsRef.current = []; // D02: Clear tool positions for new message
     generatingToolCallsRef.current = [];
     setGeneratingToolCalls([]);
     executingToolsRef.current = [];
@@ -885,6 +902,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
         params: { temperature, maxTokens, topP, topK, repeatPenalty, seed },
         maxIterations,
         autoMode,
+        disabledTools: disabledTools.length > 0 ? disabledTools : undefined,
       };
 
       // Cloud provider selection (skip if Auto Mode — backend will decide)
@@ -1021,7 +1039,18 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
               // silently appends a summary that was never streamed to the renderer.
               return bufferText || backendText || (hasThinking ? '' : 'No response generated.');
             })()
-          : `Error: ${result?.error || 'Unknown error'}`,
+          : (() => {
+              // D09: On cancellation, preserve partial response instead of discarding it.
+              // The backend returns result.text with the content generated before cancellation.
+              // The streaming buffer also has what the user saw during generation.
+              if (result?.error === 'Request cancelled') {
+                const partialBuffer = streamBufferRef.current.trim();
+                const partialBackend = result?.text?.trim() ?? '';
+                const partial = partialBuffer || partialBackend;
+                if (partial) return partial + '\n\n*[Generation stopped]*';
+              }
+              return `Error: ${result?.error || 'Unknown error'}`;
+            })(),
         timestamp: Date.now(),
         model: result.model,
         webSearchUsed: useWebSearch,
@@ -1631,11 +1660,130 @@ ${e.message}`,
 
   // Render content with tool terminal and code block detection
   // Merges tool calls with their results into single collapsible blocks
+  // Depth-counter code block extraction for committed messages.
+  // Replaces the broken regex split (/(```[\s\S]*?```)/g) which false-closed on
+  // internal triple-backtick sequences (template literals, JSDoc, nested markdown).
+  // Handles both bare (```) and tagged (```html) openers. Bare ``` at depth>0 closes.
+  const extractCodeBlocks = (src: string): Array<{start: number; end: number; matchStr: string}> => {
+    const result: Array<{start: number; end: number; matchStr: string}> = [];
+    const lines = src.split('\n');
+    let pos = 0;
+    let depth = 0;
+    let blockStartPos = -1;
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const lineEnd = pos + line.length;
+      if (/^```/.test(line)) {
+        const isBareClose = /^```\s*$/.test(line);
+        if (depth === 0) {
+          blockStartPos = pos;
+          depth = 1;
+        } else if (isBareClose) {
+          depth--;
+          if (depth === 0 && blockStartPos !== -1) {
+            const blockEnd = lineEnd + (i < lines.length - 1 ? 1 : 0);
+            result.push({ start: blockStartPos, end: blockEnd, matchStr: src.substring(blockStartPos, blockEnd) });
+            blockStartPos = -1;
+          }
+        } else {
+          depth++;
+        }
+      }
+      pos = lineEnd + 1;
+    }
+    return result;
+  };
+
   const renderContentParts = (content: string, suppressTools = false, expandBlocks = false) => {
     // Pre-extract tool results for merging
     const toolResultMap = extractToolResults(content);
 
-    const parts = content.split(/(```[\s\S]*?```)/g);
+    // Build alternating [text, codeBlock, text, codeBlock, ...] array using depth-counter
+    const codeBlocks = extractCodeBlocks(content);
+    const parts: string[] = [];
+    let lastEnd = 0;
+    for (const block of codeBlocks) {
+      if (block.start > lastEnd) {
+        parts.push(content.substring(lastEnd, block.start));
+      }
+      parts.push(block.matchStr);
+      lastEnd = block.end;
+    }
+    if (lastEnd < content.length) {
+      parts.push(content.substring(lastEnd));
+    }
+    // If no blocks found, entire content is one text part
+    if (parts.length === 0) parts.push(content);
+
+    // ── S7-9A: False-close guard for committed messages ────────────────
+    // Mirrors the RESIDUAL FALSE-CLOSE GUARD in renderStreamingContent.
+    // During seamless continuation/rotation, the model may output inner fence
+    // markers that extractCodeBlocks interprets as separate complete blocks.
+    // When text after a complete block still looks like code, merge all blocks
+    // and interstitial text into a single CodeBlock to match streaming behavior.
+    if (codeBlocks.length > 0) {
+      let mergeTriggered = false;
+      for (const block of codeBlocks) {
+        const afterBlock = content.substring(block.end);
+        const firstLine = afterBlock.split('\n').find(l => l.trim().length > 0);
+        if (firstLine) {
+          const trimmed = firstLine.trim();
+          if (STRONG_CODE_RE.test(trimmed) && !/^\s*```/.test(trimmed)) {
+            mergeTriggered = true;
+            break;
+          }
+        }
+      }
+      if (mergeTriggered) {
+        const firstBlock = codeBlocks[0];
+        const beforeCode = content.substring(0, firstBlock.start);
+        const langMatch = firstBlock.matchStr.match(/^```(\S*)/);
+        const lang = langMatch ? langMatch[1] : '';
+        // Surgically merge: extract inner code from each block, join with interstitial + tail
+        const segments: string[] = [];
+        for (let bi = 0; bi < codeBlocks.length; bi++) {
+          const block = codeBlocks[bi];
+          const inner = block.matchStr.replace(/^```\S*\n?/, '').replace(/\n?```\s*$/, '');
+          if (inner) segments.push(inner);
+          if (bi < codeBlocks.length - 1) {
+            const inter = content.substring(block.end, codeBlocks[bi + 1].start);
+            if (inter.trim()) segments.push(inter.trim());
+          }
+        }
+        const lastBlock = codeBlocks[codeBlocks.length - 1];
+        let tail = content.substring(lastBlock.end);
+        if (tail.trim()) {
+          tail = tail.replace(/^\s*```\S*\s*\n/, '');
+          if (tail.trim()) segments.push(tail.replace(/\n+$/, ''));
+        }
+        const mergedCode = segments.join('\n');
+        parts.length = 0;
+        if (beforeCode.trim()) parts.push(beforeCode);
+        parts.push(`\`\`\`${lang}\n${mergedCode}\n\`\`\``);
+      }
+    } else if (content.includes('```')) {
+      // No complete blocks but ``` markers exist — check for unclosed opening fence
+      // (common after seamless continuation where model opens ```html but never closes)
+      const openerMatch = content.match(/^(```\S+)/m);
+      if (openerMatch) {
+        const openerIdx = content.indexOf(openerMatch[0]);
+        const fenceContent = content.substring(openerIdx);
+        const firstNl = fenceContent.indexOf('\n');
+        if (firstNl >= 0 && fenceContent.length - firstNl > 100) {
+          const langMatch = fenceContent.match(/^```(\S+)/);
+          const lang = langMatch ? langMatch[1] : '';
+          const beforeFence = content.substring(0, openerIdx);
+          const codeBody = fenceContent.substring(firstNl + 1)
+            .replace(/^```\S+\s*$/gm, '')
+            .replace(/^```\s*$/gm, '')
+            .replace(/\n+$/, '\n');
+          parts.length = 0;
+          if (beforeFence.trim()) parts.push(beforeFence);
+          parts.push(`\`\`\`${lang}\n${codeBody}\n\`\`\``);
+        }
+      }
+    }
+
     const elements: React.ReactNode[] = [];
     let pendingWriteFP: string | null = null; // filePath from write_file json header with no content — reconnects to next code block
     let pendingWriteLang = ''; // mapped language for the pending filePath extension
@@ -1643,7 +1791,7 @@ ${e.message}`,
     for (let i = 0; i < parts.length; i++) {
       const part = parts[i];
 
-      if (part.startsWith('```') && part.endsWith('```')) {
+      if (part.startsWith('```') && part.endsWith('```') && part.length > 6) {
         const firstLine = part.indexOf('\n');
         const lang = part.substring(3, firstLine > 0 ? firstLine : 3).trim();
         const code = firstLine > 0 ? part.substring(firstLine + 1, part.length - 3) : part.substring(3, part.length - 3);
@@ -1872,10 +2020,43 @@ ${e.message}`,
   };
 
   const renderMessage = (msg: ChatMessage, expandBlocks = false): React.ReactNode[] => {
-    // Tools render inline chronologically within content via renderContentParts.
-    // suppressTools=false: tool call JSON blocks in content are rendered inline
-    // where they appear, merged with results from extractToolResults().
-    return renderContentParts(msg.content, false, expandBlocks);
+    // Render content text (prose, code blocks, any inline tool call JSON still in content)
+    const elements = renderContentParts(msg.content, false, expandBlocks);
+
+    // D01: Render tool results from msg.toolsUsed — these survive finalization
+    // even when tool call JSON is stripped from msg.content by parseResponse().
+    // Without this, code blocks from write_file disappear after streaming ends.
+    if (msg.toolsUsed && msg.toolsUsed.length > 0) {
+      for (let ti = 0; ti < msg.toolsUsed.length; ti++) {
+        const toolUsed = msg.toolsUsed[ti];
+        const isWriteTool = ['write_file', 'create_file', 'edit_file', 'append_to_file'].includes(toolUsed.tool);
+        const writeContent = isWriteTool ? toolUsed.params?.content as string | undefined : undefined;
+        const writeFilePath = (toolUsed.params?.filePath as string || '');
+        const writeExt = writeFilePath.includes('.') ? writeFilePath.split('.').pop()?.toLowerCase() || '' : '';
+        const langMap: Record<string, string> = { ts: 'typescript', tsx: 'tsx', js: 'javascript', jsx: 'jsx', py: 'python', rs: 'rust', go: 'go', java: 'java', cs: 'csharp', cpp: 'cpp', c: 'c', html: 'html', css: 'css', json: 'json', yaml: 'yaml', yml: 'yaml', md: 'markdown', sh: 'bash', bat: 'batch', txt: 'text', xml: 'xml', sql: 'sql' };
+        const writeLang = langMap[writeExt] || writeExt || 'code';
+        const resultOk = toolUsed.result?.success !== false;
+        if (isWriteTool && writeContent) {
+          elements.push(
+            <div key={`toolUsed-${ti}`} className="my-1.5">
+              <div className="flex items-center gap-1.5 mb-1 px-0.5">
+                {resultOk
+                  ? <Check size={11} className="text-[#89d185] flex-shrink-0" />
+                  : <X size={11} className="text-[#f14c4c] flex-shrink-0" />}
+                <span className="text-[11px] text-[#d4d4d4] font-medium">{getToolLabel(toolUsed, resultOk ? 'ok' : 'fail')}</span>
+              </div>
+              <CodeBlock code={writeContent} language={writeLang} onApply={() => onApplyCode(currentFile, writeContent)} isToolCall={true} />
+            </div>
+          );
+        } else {
+          elements.push(
+            <InlineToolCall key={`toolUsed-${ti}`} label={getToolLabel(toolUsed, resultOk ? 'ok' : 'fail')} icon={resultOk ? '\u2713' : '\u2717'} />
+          );
+        }
+      }
+    }
+
+    return elements;
   };
 
   // For streaming: split on complete code blocks, render completed ones with full styling,
@@ -1891,10 +2072,6 @@ ${e.message}`,
     const toolResultMap = extractToolResults(text);
 
     // Find all complete code blocks (``` ... ```)
-    // Pattern that matches text strongly indicative of code (not prose).
-    // Used to detect false fence closes from triple backticks inside generated code
-    // (e.g., template literals containing markdown examples).
-    const STRONG_CODE_RE = /^(?:\s{2,}\S|\s*(?:\/\/|\/\*|\*\/)|\s*(?:import|export|from|class|function|const|let|var|return|if|else|for|while|do|switch|case|break|continue|try|catch|finally|throw|new|this|async|await|def|elif|except|with|yield|super|extends|implements)\b|\s*[})\];]|\s*\.[a-zA-Z_$]|\s*[`"']|\s*@[a-zA-Z]|\s*(?:=>|->)|\s*[a-zA-Z_$][a-zA-Z0-9_$.]*\s*[({\[:=])/;
 
     // Fix 23: Depth-counter-based block detection.
     // Replaces the regex approach (Fix 21) which still false-closed on column-0 inner fences
@@ -2658,6 +2835,98 @@ ${e.message}`,
               {licenseMessage}
             </p>
           )}
+
+          {/* Tool Toggles */}
+          <div className="border-t border-[#3c3c3c] my-2" />
+          <p className="text-[10px] text-[#858585] mb-1 uppercase tracking-wider flex items-center gap-1.5">
+            <Settings size={10} /> Tools
+            <span className="ml-auto text-[9px] text-[#585858] normal-case tracking-normal">
+              {66 - disabledTools.length}/{66} enabled
+            </span>
+          </p>
+          <p className="text-[10px] text-[#585858] mb-2">Toggle tools the AI can use. Disabled tools are hidden from the model and rejected at execution.</p>
+          {(() => {
+            const toolCategories: Record<string, string[]> = {
+              'File Operations': ['read_file', 'write_file', 'edit_file', 'append_to_file', 'delete_file', 'rename_file', 'copy_file', 'list_directory', 'find_files', 'create_directory', 'get_project_structure', 'get_file_info', 'open_file_in_editor', 'diff_files'],
+              'Search': ['grep_search', 'search_in_file', 'search_codebase', 'replace_in_files'],
+              'Terminal': ['run_command', 'check_port', 'install_packages'],
+              'Web': ['web_search', 'fetch_webpage', 'http_request'],
+              'Browser': ['browser_navigate', 'browser_snapshot', 'browser_click', 'browser_type', 'browser_fill_form', 'browser_select_option', 'browser_evaluate', 'browser_scroll', 'browser_back', 'browser_press_key', 'browser_hover', 'browser_drag', 'browser_screenshot', 'browser_get_content', 'browser_get_url', 'browser_get_links', 'browser_tabs', 'browser_handle_dialog', 'browser_console_messages', 'browser_file_upload', 'browser_resize', 'browser_wait', 'browser_wait_for', 'browser_close'],
+              'Git': ['git_status', 'git_commit', 'git_diff', 'git_log', 'git_branch', 'git_stash', 'git_reset'],
+              'Code Analysis': ['analyze_error'],
+              'Undo': ['undo_edit', 'list_undoable'],
+              'Memory': ['save_memory', 'get_memory', 'list_memories'],
+              'Planning': ['write_todos', 'update_todo'],
+              'Scratchpad': ['write_scratchpad', 'read_scratchpad'],
+              'Image Generation': ['generate_image'],
+            };
+            const allToolNames = Object.values(toolCategories).flat();
+            return (
+              <div className="space-y-0.5 max-h-[200px] overflow-auto">
+                {Object.entries(toolCategories).map(([category, tools]) => {
+                  const enabledInCat = tools.filter(t => !disabledTools.includes(t)).length;
+                  const allEnabled = enabledInCat === tools.length;
+                  const noneEnabled = enabledInCat === 0;
+                  return (
+                    <details key={category} className="group">
+                      <summary className="flex items-center gap-1.5 py-0.5 cursor-pointer select-none text-[10px] text-[#cccccc] hover:text-white list-none">
+                        <ChevronDown size={10} className="transition-transform group-open:rotate-0 -rotate-90 text-[#585858]" />
+                        <span className="flex-1">{category} <span className="text-[#585858]">({enabledInCat}/{tools.length})</span></span>
+                        <button
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (allEnabled) {
+                              setDisabledTools(prev => [...new Set([...prev, ...tools])]);
+                            } else {
+                              setDisabledTools(prev => prev.filter(t => !tools.includes(t)));
+                            }
+                          }}
+                          className="text-[9px] px-1.5 py-0 rounded transition-colors"
+                          style={{
+                            color: allEnabled ? '#585858' : '#3794ff',
+                            backgroundColor: 'transparent',
+                          }}
+                          onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#ffffff10'; }}
+                          onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+                        >
+                          {allEnabled ? 'Disable all' : 'Enable all'}
+                        </button>
+                      </summary>
+                      <div className="pl-4 pb-1 space-y-0">
+                        {tools.map(toolName => {
+                          const isEnabled = !disabledTools.includes(toolName);
+                          return (
+                            <label key={toolName} className="flex items-center gap-1.5 py-[1px] cursor-pointer text-[10px] hover:bg-[#ffffff06] rounded px-1 -mx-1">
+                              <div
+                                onClick={() => toggleTool(toolName)}
+                                className="w-[26px] h-[13px] rounded-full relative transition-colors flex-shrink-0 cursor-pointer"
+                                style={{ backgroundColor: isEnabled ? '#007acc' : '#3c3c3c' }}
+                              >
+                                <div
+                                  className="w-[9px] h-[9px] rounded-full bg-white absolute top-[2px] transition-all"
+                                  style={{ left: isEnabled ? '15px' : '2px' }}
+                                />
+                              </div>
+                              <span style={{ color: isEnabled ? '#cccccc' : '#585858' }}>{toolName}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </details>
+                  );
+                })}
+                {disabledTools.length > 0 && (
+                  <button
+                    onClick={() => setDisabledTools([])}
+                    className="text-[9px] text-[#3794ff] hover:text-[#4da6ff] hover:underline mt-1 cursor-pointer"
+                  >
+                    Enable all tools
+                  </button>
+                )}
+              </div>
+            );
+          })()}
         </div>
       )}
 
@@ -2836,35 +3105,271 @@ ${e.message}`,
                       const combined = segs.join('\n\n');
                       return <ThinkingBlock text={combined} isLive={true} segmentCount={segs.length} />;
                     })()}
-                    {streamingText ? (
-                      <div className="space-y-1">{renderStreamingContent(streamingText)}</div>
-                    ) : (generatingToolCalls.length > 0 || executingTools.length > 0 || completedStreamingTools.length > 0) ? (
-                      null
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <Loader2 size={14} className="animate-spin" style={{ color: 'var(--theme-accent)' }} />
-                        <span style={{ color: 'var(--theme-foreground-muted)' }}>
-                          {generationStuck ? 'Generation may be stuck...' : thinkingSegments.some(s => s.trim()) ? 'Reasoning...' : 'Waiting for response...'}
-                        </span>
-                        {generationStuck && (
-                          <button
-                            onClick={async () => {
-                              await window.electronAPI?.llmCancel?.();
-                              setIsGenerating(false);
-                              setStreamingText('');
-                              setThinkingSegments([]);
-                              setAgenticProgress(null);
-                              setAgenticPhases([]);
-                              setGenerationStuck(false);
-                            }}
-                            className="ml-2 px-2.5 py-1 rounded-md text-[10px] font-medium transition-all"
-                            style={{ backgroundColor: 'color-mix(in srgb, #f44747 15%, transparent)', color: '#f44747', border: '1px solid color-mix(in srgb, #f44747 30%, transparent)' }}
-                          >
-                            Cancel
-                          </button>
-                        )}
-                      </div>
-                    )}
+                    {(() => {
+                      const hasTools = generatingToolCalls.length > 0 || completedStreamingTools.length > 0 || executingTools.length > 0;
+
+                      // No text and no tools — show loading spinner
+                      if (!streamingText && !hasTools) {
+                        return (
+                          <div className="flex items-center gap-2">
+                            <Loader2 size={14} className="animate-spin" style={{ color: 'var(--theme-accent)' }} />
+                            <span style={{ color: 'var(--theme-foreground-muted)' }}>
+                              {generationStuck ? 'Generation may be stuck...' : thinkingSegments.some(s => s.trim()) ? 'Reasoning...' : 'Waiting for response...'}
+                            </span>
+                            {generationStuck && (
+                              <button
+                                onClick={async () => {
+                                  await window.electronAPI?.llmCancel?.();
+                                  setIsGenerating(false);
+                                  setStreamingText('');
+                                  setThinkingSegments([]);
+                                  setAgenticProgress(null);
+                                  setAgenticPhases([]);
+                                  setGenerationStuck(false);
+                                }}
+                                className="ml-2 px-2.5 py-1 rounded-md text-[10px] font-medium transition-all"
+                                style={{ backgroundColor: 'color-mix(in srgb, #f44747 15%, transparent)', color: '#f44747', border: '1px solid color-mix(in srgb, #f44747 30%, transparent)' }}
+                              >
+                                Cancel
+                              </button>
+                            )}
+                          </div>
+                        );
+                      }
+
+                      if (!hasTools) {
+                        return streamingText ? <div className="space-y-1">{renderStreamingContent(streamingText)}</div> : null;
+                      }
+
+                      // === Build tool elements with text positions for inline interleaving ===
+                      const WRITE_TOOLS_UNI = ['write_file', 'create_file', 'edit_file', 'append_to_file'];
+                      const LANG_MAP_UNI: Record<string, string> = { ts: 'typescript', tsx: 'tsx', js: 'javascript', jsx: 'jsx', py: 'python', rs: 'rust', go: 'go', java: 'java', cs: 'csharp', cpp: 'cpp', c: 'c', html: 'html', css: 'css', json: 'json', yaml: 'yaml', yml: 'yaml', md: 'markdown', sh: 'bash', bat: 'batch', txt: 'text', xml: 'xml', sql: 'sql' };
+                      const toolItems: Array<{ position: number; element: React.ReactNode }> = [];
+
+                      // ── Build unified file map from all three sources ──
+                      const fileMap = new Map<string, { baseContent: string; streamContent: string; status: 'streaming' | 'executing' | 'done'; lineCount?: number; result?: any; position: number }>();
+
+                      completedStreamingTools.filter(td => WRITE_TOOLS_UNI.includes(td.tool)).forEach(td => {
+                        const fp = (td.params?.filePath || td.params?.fileName || '') as string;
+                        if (!fp) return;
+                        const contentForBlock = ((td as any).result?.fullContent || td.params?.content || '') as string;
+                        const existing = fileMap.get(fp);
+                        const pos = Math.min(existing?.position ?? Infinity, td.textPosition ?? Infinity);
+                        fileMap.set(fp, { baseContent: contentForBlock, streamContent: '', status: 'done', result: (td as any).result, position: pos });
+                      });
+
+                      executingTools.filter(td => WRITE_TOOLS_UNI.includes(td.tool)).forEach(td => {
+                        const fp = (td.params?.filePath || td.params?.fileName || '') as string;
+                        if (!fp) return;
+                        const existing = fileMap.get(fp);
+                        if (existing && td.tool === 'append_to_file') {
+                          existing.status = 'executing';
+                          existing.position = Math.min(existing.position, td.textPosition ?? Infinity);
+                        } else {
+                          const execContent = ((td as any).result?.fullContent || td.params?.content || '') as string;
+                          const pos = Math.min(existing?.position ?? Infinity, td.textPosition ?? Infinity);
+                          fileMap.set(fp, { baseContent: execContent, streamContent: '', status: 'executing', position: pos });
+                        }
+                      });
+
+                      generatingToolCalls.filter(tc => WRITE_TOOLS_UNI.includes(tc.functionName)).forEach(tc => {
+                        const fpMatch = tc.paramsText.match(/"filePath"\s*:\s*"([^"]+)"/);
+                        const fp = fpMatch ? fpMatch[1] : '';
+                        if (!fp) return;
+                        const contentMatch = tc.paramsText.match(/"content"\s*:\s*"([\s\S]*)/);
+                        let partialContent = '';
+                        if (contentMatch) {
+                          partialContent = contentMatch[1].replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+                        }
+                        const existing = fileMap.get(fp);
+                        const tcPos = tc.textPosition ?? Infinity;
+                        if (existing && tc.functionName === 'append_to_file') {
+                          existing.streamContent = partialContent;
+                          existing.status = 'streaming';
+                          existing.lineCount = tc.lineCount;
+                          existing.position = Math.min(existing.position, tcPos);
+                        } else if (existing) {
+                          existing.baseContent = '';
+                          existing.streamContent = partialContent;
+                          existing.status = 'streaming';
+                          existing.lineCount = tc.lineCount;
+                          existing.position = Math.min(existing.position, tcPos);
+                        } else {
+                          const accBase = (tc.functionName === 'append_to_file') ? (fileContentAccRef.current.get(fp) || '') : '';
+                          fileMap.set(fp, { baseContent: accBase, streamContent: partialContent, status: 'streaming', lineCount: tc.lineCount, position: tcPos });
+                        }
+                      });
+
+                      // ── Turn file blocks into positioned tool items ──
+                      Array.from(fileMap.entries()).forEach(([fp, data]) => {
+                        const fullContent = data.baseContent + data.streamContent;
+                        const fname = fp.includes('/') ? fp.split('/').pop() || fp : fp.includes('\\') ? fp.split('\\').pop() || fp : fp;
+                        const ext = fp.includes('.') ? fp.split('.').pop()?.toLowerCase() || '' : '';
+                        const lang = LANG_MAP_UNI[ext] || ext || 'code';
+                        const isOk = data.result?.success !== false;
+                        const isDone = data.status === 'done';
+                        let displayLineCount = fullContent ? fullContent.split('\n').length : 0;
+                        if (data.status === 'streaming' && data.lineCount) {
+                          const baseLines = data.baseContent ? data.baseContent.split('\n').length : 0;
+                          const totalFromBackend = baseLines + data.lineCount;
+                          if (totalFromBackend > displayLineCount) displayLineCount = totalFromBackend;
+                        }
+                        toolItems.push({
+                          position: data.position,
+                          element: (
+                            <div key={`file-${fp}`} className="mt-1">
+                              <div className="flex items-center gap-1 mb-0.5 px-0.5">
+                                {isDone ? (
+                                  isOk ? <Check size={11} className="text-[#89d185] flex-shrink-0" /> : <X size={11} className="text-[#f14c4c] flex-shrink-0" />
+                                ) : (
+                                  <Loader2 size={10} className="animate-spin text-[#007acc] flex-shrink-0" />
+                                )}
+                                <span className={`text-[11px] font-medium ${isDone ? 'text-[#d4d4d4]' : 'text-[#dcdcaa]'}`}>{fname || 'file'}</span>
+                                {isDone && <span className={`text-[9px] ${isOk ? 'text-[#89d185]' : 'text-[#f14c4c]'}`}>[{isOk ? 'OK' : 'FAIL'}]</span>}
+                                {!isDone && <span className="text-[9px] text-[#858585] animate-pulse ml-1">{data.status === 'executing' ? 'executing...' : 'writing...'}</span>}
+                                {displayLineCount > 0 && <span className="text-[9px] text-[#858585] ml-1">({displayLineCount} lines)</span>}
+                              </div>
+                              {fullContent ? (
+                                <CodeBlock code={fullContent} language={lang} onApply={isDone ? () => onApplyCode(currentFile, fullContent) : () => {}} isToolCall={true} defaultCollapsed={!isDone} />
+                              ) : (
+                                <div className="flex items-center gap-1.5 px-2 py-1 rounded" style={{ backgroundColor: 'var(--theme-bg-secondary)' }}>
+                                  <Loader2 size={9} className="animate-spin" style={{ color: 'var(--theme-accent)' }} />
+                                  <span className="text-[10px]" style={{ color: 'var(--theme-foreground-muted)' }}>Creating {fname}<span className="animate-pulse">...</span></span>
+                                </div>
+                              )}
+                            </div>
+                          ),
+                        });
+                      });
+
+                      // ── Non-write generating tools ──
+                      generatingToolCalls.filter(tc => !WRITE_TOOLS_UNI.includes(tc.functionName)).forEach(tc => {
+                        let partialDetail = '';
+                        try {
+                          const fpMatch = tc.paramsText.match(/"filePath"\s*:\s*"([^"]+)"/);
+                          const urlMatch = tc.paramsText.match(/"url"\s*:\s*"([^"]+)"/);
+                          const qMatch = tc.paramsText.match(/"query"\s*:\s*"([^"]+)"/);
+                          if (fpMatch) {
+                            const fp = fpMatch[1];
+                            partialDetail = fp.includes('/') ? fp.split('/').pop() || fp : fp.includes('\\') ? fp.split('\\').pop() || fp : fp;
+                          } else if (urlMatch) {
+                            try { partialDetail = new URL(urlMatch[1]).hostname; } catch { partialDetail = urlMatch[1].substring(0, 30); }
+                          } else if (qMatch) {
+                            partialDetail = qMatch[1].substring(0, 25) + (qMatch[1].length > 25 ? '...' : '');
+                          }
+                        } catch {}
+                        const genLabel = partialDetail ? `${tc.functionName}: ${partialDetail}` : tc.functionName;
+                        toolItems.push({
+                          position: tc.textPosition ?? Infinity,
+                          element: (
+                            <InlineToolCall key={`gen-${tc.callIndex}`} label={genLabel} icon="\u29D7">
+                              <div>
+                                <div className="flex items-center gap-1.5 mb-1">
+                                  <Loader2 size={10} className="animate-spin" style={{ color: 'var(--theme-accent)' }} />
+                                  <span className="text-[10px]" style={{ color: 'var(--theme-foreground-muted)' }}>Generating tool call...</span>
+                                </div>
+                                {tc.paramsText && (
+                                  <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2 max-h-[180px] overflow-y-auto">{tc.paramsText}</pre>
+                                )}
+                              </div>
+                            </InlineToolCall>
+                          ),
+                        });
+                      });
+
+                      // ── Non-write completed tools ──
+                      completedStreamingTools.filter(td => !WRITE_TOOLS_UNI.includes(td.tool)).forEach((toolData, i) => {
+                        const rdResult = (toolData as any).result;
+                        const rdIsOk = rdResult?.success !== false;
+                        const rdDisplay = rdResult
+                          ? (typeof rdResult === 'object' ? JSON.stringify(rdResult, null, 2).substring(0, 600) : String(rdResult).substring(0, 600))
+                          : 'Completed';
+                        toolItems.push({
+                          position: toolData.textPosition ?? Infinity,
+                          element: (
+                            <InlineToolCall key={`done-${i}`} label={getToolLabel(toolData, rdIsOk ? 'ok' : 'fail')} icon={rdIsOk ? '\u2713' : '\u2717'}>
+                              <div>
+                                {toolData.params && Object.keys(toolData.params).length > 0 && (
+                                  <>
+                                    <div className="text-[10px] text-[#858585] mb-1 font-medium tracking-wide">PARAMETERS</div>
+                                    <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2 mb-2 max-h-[150px] overflow-y-auto">{JSON.stringify(toolData.params, null, 2)}</pre>
+                                  </>
+                                )}
+                                <div className={`text-[10px] mb-1 font-medium tracking-wide ${rdIsOk ? 'text-[#89d185]' : 'text-[#f14c4c]'}`}>RESULT</div>
+                                <pre className="whitespace-pre-wrap text-[11px] font-mono text-[#d4d4d4] bg-[#1e1e1e] rounded-md p-2 max-h-[200px] overflow-y-auto">{rdDisplay}</pre>
+                              </div>
+                            </InlineToolCall>
+                          ),
+                        });
+                      });
+
+                      // ── Non-write executing tools ──
+                      executingTools.filter(td => !WRITE_TOOLS_UNI.includes(td.tool)).forEach((toolData, i) => {
+                        toolItems.push({
+                          position: toolData.textPosition ?? Infinity,
+                          element: (
+                            <InlineToolCall key={`exec-${i}`} label={getToolLabel(toolData, 'running')} icon="\u27F3">
+                              <div>
+                                <div className="flex items-center gap-2 mb-2">
+                                  <Loader2 size={12} className="animate-spin" style={{ color: 'var(--theme-accent)' }} />
+                                  <span className="text-[11px]" style={{ color: 'var(--theme-foreground-muted)' }}>Executing...</span>
+                                </div>
+                                {toolData.params && Object.keys(toolData.params).length > 0 ? (
+                                  <>
+                                    <div className="text-[10px] mb-1 font-medium tracking-wide" style={{ color: 'var(--theme-foreground-muted)' }}>PARAMETERS</div>
+                                    <pre className="whitespace-pre-wrap text-[11px] font-mono rounded-md p-2" style={{ color: 'var(--theme-foreground)', backgroundColor: 'var(--theme-bg)' }}>{JSON.stringify(toolData.params, null, 2)}</pre>
+                                  </>
+                                ) : null}
+                              </div>
+                            </InlineToolCall>
+                          ),
+                        });
+                      });
+
+                      // ── Interleave text segments with tool items by position ──
+                      toolItems.sort((a, b) => a.position - b.position);
+                      const hasPositions = toolItems.some(t => Number.isFinite(t.position));
+
+                      if (!hasPositions || !streamingText) {
+                        // No position data or no text — flat layout (backward compatible)
+                        return (
+                          <>
+                            {streamingText && <div className="space-y-1">{renderStreamingContent(streamingText)}</div>}
+                            {toolItems.map((item, i) => <React.Fragment key={`ti-${i}`}>{item.element}</React.Fragment>)}
+                          </>
+                        );
+                      }
+
+                      // Group tools by position, then render text-segment → tools → text-segment → ...
+                      const posGroups = new Map<number, React.ReactNode[]>();
+                      for (const item of toolItems) {
+                        const pos = Number.isFinite(item.position) ? Math.min(item.position, streamingText.length) : streamingText.length;
+                        if (!posGroups.has(pos)) posGroups.set(pos, []);
+                        posGroups.get(pos)!.push(item.element);
+                      }
+                      const sortedPos = Array.from(posGroups.keys()).sort((a, b) => a - b);
+
+                      const result: React.ReactNode[] = [];
+                      let lastPos = 0;
+                      for (const pos of sortedPos) {
+                        if (pos > lastPos) {
+                          const seg = streamingText.substring(lastPos, pos);
+                          if (seg.trim()) {
+                            result.push(<div key={`seg-${lastPos}`} className="space-y-1">{renderStreamingContent(seg)}</div>);
+                          }
+                        }
+                        const tools = posGroups.get(pos)!;
+                        tools.forEach((el, i) => result.push(<React.Fragment key={`tg-${pos}-${i}`}>{el}</React.Fragment>));
+                        lastPos = pos;
+                      }
+                      if (lastPos < streamingText.length) {
+                        const rem = streamingText.substring(lastPos);
+                        if (rem.trim()) {
+                          result.push(<div key={`seg-${lastPos}`} className="space-y-1">{renderStreamingContent(rem)}</div>);
+                        }
+                      }
+                      return <>{result}</>;
+                    })()}
                     {agenticPhases.filter(p => p.phase !== 'generating-summary').length > 0 && (
                       <div className="mt-2 space-y-1">
                         {agenticPhases.filter(p => p.phase !== 'generating-summary').map((p) => (
@@ -2900,8 +3405,8 @@ ${e.message}`,
                         </div>
                       </div>
                     )}
-                    {/* Fix 30C: Unified per-file write tool display + non-write tool display */}
-                    {(generatingToolCalls.length > 0 || completedStreamingTools.length > 0 || executingTools.length > 0) && (() => {
+                    {/* D02: Tool rendering moved to interleaved IIFE above — legacy code below kept for reference */}
+                    {false && (() => {
                       const WRITE_TOOLS_UNI = ['write_file', 'create_file', 'edit_file', 'append_to_file'];
                       const LANG_MAP_UNI: Record<string, string> = { ts: 'typescript', tsx: 'tsx', js: 'javascript', jsx: 'jsx', py: 'python', rs: 'rust', go: 'go', java: 'java', cs: 'csharp', cpp: 'cpp', c: 'c', html: 'html', css: 'css', json: 'json', yaml: 'yaml', yml: 'yaml', md: 'markdown', sh: 'bash', bat: 'batch', txt: 'text', xml: 'xml', sql: 'sql' };
 

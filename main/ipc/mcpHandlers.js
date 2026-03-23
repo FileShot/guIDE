@@ -6,7 +6,7 @@ const { spawn } = require('child_process');
 
 function register(ctx) {
   // ─── Built-in MCP Tools ─────────────────────────────────────────────
-  ipcMain.handle('mcp-get-tools', () => ctx.mcpToolServer.getToolDefinitions());
+  ipcMain.handle('mcp-get-tools', () => ctx.mcpToolServer.getAllToolDefinitions());
 
   ipcMain.handle('mcp-execute-tool', async (_, toolName, params) => {
     try {
@@ -41,7 +41,7 @@ function register(ctx) {
   }
 
   ipcMain.handle('mcp-list-servers', () => {
-    const builtInTools = ctx.mcpToolServer.getToolDefinitions();
+    const builtInTools = ctx.mcpToolServer.getAllToolDefinitions();
     const servers = [{
       id: 'built-in',
       name: 'guIDE Built-in Tools',

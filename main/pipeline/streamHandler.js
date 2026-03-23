@@ -237,6 +237,7 @@ class StreamHandler {
 
   getFullText()    { return this._buffer; }
   isHoldingTool()  { return this._holdingToolCall; }
+  isHoldingFenced() { return this._holdingFenced; }
 
   /* ── Other UI events ────────────────────────────────────── */
   thinkingToken(t)           { this._send('llm-thinking-token', t); }

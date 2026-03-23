@@ -313,4 +313,58 @@ function tryFixJson(s) {
   }
 }
 
-module.exports = { parseResponse, extractToolCalls, cleanTrailingArtifacts };
+/**
+ * Extract content from a partial/failed write_file tool call.
+ * When a tool call fails to complete, this salvages the actual content
+ * that was inside the "content" argument so the user doesn't lose it.
+ * 
+ * @param {string} buffer — The accumulated buffer containing the failed tool call
+ * @returns {string|null} — The extracted content, or null if none found
+ */
+function extractContentFromPartialToolCall(buffer) {
+  if (!buffer || buffer.length < 50) return null;
+  
+  // Look for "content": followed by the actual content string
+  // This handles write_file calls that got truncated
+  const patterns = [
+    /"content"\s*:\s*"([\s\S]*)/i,           // "content": "...
+    /"content"\s*:\s*`([\s\S]*)/i,           // "content": `...
+    /"fileContent"\s*:\s*"([\s\S]*)/i,       // "fileContent": "...
+    /```[\w]*\n([\s\S]*)$/,                  // Code block at end
+  ];
+  
+  for (const pattern of patterns) {
+    const match = buffer.match(pattern);
+    if (match && match[1]) {
+      let content = match[1];
+      
+      // Unescape JSON string escapes if we matched a JSON string
+      if (pattern.source.includes('"content"') || pattern.source.includes('"fileContent"')) {
+        try {
+          // Try to find where the string ends (unescaped quote)
+          // For truncated strings, just do basic unescaping
+          content = content
+            .replace(/\\n/g, '\n')
+            .replace(/\\t/g, '\t')
+            .replace(/\\r/g, '\r')
+            .replace(/\\"/g, '"')
+            .replace(/\\\\/g, '\\');
+        } catch {
+          // Keep content as-is if unescaping fails
+        }
+      }
+      
+      // Remove any trailing incomplete JSON syntax
+      content = content.replace(/["\s]*}\s*```?\s*$/, '');
+      content = content.replace(/"\s*$/, '');
+      
+      if (content.length > 50) {
+        return content.trim();
+      }
+    }
+  }
+  
+  return null;
+}
+
+module.exports = { parseResponse, extractToolCalls, cleanTrailingArtifacts, extractContentFromPartialToolCall };

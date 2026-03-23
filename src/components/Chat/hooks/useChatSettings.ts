@@ -23,6 +23,7 @@ export interface ChatSettings {
   planMode: boolean;
   cloudProvider: string | null;
   cloudModel: string | null;
+  disabledTools: string[];
 }
 
 export interface ChatSettingsActions {
@@ -44,6 +45,8 @@ export interface ChatSettingsActions {
   setPlanMode: (v: boolean) => void;
   setCloudProvider: (v: string | null) => void;
   setCloudModel: (v: string | null) => void;
+  setDisabledTools: (v: string[]) => void;
+  toggleTool: (toolName: string) => void;
   resetToDefaults: () => void;
 }
 
@@ -64,6 +67,7 @@ export function useChatSettings(): ChatSettings & ChatSettingsActions {
   const [ttsEnabled, setTtsEnabled] = useState(false);
   const [autoMode, setAutoMode] = useState(false);
   const [planMode, setPlanMode] = useState(false);
+  const [disabledTools, setDisabledTools] = useState<string[]>([]);
   const [cloudProvider, setCloudProvider] = useState<string | null>(() => {
     try { return localStorage.getItem('guide-cloud-provider') || null; } catch { return null; }
   });
@@ -123,6 +127,7 @@ export function useChatSettings(): ChatSettings & ChatSettingsActions {
           if (s.ttsEnabled !== undefined) setTtsEnabled(s.ttsEnabled);
           if (s.autoMode !== undefined) setAutoMode(s.autoMode);
           if (s.gpuPreference !== undefined) setGpuPreference(s.gpuPreference);
+          if (Array.isArray(s.disabledTools)) setDisabledTools(s.disabledTools);
         }
       } catch { /* first run, no settings yet */ }
     })();
@@ -139,13 +144,14 @@ export function useChatSettings(): ChatSettings & ChatSettingsActions {
         repeatPenalty, seed, maxIterations,
         cloudProvider, cloudModel,
         useWebSearch, useRAG, ttsEnabled, autoMode, gpuPreference,
+        disabledTools,
       });
       (window as any).electronAPI?.llmUpdateParams?.({
         maxTokens, temperature, topP, topK, repeatPenalty, seed,
       });
     }, 500);
     return () => { if (settingsSaveTimerRef.current) clearTimeout(settingsSaveTimerRef.current); };
-  }, [temperature, maxTokens, contextSize, topP, topK, repeatPenalty, seed, maxIterations, cloudProvider, cloudModel, useWebSearch, useRAG, ttsEnabled, autoMode, gpuPreference]);
+  }, [temperature, maxTokens, contextSize, topP, topK, repeatPenalty, seed, maxIterations, cloudProvider, cloudModel, useWebSearch, useRAG, ttsEnabled, autoMode, gpuPreference, disabledTools]);
 
   // Initialize the save timer ref after first render
   useEffect(() => {
@@ -169,6 +175,14 @@ export function useChatSettings(): ChatSettings & ChatSettingsActions {
     if (cloudModel) localStorage.setItem('guide-cloud-model', cloudModel);
   }, [cloudProvider, cloudModel]);
 
+  const toggleTool = useCallback((toolName: string) => {
+    setDisabledTools(prev =>
+      prev.includes(toolName)
+        ? prev.filter(t => t !== toolName)
+        : [...prev, toolName]
+    );
+  }, []);
+
   const resetToDefaults = useCallback(() => {
     setTemperature(0.5);
     setMaxTokens(4096);
@@ -180,6 +194,7 @@ export function useChatSettings(): ChatSettings & ChatSettingsActions {
     setReasoningEffort('medium');
     setThinkingBudget(0);
     setMaxIterations(100);
+    setDisabledTools([]);
     (window as any).electronAPI?.llmSetContextSize?.(0);
     (window as any).electronAPI?.llmSetReasoningEffort?.('medium');
   }, []);
@@ -187,11 +202,12 @@ export function useChatSettings(): ChatSettings & ChatSettingsActions {
   return {
     temperature, maxTokens, contextSize, topP, topK, repeatPenalty, seed,
     reasoningEffort, thinkingBudget, maxIterations, gpuPreference, useWebSearch, useRAG,
-    ttsEnabled, autoMode, planMode, cloudProvider, cloudModel,
+    ttsEnabled, autoMode, planMode, cloudProvider, cloudModel, disabledTools,
     setTemperature, setMaxTokens, setContextSize, setTopP, setTopK,
     setRepeatPenalty, setSeed, setReasoningEffort, setThinkingBudget, setMaxIterations,
     setGpuPreference, setUseWebSearch, setUseRAG, setTtsEnabled,
     setAutoMode, setPlanMode, setCloudProvider, setCloudModel,
+    setDisabledTools, toggleTool,
     resetToDefaults,
   };
 }

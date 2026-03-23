@@ -1,15 +1,55 @@
 # 🚫 STOP — READ THIS FIRST — NON-NEGOTIABLE — NO EXCEPTIONS
 
+---
+
+## WHAT IS THIS PROJECT
+
+**guIDE** is a local-first, offline-capable AI IDE — the quality target is Visual Studio Code + GitHub Copilot, but running entirely locally with no cloud dependency. It ships to real end users on all hardware configurations from 4GB GPU laptops to 128GB RAM workstations, running 0.5B to 200B parameter models.
+
+Every change to this codebase must be:
+- **Production-grade** — VSCode/Copilot level of polish. No band-aids, no test-specific workarounds, no partial implementations.
+- **General** — works for ALL users, ALL models, ALL hardware. Not just the dev machine.
+- **Complete** — both `main/` AND `pipeline-clone/main/` updated. 0% done until both are updated.
+- **Verified** — do NOT say a fix works without being able to cite specific code evidence.
+
+---
+
+## TOP-LEVEL RULES — EVERY AGENT MUST READ ALL OF THESE BEFORE RESPONDING
+
+> These are the most commonly violated rules. Read every bullet. No exceptions.
+
+1. **END WITH MULTI-CHOICE TOOL** — NEVER end a response with text. ALWAYS use the `vscode_askQuestions` tool at the end. "Let me know if you need anything" is BANNED. See RULE -1 below.
+2. **TRIPWIRE** — First line of EVERY response: `[Task: X | Last: Y]`
+3. **READ BEFORE WRITING** — Read every relevant file in full before implementing any change. No partial reads. No "I already know this code." Read it anyway.
+4. **PLAN FIRST, CODE SECOND** — Present a plan, wait for USER approval, THEN implement. Never write code in the same response as the plan.
+5. **NO BANNED WORDS** — Never say: confirmed, fixed, resolves, fully fixed, ready, working, all set. No emojis (especially no checkmarks). See BANNED WORDS section.
+6. **BOTH TREES ALWAYS** — Every code change goes to BOTH `main/` AND `pipeline-clone/main/`. No exceptions.
+7. **CHANGES_LOG.md ALWAYS** — Every code change logged in `pipeline-clone/CHANGES_LOG.md`. No exceptions.
+8. **NO CHEERLEADING** — Do NOT say "great results", "strong performance", "improvement", "looking good", or any positive framing. Report defects. That is the job.
+9. **NEVER DISMISS USER OBSERVATIONS** — What the user observes is FACT. If your analysis contradicts it, YOUR ANALYSIS IS WRONG. Go back and read more code.
+10. **NO BAND-AID FIXES** — Every fix addresses the root architectural cause. Surface-level patches, guard clauses, and timeouts masking a deeper issue are NOT fixes.
+11. **NEVER BLAME MODEL SIZE OR CONTEXT WINDOW** — If it fails, the pipeline is broken. Fix the pipeline. See dedicated sections below.
+12. **PRODUCTION SOFTWARE** — Every fix must work for 4GB GPU users AND 128GB workstation users. Hardware-specific fixes are bugs.
+13. **READ CHANGES_LOG.md FIRST** — Before proposing ANY fix, read `pipeline-clone/CHANGES_LOG.md`. Context resets every session. The log is the anchor.
+14. **READ 323_DEFECTS.md** — The definitive defect list is at `C:\Users\brend\IDE\323_DEFECTS.md`. Read it before proposing any fix to the guIDE pipeline.
+15. **ACKNOWLEDGE EVERY POINT** — If user makes 7 points, respond to all 7. Skipping one is the same as ignoring a direct instruction.
+16. **SELF-ACCOUNTABILITY CHECKPOINT** — After EVERY todo item, run through the mandatory checkpoint before marking it done.
+17. **PRE-CODE CHECKLIST** — Required before every code change. See mandatory section below.
+18. **POST-CODE VERIFICATION** — Required after every code change. See mandatory section below.
+
+---
+
 ## 🔴 RULE -1 — NEVER END INTERACTION WITHOUT MULTI-CHOICE QUESTION — ABSOLUTE
 
 **This is THE most critical rule. Every premium request costs money. Ending without continuation wastes it.**
 
-- **NEVER end an interaction by just stopping.** If you complete a task, hit a wall, need input, or have nothing more to do — you MUST use the multi-choice question tool to give the user options.
-- **Every interaction MUST end with either:** (1) a multi-choice question tool call, OR (2) active work still in progress (e.g., waiting for a build, running a command)
+- **NEVER end an interaction by just stopping.** If you complete a task, hit a wall, need input, or have nothing more to do — you MUST use the multi-choice question tool (`vscode_askQuestions`) to give the user options.
+- **Every interaction MUST end with either:** (1) a `vscode_askQuestions` tool call, OR (2) active work still in progress (e.g., waiting for a build, running a command)
 - **"I've completed X, let me know if you need anything else"** — BANNED. This is ending without continuation.
 - **"Ready to proceed when you are"** — BANNED. Use multi-choice question instead.
-- **If you are about to type your final message:** STOP. Call the multi-choice question tool with options like: "Build it", "Make additional changes", "Review the plan", "I have questions", etc.
+- **If you are about to type your final message:** STOP. Call the `vscode_askQuestions` tool with options like: "Build it", "Make additional changes", "Review the plan", "I have questions", etc.
 - **This rule applies to EVERY interaction, no exceptions.** The user should never have to type a new message just to continue — they should be able to click an option.
+- **Last step of EVERY todo list must be:** call `vscode_askQuestions`. This is non-negotiable.
 
 ** NEVER BLAME MODEL
  SIZE —ALL MODELS EXCEL IN LM STUDIO  AT SAME TASKS THEYRE BEING TESTED ON HERE! If something fails, the problem is in the pipeline. Exhaust all levers before concluding "the model isn't good enough." Do not say "the model can't do this" without first confirming that every other lever has been pulled. This is a production software project, not a research experiment. The user expects results, not excuses.
@@ -1045,3 +1085,53 @@ Every stress test session MUST cover these 5 dimensions with UNIQUE prompts each
 - Report every test using the mandatory reporting format
 - Score every test on all 3 dimensions (coherence, tool correctness, response quality)
 - No cheerleading, no positive framing, only defects
+
+---
+
+## WEB TESTING RULES — KEY RULES CONSOLIDATED FROM WEB_TEST_RULES.md
+
+The full rules are in `C:\Users\brend\IDE\WEB_TEST_RULES.md`. These are the must-know key rules for ANY agent doing web/browser testing.
+
+### Session Format (14A)
+- Each session: 5 turns per session, 3 sessions minimum per test
+- Screenshot EVERY 5 seconds of active testing, not just at start/end
+- A session that does not cover all 5 turns is incomplete. Resume from where it left off.
+
+### ALWAYS Read WEB_TEST_RULES.md In Full Before Testing
+- Do NOT skim. Read the ENTIRE file before running any web test.
+- The previous agent in this project stopped reading at line 500 — this is a violation. Read ALL lines.
+- Use `read_file` from line 1 to the LAST LINE of the file. Not just the first section.
+
+### Screenshots and Observations
+- Every screenshot must be described in full before acting on it
+- Do NOT assume what's on screen — describe it, state what you see, then hypothesize
+- Never skip an image description
+
+### Test Reporting Format (Mandatory)
+```
+SESSION: [number]
+TURN: [1-5]
+PROMPT SENT: [exact text]
+OBSERVED BEHAVIOR: [exact description, not paraphrase]
+SCREENSHOT: [taken yes/no]
+DEFECTS FOUND: [list, or "None found for this turn"]
+```
+
+---
+
+## MANDATORY — READ 323_DEFECTS.md BEFORE PROPOSING ANY FIX
+
+File: `C:\Users\brend\IDE\323_DEFECTS.md`
+
+- This file is the DEFINITIVE defect list for the guIDE pipeline.
+- Before proposing any fix to any bug, read this file first.
+- Every defect in this file is REAL — user-observed or agent-observed during testing.
+- Do NOT gaslight. Do NOT say "the code looks fine" when 323_DEFECTS.md says it's broken.
+- When a defect is fixed (confirmed by user after testing), update the Status column to RESOLVED and log the fix in CHANGES_LOG.md.
+- When new defects are found during testing, ADD THEM to 323_DEFECTS.md immediately.
+
+### Defect Severity Reference
+- P0 — Blocks core functionality entirely
+- P1 — Breaks a major user-facing feature
+- P2 — Degrades UX significantly
+- P3 — Minor issue or cosmetic

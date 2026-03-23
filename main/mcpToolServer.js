@@ -50,6 +50,10 @@ class MCPToolServer {
     // Caches
     this._toolDefsCache = null;
     this._toolPromptCache = null;
+    this._allToolDefsCache = null;
+
+    // Disabled tools (set by frontend via context.disabledTools)
+    this._disabledTools = new Set();
 
     // TODO list
     this._todos = [];
@@ -65,6 +69,21 @@ class MCPToolServer {
       'delete_file', 'replace_in_file', 'write_file', 'terminal_run',
       'git_commit', 'git_push', 'git_reset', 'git_branch_delete',
     ]);
+  }
+
+  // ─── Tool Toggle Management ───────────────────────────────────────────────
+
+  setDisabledTools(toolNames) {
+    const newSet = new Set(Array.isArray(toolNames) ? toolNames : []);
+    const changed = newSet.size !== this._disabledTools.size ||
+      [...newSet].some(t => !this._disabledTools.has(t));
+    this._disabledTools = newSet;
+    if (changed) {
+      // Invalidate caches so prompts reflect the updated tool set
+      this._toolDefsCache = null;
+      this._toolPromptCache = null;
+      console.log(`[MCPToolServer] Disabled tools updated: ${newSet.size} disabled`);
+    }
   }
 
   // ─── Parameter Normalization ─────────────────────────────────────────────
@@ -266,7 +285,24 @@ class MCPToolServer {
 
   getToolDefinitions() {
     if (this._toolDefsCache) return this._toolDefsCache;
-    this._toolDefsCache = [
+    const allDefs = this._getAllToolDefs();
+    // Filter out disabled tools
+    if (this._disabledTools.size > 0) {
+      this._toolDefsCache = allDefs.filter(t => !this._disabledTools.has(t.name));
+    } else {
+      this._toolDefsCache = allDefs;
+    }
+    return this._toolDefsCache;
+  }
+
+  /** Returns ALL tool definitions regardless of disabled state (for UI display). */
+  getAllToolDefinitions() {
+    return this._getAllToolDefs();
+  }
+
+  _getAllToolDefs() {
+    if (this._allToolDefsCache) return this._allToolDefsCache;
+    this._allToolDefsCache = [
       {
         name: 'web_search',
         description: 'Search the web for current information using DuckDuckGo. Use for anything current, live, or time-sensitive: prices, weather, news, headlines, scores, events, stock data, documentation lookups. Format: {"tool":"web_search","params":{"query":"react useState docs"}}',
@@ -293,7 +329,7 @@ class MCPToolServer {
       },
       {
         name: 'write_file',
-        description: 'Write or create a file — OVERWRITES the entire file with the content provided. Use for new files or when replacing the full content. If you need to add to a file without losing existing content, use append_to_file instead. Format: {"tool":"write_file","params":{"filePath":"src/app.js","content":"..."}}',
+        description: 'Write or create a file — OVERWRITES the entire file with the content provided. ALWAYS use this tool when the user asks you to create a file, website, app, or any code. NEVER output file contents as inline code blocks in chat — use this tool instead. For large files, use write_file for the first portion, then append_to_file for the rest. Format: {"tool":"write_file","params":{"filePath":"src/app.js","content":"..."}}',
         parameters: {
           filePath: { type: 'string', description: 'File path', required: true },
           content: { type: 'string', description: 'File content', required: true },
@@ -791,7 +827,7 @@ class MCPToolServer {
       },
 
     ];
-    return this._toolDefsCache;
+    return this._allToolDefsCache;
   }
 
   // ─── Tool Execution Dispatch ──────────────────────────────────────────────
@@ -799,6 +835,12 @@ class MCPToolServer {
   async executeTool(toolName, params = {}) {
     const startTime = Date.now();
     let result;
+
+    // Reject disabled tools
+    if (this._disabledTools.has(toolName)) {
+      console.log(`[MCPToolServer] Blocked disabled tool: ${toolName}`);
+      return { success: false, error: `Tool "${toolName}" is disabled in settings. Enable it in Settings → Tools.` };
+    }
 
     if (toolName && typeof toolName === 'string') {
       if (toolName.startsWith('browser_')) {
@@ -1249,6 +1291,9 @@ class MCPToolServer {
   }
 
   async _readFile(filePath, startLine, endLine) {
+    if (!filePath || typeof filePath !== 'string' || filePath.trim() === '') {
+      return { success: false, error: 'Missing required parameter: filePath (string). Provide the path of the file to read. Example: {"filePath":"src/app.js"}' };
+    }
     const fullPath = path.isAbsolute(filePath) ? filePath : path.join(this.projectPath || '', filePath);
     try {
       const stats = await fs.stat(fullPath);
@@ -1273,6 +1318,12 @@ class MCPToolServer {
   }
 
   async _writeFile(filePath, content) {
+    if (!filePath || typeof filePath !== 'string' || filePath.trim() === '') {
+      return { success: false, error: 'Missing required parameter: filePath (string). Provide the path of the file to write. Example: {"filePath":"src/app.js","content":"..."}' };
+    }
+    if (content === undefined || content === null) {
+      return { success: false, error: `Missing required parameter: content (string). You called write_file for "${filePath}" but provided no content. Include the full file content. Example: {"filePath":"${filePath}","content":"your code here"}` };
+    }
     if (!this.projectPath) {
       return {
         success: false,
@@ -2325,6 +2376,9 @@ class MCPToolServer {
     if (!Array.isArray(items) || items.length === 0) {
       return { success: false, error: 'items must be a non-empty array of strings or {text, status} objects' };
     }
+    // Replace entire list (idempotent) — prevents duplicate accumulation across context rotations
+    this._todos = [];
+    this._todoNextId = 1;
     const created = [];
     for (const item of items) {
       let text, status;
@@ -2595,15 +2649,20 @@ class MCPToolServer {
       hint += `Project: ${this.projectPath}\n\n`;
     }
 
-    // Define categories to include based on task type
+    // Define categories — ALL tools must appear here or they are invisible to the model
     const categories = {
-      'File Operations': ['read_file', 'write_file', 'edit_file', 'append_to_file', 'delete_file', 'rename_file', 'copy_file', 'list_directory', 'find_files', 'create_directory', 'get_project_structure', 'grep_search'],
-      'Terminal': ['run_command'],
+      'File Operations': ['read_file', 'write_file', 'edit_file', 'append_to_file', 'delete_file', 'rename_file', 'copy_file', 'list_directory', 'find_files', 'create_directory', 'get_project_structure', 'get_file_info', 'open_file_in_editor', 'diff_files'],
+      'Search': ['grep_search', 'search_in_file', 'search_codebase', 'replace_in_files'],
+      'Terminal': ['run_command', 'check_port', 'install_packages'],
       'Web': ['web_search', 'fetch_webpage', 'http_request'],
-      'Browser': ['browser_navigate', 'browser_snapshot', 'browser_click', 'browser_type', 'browser_fill_form', 'browser_evaluate', 'browser_scroll', 'browser_back', 'browser_press_key', 'browser_hover', 'browser_screenshot', 'browser_get_content', 'browser_tabs', 'browser_close'],
-      'Git': ['git_status', 'git_commit', 'git_diff', 'git_log', 'git_branch'],
+      'Browser': ['browser_navigate', 'browser_snapshot', 'browser_click', 'browser_type', 'browser_fill_form', 'browser_select_option', 'browser_evaluate', 'browser_scroll', 'browser_back', 'browser_press_key', 'browser_hover', 'browser_drag', 'browser_screenshot', 'browser_get_content', 'browser_get_url', 'browser_get_links', 'browser_tabs', 'browser_handle_dialog', 'browser_console_messages', 'browser_file_upload', 'browser_resize', 'browser_wait', 'browser_wait_for', 'browser_close'],
+      'Git': ['git_status', 'git_commit', 'git_diff', 'git_log', 'git_branch', 'git_stash', 'git_reset'],
+      'Code Analysis': ['analyze_error'],
+      'Undo': ['undo_edit', 'list_undoable'],
       'Memory': ['save_memory', 'get_memory', 'list_memories'],
       'Planning': ['write_todos', 'update_todo'],
+      'Scratchpad': ['write_scratchpad', 'read_scratchpad'],
+      'Image Generation': ['generate_image'],
     };
 
     // For minimal mode, only show essential tools
@@ -2616,7 +2675,7 @@ class MCPToolServer {
           .filter(([, info]) => info.required)
           .map(([n]) => n)
           .join(', ') : '';
-        hint += `- **${name}**(${params}) — ${tool.description.split('.')[0]}.\n`;
+        hint += `- **${name}**(${params}) — ${tool.description}\n`;
       }
       return hint;
     }
@@ -2630,9 +2689,7 @@ class MCPToolServer {
         const params = tool.parameters ? Object.entries(tool.parameters)
           .map(([n, info]) => `${n}${info.required ? '' : '?'}`)
           .join(', ') : '';
-        // Use first sentence of description only for compact view
-        const desc = tool.description.split(/\.\s/)[0];
-        hint += `- **${name}**(${params}) — ${desc}.\n`;
+        hint += `- **${name}**(${params}) — ${tool.description}\n`;
       }
       hint += '\n';
     }

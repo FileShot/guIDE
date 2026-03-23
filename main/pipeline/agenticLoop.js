@@ -16,7 +16,7 @@
 'use strict';
 
 const { StreamHandler } = require('./streamHandler');
-const { parseResponse, cleanTrailingArtifacts } = require('./responseParser');
+const { parseResponse, cleanTrailingArtifacts, extractContentFromPartialToolCall } = require('./responseParser');
 const {
   progressiveContextCompaction,
   preGenerationContextCheck,
@@ -61,6 +61,11 @@ async function handleLocalChat(ctx, message, context, helpers) {
     ctx.currentProjectPath = context.projectPath;
   }
 
+  // Apply tool toggles from frontend settings
+  if (typeof mcpToolServer.setDisabledTools === 'function') {
+    mcpToolServer.setDisabledTools(context?.disabledTools || []);
+  }
+
   // Wait for model if still loading
   if (!llmEngine.isReady) {
     console.log('[AgenticLoop] Model not ready — waiting...');
@@ -86,7 +91,7 @@ async function handleLocalChat(ctx, message, context, helpers) {
   const maxResponseTokens = Math.min(Math.floor(totalCtx * 0.25), 4096);
   const toolCount = typeof mcpToolServer.getToolDefinitions === 'function' ? mcpToolServer.getToolDefinitions().length : 20;
   const sysPromptReserve = Math.max(500, toolCount * 55);
-  const maxPromptTokens = Math.max(totalCtx - sysPromptReserve - maxResponseTokens, 256);
+  let maxPromptTokens = Math.max(totalCtx - sysPromptReserve - maxResponseTokens, 256);
 
   console.log(`[AgenticLoop] Context budget: total=${totalCtx}, sysReserve=${sysPromptReserve}, maxPrompt=${maxPromptTokens}, maxResponse=${maxResponseTokens}`);
 
@@ -111,6 +116,7 @@ async function handleLocalChat(ctx, message, context, helpers) {
 
   let contextRotations = 0;
   let continuationCount = 0;
+  let unclosedFenceRetries = 0;       // S7-9B: forced continuations for unclosed code blocks
 
   // Budget-aware system prompt builder (closure so it can be called repeatedly)
   const _buildSystemPrompt = () => {
@@ -148,14 +154,15 @@ async function handleLocalChat(ctx, message, context, helpers) {
   {
     const actualStaticTokens = estimateTokens(systemPrompt);
     if (actualStaticTokens > sysPromptReserve) {
-      const corrected = Math.max(totalCtx - actualStaticTokens - maxResponseTokens, 256);
-      console.log(`[AgenticLoop] sysReserve corrected ${sysPromptReserve}→${actualStaticTokens}. maxPromptTokens→${corrected}`);
+      maxPromptTokens = Math.max(totalCtx - actualStaticTokens - maxResponseTokens, 256);
+      console.log(`[AgenticLoop] sysReserve corrected ${sysPromptReserve}→${actualStaticTokens}. maxPromptTokens→${maxPromptTokens}`);
     }
   }
 
-  // Merge sampling parameters
+  // Merge sampling parameters — cap maxTokens to computed budget to prevent
+  // node-llama-cpp from reserving more response tokens than the context supports
   const params = {
-    maxTokens:     context?.params?.maxTokens     || maxResponseTokens,
+    maxTokens:     Math.min(context?.params?.maxTokens || maxResponseTokens, maxResponseTokens),
     temperature:   context?.params?.temperature   ?? 0.5,
     topP:          context?.params?.topP           ?? 0.9,
     topK:          context?.params?.topK           ?? 20,
@@ -171,6 +178,7 @@ async function handleLocalChat(ctx, message, context, helpers) {
   let lastStopReason = 'natural';
   const allToolResults = [];
   let pendingToolCallBuffer = null;  // Accumulates raw text for tool calls spanning continuations
+  let lastMidFence = false;          // S7-7: Persists midFence state for rotation anchoring
   let tokensSinceLastCtxEmit = 0;    // Throttle live context ring updates
   const recentToolSigs = [];         // Track tool call signatures for stuck/cycle detection
   const toolExecCache = new Map();   // Cross-iteration dedup: signature → { iteration, resultSummary }
@@ -214,6 +222,51 @@ async function handleLocalChat(ctx, message, context, helpers) {
 
       // Use the rotation prompt
       nextUserMessage = preCheck.prompt.userMessage;
+
+      // FIX T07: If a write_file call was accumulating when rotation fired, anchor
+      // the continuation so the model resumes the same file instead of starting fresh.
+      // Without this the model loses all knowledge of the pending write_file and
+      // generates an unrelated tool call on the next iteration.
+      if (pendingToolCallBuffer !== null && pendingToolCallBuffer.length > 0) {
+        const bufLen = pendingToolCallBuffer.length;
+        const fileMatch = pendingToolCallBuffer.match(/"filePath"\s*:\s*"([^"]+)"/);
+        const targetFile = fileMatch ? fileMatch[1] : 'the file';
+        const bufTail = pendingToolCallBuffer.slice(-2500);
+        nextUserMessage +=
+          `\n\nIMPORTANT — IN-PROGRESS WRITE: You were in the middle of a write_file call for "${targetFile}" ` +
+          `(${bufLen} chars generated so far). The context was rotated to free memory. ` +
+          `You MUST continue that write_file call. Produce the COMPLETE remaining content ` +
+          `and close all JSON properly so write_file can execute.\n` +
+          `Last portion already generated:\n${bufTail}\n\nContinue from exactly where that stopped.`;
+        console.log(`[AgenticLoop] Pre-check rotation: anchored write_file continuation for "${targetFile}" (${bufLen} chars in buffer)`);
+      }
+
+      // S7-7: Anchor inline code continuation through rotation.
+      // When the model was mid-code-block (midFence detected in shouldContinue branch),
+      // provide the tail of generated code so the model can continue from that point
+      // instead of restarting from scratch.
+      if (lastMidFence && fullResponseText.length > 0) {
+        const codeTail = fullResponseText.slice(-2500);
+        nextUserMessage +=
+          `\n\nCRITICAL — You were in the middle of writing inline code (a markdown code block). ` +
+          `You have already generated ${fullResponseText.length} characters. ` +
+          `Here is the end of what you wrote:\n${codeTail}\n\n` +
+          `Continue writing from EXACTLY where that code ends. ` +
+          `Do NOT open a new code fence (you are already inside one). ` +
+          `Do NOT restart the file from the beginning. ` +
+          `Do NOT output \`\`\`html or any fence marker. ` +
+          `Just continue the code directly from where it stopped.`;
+        console.log(`[AgenticLoop] Pre-check rotation: anchored inline code continuation (${fullResponseText.length} chars generated)`);
+        lastMidFence = false;
+      } else if (!lastMidFence && continuationCount > 0 && fullResponseText.length > 0) {
+        // Plain text continuation through rotation — provide tail for context
+        const textTail = fullResponseText.slice(-1500);
+        nextUserMessage +=
+          `\n\nYou were in the middle of writing a response. ` +
+          `Here is the end of what you wrote:\n${textTail}\n\n` +
+          `Continue from exactly where that text ends. Do not repeat any content.`;
+        console.log(`[AgenticLoop] Pre-check rotation: anchored plain text continuation (${fullResponseText.length} chars generated)`);
+      }
 
       // Update system prompt in history
       llmEngine.chatHistory = [{ type: 'system', text: preCheck.prompt.systemContext }];
@@ -270,9 +323,17 @@ async function handleLocalChat(ctx, message, context, helpers) {
       if (errMsg.startsWith('CONTEXT_OVERFLOW:')) {
         console.log(`[AgenticLoop] CONTEXT_OVERFLOW at iteration ${iteration} — performing rotation`);
 
-        // Clear any pending tool call buffer — context is being rotated
+        // Clear any pending tool call buffer — context is being rotated.
+        // FIX T07: Capture write_file context BEFORE clearing so we can anchor
+        // the continuation in nextUserMessage after rotation.
+        let overflowPendingFileCtx = null;
         if (pendingToolCallBuffer !== null) {
           console.log('[AgenticLoop] Clearing pending tool call buffer due to context rotation');
+          const bufLen = pendingToolCallBuffer.length;
+          const fileMatch = pendingToolCallBuffer.match(/"filePath"\s*:\s*"([^"]+)"/);
+          const targetFile = fileMatch ? fileMatch[1] : 'the file';
+          const bufTail = pendingToolCallBuffer.slice(-2500);
+          overflowPendingFileCtx = { bufLen, targetFile, bufTail };
           const cleaned = cleanTrailingArtifacts(pendingToolCallBuffer);
           fullResponseText += cleaned;
           displayResponseText += cleaned;
@@ -306,6 +367,41 @@ async function handleLocalChat(ctx, message, context, helpers) {
           `Continue the task. Original request: ${message.substring(0, 300)}\n` +
           `Do NOT output any acknowledgment or summary — make forward progress immediately.\n` +
           `Do NOT redo completed work. Files listed in progress exist on disk. If a plan exists, it is already active — use update_todo, do NOT call write_todos.`;
+
+        // FIX T07: Anchor any in-progress write_file so the model resumes it after rotation
+        if (overflowPendingFileCtx) {
+          const { bufLen, targetFile, bufTail } = overflowPendingFileCtx;
+          nextUserMessage +=
+            `\n\nIMPORTANT — IN-PROGRESS WRITE: You were in the middle of a write_file call for "${targetFile}" ` +
+            `(${bufLen} chars generated so far). Context overflow forced a rotation. ` +
+            `You MUST resume that write_file call. Produce the COMPLETE remaining content ` +
+            `and close all JSON properly so write_file can execute.\n` +
+            `Last portion already generated:\n${bufTail}\n\nContinue from exactly where that stopped.`;
+          console.log(`[AgenticLoop] Overflow rotation: anchored write_file continuation for "${targetFile}" (${bufLen} chars in buffer)`);
+        }
+
+        // S7-7: Anchor inline code continuation through overflow rotation
+        if (lastMidFence && fullResponseText.length > 0) {
+          const codeTail = fullResponseText.slice(-2500);
+          nextUserMessage +=
+            `\n\nCRITICAL — You were in the middle of writing inline code (a markdown code block). ` +
+            `You have already generated ${fullResponseText.length} characters. ` +
+            `Here is the end of what you wrote:\n${codeTail}\n\n` +
+            `Continue writing from EXACTLY where that code ends. ` +
+            `Do NOT open a new code fence (you are already inside one). ` +
+            `Do NOT restart the file from the beginning. ` +
+            `Do NOT output \`\`\`html or any fence marker. ` +
+            `Just continue the code directly from where it stopped.`;
+          console.log(`[AgenticLoop] Overflow rotation: anchored inline code continuation (${fullResponseText.length} chars generated)`);
+          lastMidFence = false;
+        } else if (!lastMidFence && continuationCount > 0 && fullResponseText.length > 0) {
+          const textTail = fullResponseText.slice(-1500);
+          nextUserMessage +=
+            `\n\nYou were in the middle of writing a response. ` +
+            `Here is the end of what you wrote:\n${textTail}\n\n` +
+            `Continue from exactly where that text ends. Do not repeat any content.`;
+          console.log(`[AgenticLoop] Overflow rotation: anchored plain text continuation (${fullResponseText.length} chars generated)`);
+        }
 
         // Prepend any partial response from before the overflow
         if (err.partialResponse) {
@@ -380,20 +476,60 @@ async function handleLocalChat(ctx, message, context, helpers) {
         } else {
           continuationCount++;
           console.log(`[AgenticLoop]   Continuation (tool call accumulation, ${pendingToolCallBuffer.length} chars)`);
-          nextUserMessage = continuationMessage({ lastText: pendingToolCallBuffer, toolInProgress: true });
+          nextUserMessage = continuationMessage({ 
+            lastText: pendingToolCallBuffer, 
+            toolInProgress: true,
+            accumulatedBuffer: pendingToolCallBuffer,
+            midFence: stream.isHoldingFenced?.() || false
+          });
           // Do NOT finalize the stream — keep tool-hold state alive so the UI
           // code block continues receiving live content across continuations
           continue;
         }
       } else {
-        // Natural stop but tool call still incomplete — treat as display text
-        console.log('[AgenticLoop] Accumulated buffer has no complete tool call — treating as display text');
-        const cleaned = cleanTrailingArtifacts(pendingToolCallBuffer);
-        fullResponseText += cleaned;
-        displayResponseText += cleaned;
-        pendingToolCallBuffer = null;
-        stream.finalize(false);
+        // Natural stop but tool call still incomplete — preserve content from failed tool call
+        console.log('[AgenticLoop] Accumulated buffer has no complete tool call — preserving content');
+
+        // FIX T18: Reset stream BEFORE emitting extracted content so that
+        // the stream is not in tool-hold state when we send llm-token events.
+        // Previously stream.finalize(false) was called AFTER _send, which
+        // triggered the false-positive recovery path in StreamHandler and dumped
+        // the entire raw _toolCallJson buffer (~11K chars) as a second llm-token
+        // event — causing tool JSON to appear inside the user's code block.
+        stream.reset();
         toolCalls = [];
+
+        // Try to extract the actual content from the failed write_file call
+        const contentExtracted = extractContentFromPartialToolCall(pendingToolCallBuffer);
+        if (contentExtracted && contentExtracted.length > 100) {
+          // Substantial content found inside the failed tool call — emit it progressively.
+          // FIX T19: Chunk delivery so the browser event loop can process the
+          // invoke-reply WebSocket frame between chunks, preventing the UI from
+          // getting stuck in "generating" state. Without chunking, a single
+          // large llm-token event (~11K chars) blocked React's reconciliation
+          // long enough that the invoke-reply frame sat unprocessed in the queue.
+          console.log(`[AgenticLoop] Extracted ${contentExtracted.length} chars from failed tool call — emitting in chunks`);
+          const CHUNK = 200;
+          stream._send('llm-token', '\n\n[Tool call incomplete — content preserved:]\n');
+          for (let i = 0; i < contentExtracted.length; i += CHUNK) {
+            stream._send('llm-token', contentExtracted.slice(i, i + CHUNK));
+            if (i + CHUNK < contentExtracted.length) {
+              await new Promise(r => setImmediate(r)); // yield to event loop between chunks
+            }
+          }
+          fullResponseText += '\n\n[Tool call incomplete — content preserved:]\n' + contentExtracted;
+          displayResponseText += '\n\n[Tool call incomplete — content preserved:]\n' + contentExtracted;
+        } else {
+          // No extractable content — fall back to cleaned artifacts
+          const cleaned = cleanTrailingArtifacts(pendingToolCallBuffer);
+          fullResponseText += cleaned;
+          displayResponseText += cleaned;
+        }
+
+        pendingToolCallBuffer = null;
+        // NOTE: stream.finalize() is intentionally NOT called here.
+        // stream.reset() above already cleared all hold state. Calling finalize
+        // now would re-dump _toolCallJson (empty at this point but defensive).
       }
     } else {
       // ── Normal parse path ─────────────────────────────
@@ -406,14 +542,19 @@ async function handleLocalChat(ctx, message, context, helpers) {
         console.log('[AgenticLoop] Detected partial tool call — starting accumulation');
         pendingToolCallBuffer = rawText;
         continuationCount++;
-        nextUserMessage = continuationMessage({ lastText: rawText, toolInProgress: true });
+        nextUserMessage = continuationMessage({ 
+          lastText: rawText, 
+          toolInProgress: true,
+          accumulatedBuffer: rawText,
+          midFence: stream.isHoldingFenced?.() || false
+        });
         // Do NOT finalize — stream is holding the tool call content and should
         // keep emitting llm-tool-generating events across continuation boundaries
         continue;
       }
 
-      stream.finalize(result.stopReason === 'tool_call');
-      fullResponseText += displayText;
+      stream.finalize(toolCalls.length > 0);
+      fullResponseText += toolCalls.length > 0 ? displayText : rawText;
       displayResponseText += displayText;
     }
 
@@ -548,7 +689,7 @@ async function handleLocalChat(ctx, message, context, helpers) {
           iteration,
           formattedResults
         );
-        nextUserMessage = `${assembledContext}\n\nContinue with the task based on these results.${stuckSuffix}`;
+        nextUserMessage = `${assembledContext}\n\nContinue with the task based on these results. Original request: ${message.substring(0, 300)}${stuckSuffix}`;
       } else {
         // Early iterations: just use formatted results directly
         // But cap to prevent overflow
@@ -557,7 +698,7 @@ async function handleLocalChat(ctx, message, context, helpers) {
         const cappedResults = formattedResults.length > maxResultChars
           ? formattedResults.slice(0, maxResultChars) + '\n...(results truncated)'
           : formattedResults;
-        nextUserMessage = `Tool execution results:\n\n${cappedResults}\n\nContinue with the task based on these results.${stuckSuffix}`;
+        nextUserMessage = `Tool execution results:\n\n${cappedResults}\n\nContinue with the task based on these results. Original request: ${message.substring(0, 300)}${stuckSuffix}`;
       }
 
       // If stuck detected, also clear the recent sigs so detection resets
@@ -570,8 +711,30 @@ async function handleLocalChat(ctx, message, context, helpers) {
     if (shouldContinue(result)) {
       console.log('[AgenticLoop]   Continuation triggered (maxTokens hit)');
       continuationCount++;
-      nextUserMessage = continuationMessage({ lastText: displayText || fullResponseText });
+      // Detect if the response ended inside a fenced code block (odd count of ``` lines)
+      const responseText = displayText || fullResponseText;
+      const fenceCount = (responseText.match(/^```/gm) || []).length;
+      const midFence = fenceCount % 2 !== 0;
+      if (midFence) console.log('[AgenticLoop]   Mid-fence detected — response was inside a code block');
+      lastMidFence = midFence;  // S7-7: persist for rotation anchoring
+      nextUserMessage = continuationMessage({ lastText: responseText, midFence });
       continue;
+    }
+
+    // ── S7-9B: Natural stop with unclosed code fence → force continuation ──
+    // If the model emitted eogToken but the accumulated response has an unclosed
+    // code block (odd fence parity), the file is incomplete. Force continuation
+    // so the model can complete and close the block. Safety-limited to 3 retries.
+    {
+      const fenceLines = (fullResponseText.match(/^```/gm) || []).length;
+      if (fenceLines % 2 !== 0 && unclosedFenceRetries < 3) {
+        console.log(`[AgenticLoop]   Natural stop with unclosed code fence (${fenceLines} fences) — forcing continuation (retry ${unclosedFenceRetries + 1}/3)`);
+        unclosedFenceRetries++;
+        continuationCount++;
+        lastMidFence = true;
+        nextUserMessage = continuationMessage({ lastText: fullResponseText, midFence: true });
+        continue;
+      }
     }
 
     // ── Branch: Natural completion ────────────────────────

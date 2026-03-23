@@ -727,6 +727,7 @@ export interface AIChatContext {
   conversationHistory?: { role: string; content: string }[];
   images?: { data: string; mimeType: string; name: string }[];
   autoMode?: boolean;
+  disabledTools?: string[];
 }
 
 export interface AIChatResult {

@@ -461,8 +461,8 @@ export const CodeBlock: React.FC<{ code: string; language: string; onApply: () =
   const [copied, setCopied] = useState(false);
   const lineCount = code.split('\n').length;
   const isLong = lineCount > COLLAPSE_LINE_THRESHOLD;
-  // Default to collapsed for ALL code blocks. Only keep expanded while actively streaming.
-  const [expanded, setExpanded] = useState(!!isStreaming);
+  // Default to collapsed for ALL code blocks, including during streaming.
+  const [expanded, setExpanded] = useState(false);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(code);

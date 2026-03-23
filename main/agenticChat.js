@@ -26,8 +26,8 @@ const {
 const { handleLocalChat: pipelineLocalChat } = require('./pipeline/agenticLoop');
 
 // ─── Constants (cloud path) ─────────────────────────────────
-const STUCK_THRESHOLD = 10;
-const CYCLE_MIN_REPEATS = 5;
+const STUCK_THRESHOLD = 3;
+const CYCLE_MIN_REPEATS = 3;
 const MAX_RESPONSE_SIZE = 2 * 1024 * 1024;
 const WALL_CLOCK_DEADLINE_MS = 30 * 60 * 1000;
 
@@ -197,6 +197,11 @@ function register(ctx) {
     if (context?.projectPath) {
       mcpToolServer.projectPath = context.projectPath;
       ctx.currentProjectPath = context.projectPath;
+    }
+
+    // Apply tool toggles from frontend settings
+    if (typeof mcpToolServer.setDisabledTools === 'function') {
+      mcpToolServer.setDisabledTools(context?.disabledTools || []);
     }
 
     const cloudStatus = cloudLLM.getStatus();

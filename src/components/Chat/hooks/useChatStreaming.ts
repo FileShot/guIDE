@@ -37,9 +37,11 @@ export function useChatStreaming(): ChatStreamingState {
   const thinkingSegmentsRef = useRef<string[]>([]);
   const wasRespondingRef = useRef(false);
   const streamRafRef = useRef<number | null>(null);
+  const streamTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const thinkingRafRef = useRef<number | null>(null);
   const streamDirtyRef = useRef(false);
   const thinkingDirtyRef = useRef(false);
+  const lastFlushTimeRef = useRef(0);
   const streamEpochRef = useRef(0);
   const activeEpochRef = useRef(0);
   const iterationStartOffsetRef = useRef(0); // offset where current iteration's text starts in streamBufferRef
@@ -54,16 +56,20 @@ export function useChatStreaming(): ChatStreamingState {
     // This way, tokens are accepted during active generation, but discarded after clear/cancel
     // until a new generation begins and re-syncs the epochs.
 
-    // RAF-batched display: show the full buffer on every animation frame.
-    // Local models stream tokens one-at-a-time at hardware speed — no artificial
-    // pacing is needed. Cloud models deliver fast batches, but the natural RAF
-    // (16ms/frame) provides sufficient smoothing without a rate cap.
-    // The old 100 chars/sec typewriter caused the UI to fall permanently behind
-    // local generation (which can exceed 200 chars/sec), making code blocks appear
-    // frozen while the backend kept producing tokens.
+    // Throttled display: flush buffer to React state at most every STREAM_THROTTLE_MS.
+    // Each flush triggers renderStreamingContent() which runs O(n) parsing on the
+    // full buffer (extractCompleteBlocks, markdownInlineToHTML, DOMPurify).
+    // At 16ms/frame (RAF), a 5000+ char buffer causes >50ms render cycles that block
+    // the event loop and freeze the browser. Throttling to 100ms keeps the UI responsive
+    // while still showing ~10 visual updates per second during active generation.
+    // For short buffers (<200 chars), updates happen immediately via RAF for fast startup.
+    const STREAM_THROTTLE_MS = 100;
+
     const flushStreamUpdate = () => {
       streamRafRef.current = null;
+      streamTimerRef.current = null;
       streamDirtyRef.current = false;
+      lastFlushTimeRef.current = Date.now();
       const buffer = streamBufferRef.current;
       displayPosRef.current = buffer.length;
       if (buffer.length <= 50 || buffer.length % 500 < 20) {
@@ -81,8 +87,22 @@ export function useChatStreaming(): ChatStreamingState {
 
     const scheduleStreamUpdate = () => {
       streamDirtyRef.current = true;
-      if (!streamRafRef.current) {
+      // Short buffers: update immediately via RAF for fast perceived startup
+      if (streamBufferRef.current.length < 200) {
+        if (streamTimerRef.current) { clearTimeout(streamTimerRef.current); streamTimerRef.current = null; }
+        if (!streamRafRef.current) {
+          streamRafRef.current = requestAnimationFrame(flushStreamUpdate);
+        }
+        return;
+      }
+      // Longer buffers: throttle to STREAM_THROTTLE_MS to prevent event loop blocking
+      if (streamRafRef.current) { cancelAnimationFrame(streamRafRef.current); streamRafRef.current = null; }
+      if (streamTimerRef.current) return; // timer already pending
+      const elapsed = Date.now() - lastFlushTimeRef.current;
+      if (elapsed >= STREAM_THROTTLE_MS) {
         streamRafRef.current = requestAnimationFrame(flushStreamUpdate);
+      } else {
+        streamTimerRef.current = setTimeout(flushStreamUpdate, STREAM_THROTTLE_MS - elapsed);
       }
     };
     const scheduleThinkingUpdate = () => {
@@ -216,6 +236,7 @@ export function useChatStreaming(): ChatStreamingState {
       cleanupIterationBegin?.();
       cleanupReplace?.();
       if (streamRafRef.current) cancelAnimationFrame(streamRafRef.current);
+      if (streamTimerRef.current) clearTimeout(streamTimerRef.current);
       if (thinkingRafRef.current) cancelAnimationFrame(thinkingRafRef.current);
     };
   }, []);

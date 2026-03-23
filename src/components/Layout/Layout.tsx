@@ -376,7 +376,7 @@ export const Layout: React.FC = () => {
   return (
     <div className="flex flex-col h-screen overflow-hidden" style={{ backgroundColor: 'var(--theme-bg)', color: 'var(--theme-foreground)' }}>
       {/* Title Bar with Menu */}
-      <div className="h-[28px] flex items-center select-none flex-shrink-0 relative z-50"
+      <div className="h-[32px] flex items-center select-none flex-shrink-0 relative z-50"
            style={{ backgroundColor: 'var(--theme-title-bar)', WebkitAppRegion: 'drag' } as any}>
         <div className="flex items-center text-[11px]" style={{ color: 'var(--theme-foreground)', opacity: 0.8, WebkitAppRegion: 'no-drag' } as any}>
           <span className="px-1.5 flex items-center" title="guIDE by Brendan Gray">

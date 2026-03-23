@@ -30,7 +30,7 @@ const Header: React.FC<ConceptHeaderProps> = ({
 
   return (
     <div
-      className="h-[30px] flex items-center px-2 pr-[140px] flex-shrink-0 font-mono"
+      className="h-[30px] flex items-center px-2 flex-shrink-0 font-mono"
       style={{
         backgroundColor: 'var(--theme-bg-tertiary, var(--theme-bg-secondary))',
         borderBottom: '2px solid var(--theme-accent)',

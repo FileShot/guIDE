@@ -2454,7 +2454,7 @@ ${e.message}`,
       <>
       {/* Header — spacer pushes buttons to right edge */}
       <div
-        className={`h-[32px] flex items-center px-2 ${navigator.userAgent.includes('Electron') ? 'pr-[140px]' : 'pr-2'} flex-shrink-0`}
+        className="h-[32px] flex items-center px-2 pr-2 flex-shrink-0"
         style={{ backgroundColor: 'var(--theme-bg-secondary)', borderBottom: '1px solid var(--theme-border)' }}
       >
         <div className="flex items-center flex-shrink-0">

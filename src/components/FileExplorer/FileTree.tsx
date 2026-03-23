@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
-import { Search, RefreshCw, FolderOpen, Filter, Grid, List, Folder, FileText } from 'lucide-react';
+import { Search, RefreshCw, FolderOpen, Filter, Grid, List, Folder, FileText, MoreVertical, Eye, EyeOff, ArrowUpDown } from 'lucide-react';
 import { FileNodeComponent } from './FileNode';
 import { ContextMenu, ContextMenuItem } from './ContextMenu';
 import { ExplainFileModal } from './ExplainFileModal';
@@ -49,8 +49,12 @@ export const FileTree: React.FC<FileTreeProps> = ({ rootPath, onFileSelect, clas
   // Drag & drop state
   const [draggedPaths, setDraggedPaths] = useState<string[]>([]);
   const [dragOverTarget, setDragOverTarget] = useState<string | null>(null);
+  // Compact toolbar state
+  const [showSearch, setShowSearch] = useState(false);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
 
   const treeContainerRef = useRef<HTMLDivElement>(null);
+  const moreMenuRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(260);
 
   // Track container width for auto-switch to list when narrow
@@ -68,6 +72,16 @@ export const FileTree: React.FC<FileTreeProps> = ({ rootPath, onFileSelect, clas
     observer.observe(treeContainerRef.current);
     return () => observer.disconnect();
   }, [viewMode]);
+
+  // Close more menu on outside click
+  useEffect(() => {
+    if (!showMoreMenu) return;
+    const handler = (e: MouseEvent) => {
+      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target as Node)) setShowMoreMenu(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showMoreMenu]);
 
   // Load directory tree
   const loadDirectory = useCallback(async (path: string) => {
@@ -498,68 +512,108 @@ export const FileTree: React.FC<FileTreeProps> = ({ rootPath, onFileSelect, clas
 
   return (
     <div ref={treeContainerRef} className={cn('flex flex-col h-full bg-sidebar', className)}>
-      {/* Header */}
-      <div className="flex items-center justify-between p-3 border-b border-sidebar-border">
-        <div className="flex flex-col min-w-0 flex-1">
-          <div className="flex items-center space-x-2 min-w-0">
-            <FolderOpen className="w-4 h-4 text-sidebar-foreground flex-shrink-0" />
-            <span className="text-sm font-medium text-sidebar-foreground truncate">
-              {rootPath ? rootPath.split(/[\/\\]/).pop() || rootPath : 'No folder opened'}
-            </span>
-          </div>
-          {rootPath && (
-            <span className="text-[10px] text-foreground-subtle truncate pl-6 mt-0.5" title={rootPath}>
-              {rootPath}
-            </span>
+      {/* Compact Toolbar */}
+      <div className="h-[28px] flex items-center px-2 gap-0.5 flex-shrink-0" style={{ borderBottom: '1px solid var(--theme-sidebar-border)' }}>
+        <span
+          className="text-[12px] font-medium truncate flex-1 min-w-0"
+          style={{ color: 'var(--theme-foreground-muted)' }}
+          title={rootPath}
+        >
+          {rootPath ? rootPath.split(/[\/\\]/).pop() || rootPath : 'No folder'}
+        </span>
+        <button
+          onClick={() => { setShowSearch(v => !v); if (showSearch) { setSearchQuery(''); } }}
+          className={cn('p-1 rounded transition-colors flex-shrink-0', showSearch ? 'bg-[rgba(255,255,255,0.08)]' : 'hover:bg-[rgba(255,255,255,0.06)]')}
+          title="Search (Ctrl+F)"
+          style={{ color: showSearch ? 'var(--theme-foreground)' : 'var(--theme-foreground-subtle)' }}
+        >
+          <Search className="w-3.5 h-3.5" />
+        </button>
+        <button onClick={() => handleNewFile(rootPath)} className="p-1 rounded hover:bg-[rgba(255,255,255,0.06)] flex-shrink-0" title="New File" style={{ color: 'var(--theme-foreground-subtle)' }}>
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M9 1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V5l-4-4zm0 1.4L12.1 5H9V2.4zM4 14V2h4v4h4v8H4z"/><path d="M9 8H7v2H6v1h1v2h1v-2h2v-1H9V8z"/></svg>
+        </button>
+        <button onClick={() => handleNewFolder(rootPath)} className="p-1 rounded hover:bg-[rgba(255,255,255,0.06)] flex-shrink-0" title="New Folder" style={{ color: 'var(--theme-foreground-subtle)' }}>
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M14 4H8l-1-1H2a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1zm0 8H2V4h4.5l1 1H14v7z"/><path d="M9 7H7v2H6v1h1v2h1v-2h2v-1H9V7z"/></svg>
+        </button>
+        <button onClick={handleRefresh} disabled={isLoading} className="p-1 rounded hover:bg-[rgba(255,255,255,0.06)] disabled:opacity-50 flex-shrink-0" title="Refresh" style={{ color: 'var(--theme-foreground-subtle)' }}>
+          <RefreshCw className={cn('w-3.5 h-3.5', isLoading && 'animate-spin')} />
+        </button>
+        <div className="relative flex-shrink-0" ref={moreMenuRef}>
+          <button
+            onClick={() => setShowMoreMenu(v => !v)}
+            className={cn('p-1 rounded transition-colors', showMoreMenu ? 'bg-[rgba(255,255,255,0.08)]' : 'hover:bg-[rgba(255,255,255,0.06)]')}
+            title="More Options"
+            style={{ color: showMoreMenu ? 'var(--theme-foreground)' : 'var(--theme-foreground-subtle)' }}
+          >
+            <MoreVertical className="w-3.5 h-3.5" />
+          </button>
+          {showMoreMenu && (
+            <div
+              className="absolute right-0 top-full mt-1 rounded z-50 py-1"
+              style={{ backgroundColor: 'var(--theme-bg-elevated, #2d2d2d)', border: '1px solid var(--theme-border)', minWidth: 160, boxShadow: '0 4px 16px rgba(0,0,0,0.5)' }}
+            >
+              <button
+                className="w-full flex items-center gap-2 px-3 py-[5px] text-[11px] transition-colors"
+                style={{ color: 'var(--theme-foreground-muted)' }}
+                onClick={() => { setViewMode(viewMode === 'list' ? 'grid' : 'list'); setShowMoreMenu(false); }}
+                onMouseEnter={e => { e.currentTarget.style.backgroundColor = 'var(--theme-selection, rgba(255,255,255,0.06))'; }}
+                onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+              >
+                {viewMode === 'list' ? <Grid className="w-3.5 h-3.5" /> : <List className="w-3.5 h-3.5" />}
+                {viewMode === 'list' ? 'Grid View' : 'List View'}
+              </button>
+              <button
+                className="w-full flex items-center gap-2 px-3 py-[5px] text-[11px] transition-colors"
+                style={{ color: showHidden ? 'var(--theme-accent)' : 'var(--theme-foreground-muted)' }}
+                onClick={() => { setShowHidden(!showHidden); setShowMoreMenu(false); }}
+                onMouseEnter={e => { e.currentTarget.style.backgroundColor = 'var(--theme-selection, rgba(255,255,255,0.06))'; }}
+                onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+              >
+                {showHidden ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                {showHidden ? 'Hidden Files On' : 'Hidden Files Off'}
+              </button>
+              <div style={{ height: 1, backgroundColor: 'var(--theme-border)', margin: '4px 0' }} />
+              <div className="px-3 py-1 text-[10px] uppercase tracking-wider" style={{ color: 'var(--theme-foreground-subtle)' }}>Sort by</div>
+              {(['name', 'size', 'modified', 'type'] as const).map(opt => (
+                <button
+                  key={opt}
+                  className="w-full flex items-center gap-2 px-3 py-[5px] text-[11px] transition-colors"
+                  style={{ color: sortOptions.sortBy === opt ? 'var(--theme-accent)' : 'var(--theme-foreground-muted)' }}
+                  onClick={() => { setSortOptions(prev => ({ ...prev, sortBy: opt })); setShowMoreMenu(false); }}
+                  onMouseEnter={e => { e.currentTarget.style.backgroundColor = 'var(--theme-selection, rgba(255,255,255,0.06))'; }}
+                  onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+                >
+                  {sortOptions.sortBy === opt && <ArrowUpDown className="w-3 h-3" />}
+                  {sortOptions.sortBy !== opt && <span className="w-3" />}
+                  {opt.charAt(0).toUpperCase() + opt.slice(1)}
+                </button>
+              ))}
+            </div>
           )}
-        </div>
-        <div className="flex items-center gap-0.5 flex-shrink-0">
-          <button onClick={() => setViewMode(viewMode === 'list' ? 'grid' : 'list')} className="p-1 rounded hover:bg-background-secondary" title={viewMode === 'list' ? 'Grid View' : 'List View'}>
-            {viewMode === 'list' ? <Grid className="w-3.5 h-3.5 text-sidebar-foreground" /> : <List className="w-3.5 h-3.5 text-sidebar-foreground" />}
-          </button>
-          <button onClick={handleRefresh} disabled={isLoading} className="p-1 rounded hover:bg-background-secondary disabled:opacity-50" title="Refresh">
-            <RefreshCw className={cn('w-3.5 h-3.5 text-sidebar-foreground', isLoading && 'animate-spin')} />
-          </button>
-          <button onClick={() => handleNewFile(rootPath)} className="p-1 rounded hover:bg-background-secondary" title="New File">
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" className="text-sidebar-foreground"><path d="M9 1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V5l-4-4zm0 1.4L12.1 5H9V2.4zM4 14V2h4v4h4v8H4z"/><path d="M9 8H7v2H6v1h1v2h1v-2h2v-1H9V8z"/></svg>
-          </button>
-          <button onClick={() => handleNewFolder(rootPath)} className="p-1 rounded hover:bg-background-secondary" title="New Folder">
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" className="text-sidebar-foreground"><path d="M14 4H8l-1-1H2a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1zm0 8H2V4h4.5l1 1H14v7z"/><path d="M9 7H7v2H6v1h1v2h1v-2h2v-1H9V7z"/></svg>
-          </button>
         </div>
       </div>
 
-      {/* Search */}
-      <div className="px-3 py-2 border-b border-sidebar-border space-y-2">
-        <div className="relative">
-          <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-3.5 h-3.5 text-foreground-subtle" />
-          <input
-            type="text"
-            placeholder="Search files..."
-            className="w-full pl-7 pr-3 py-1 text-[12px] bg-background-input border border-border rounded focus:outline-none focus:ring-1 focus:ring-border-focus text-foreground placeholder-foreground-subtle"
-            onChange={(e) => debouncedSearch(e.target.value)}
-          />
+      {/* Toggleable Search */}
+      {showSearch && (
+        <div className="px-2 py-1.5 flex-shrink-0" style={{ borderBottom: '1px solid var(--theme-sidebar-border)' }}>
+          <div className="relative">
+            <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-3 h-3" style={{ color: 'var(--theme-foreground-subtle)' }} />
+            <input
+              autoFocus
+              type="text"
+              placeholder="Search files..."
+              className="w-full pl-6 pr-2 py-1 text-[11px] rounded focus:outline-none"
+              style={{
+                backgroundColor: 'var(--theme-input-bg, rgba(255,255,255,0.06))',
+                border: '1px solid var(--theme-border)',
+                color: 'var(--theme-foreground)',
+              }}
+              onChange={(e) => debouncedSearch(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Escape') { setShowSearch(false); setSearchQuery(''); } }}
+            />
+          </div>
         </div>
-        <div className="flex items-center justify-between">
-          <button
-            onClick={() => setShowHidden(!showHidden)}
-            className={cn('flex items-center space-x-1 px-2 py-0.5 text-[11px] rounded hover:bg-background-secondary', showHidden && 'bg-background-tertiary')}
-          >
-            <Filter className="w-3 h-3" />
-            <span>Hidden</span>
-          </button>
-          <select
-            value={sortOptions.sortBy}
-            onChange={(e) => setSortOptions(prev => ({ ...prev, sortBy: e.target.value as any }))}
-            className="text-[11px] bg-background-input border border-border rounded px-1.5 py-0.5 text-foreground"
-          >
-            <option value="name">Name</option>
-            <option value="size">Size</option>
-            <option value="modified">Modified</option>
-            <option value="type">Type</option>
-          </select>
-        </div>
-      </div>
+      )}
 
       {/* File Tree / Grid */}
       <div

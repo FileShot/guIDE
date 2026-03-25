@@ -2635,19 +2635,26 @@ class MCPToolServer {
   }
 
   getCompactToolHint(taskType, options) {
-    if (taskType === 'chat') return '';
-
     // Build a clean, compact tool schema from actual definitions
+    // Returns an ARRAY of strings — each element is independently appendable
+    // so the prompt assembler can include as many as the budget allows
+    // instead of silently dropping ALL tools when the single string is too large.
     const tools = this.getToolDefinitions();
     const toolMap = {};
     for (const tool of tools) toolMap[tool.name] = tool;
 
-    let hint = '## Tools\n';
-    hint += 'To call a tool, output a ```json block:\n```json\n{"tool":"<name>","params":{...}}\n```\n\n';
+    const parts = [];
 
+    // Part 0: Format header with concrete example — teaches the model the EXACT
+    // JSON format for calling tools. The example uses read_file (generic) so it
+    // is not tailored to any specific use case.
+    let header = '## Tools\n';
+    header += 'To call a tool, output a ```json block:\n```json\n{"tool":"<name>","params":{...}}\n```\n';
+    header += 'Example:\n```json\n{"tool":"read_file","params":{"filePath":"index.html"}}\n```\n\n';
     if (this.projectPath) {
-      hint += `Project: ${this.projectPath}\n\n`;
+      header += `Project: ${this.projectPath}\n\n`;
     }
+    parts.push(header);
 
     // Define categories — ALL tools must appear here or they are invisible to the model
     const categories = {
@@ -2665,9 +2672,10 @@ class MCPToolServer {
       'Image Generation': ['generate_image'],
     };
 
-    // For minimal mode, only show essential tools
+    // For minimal mode, build a single part with just core tools
     if (options && options.minimal) {
       const minimalTools = ['read_file', 'write_file', 'edit_file', 'append_to_file', 'list_directory', 'run_command', 'web_search'];
+      let minPart = '';
       for (const name of minimalTools) {
         const tool = toolMap[name];
         if (!tool) continue;
@@ -2675,32 +2683,38 @@ class MCPToolServer {
           .filter(([, info]) => info.required)
           .map(([n]) => n)
           .join(', ') : '';
-        hint += `- **${name}**(${params}) — ${tool.description}\n`;
+        minPart += `- **${name}**(${params}) — ${tool.description}\n`;
       }
-      return hint;
+      parts.push(minPart);
+      return parts;
     }
 
+    // Each category becomes a separate part — prompt assembler adds categories
+    // one by one until the token budget is exhausted. No all-or-nothing.
     for (const [category, names] of Object.entries(categories)) {
       const catTools = names.filter(n => toolMap[n]);
       if (catTools.length === 0) continue;
-      hint += `### ${category}\n`;
+      let catStr = `### ${category}\n`;
       for (const name of catTools) {
         const tool = toolMap[name];
         const params = tool.parameters ? Object.entries(tool.parameters)
           .map(([n, info]) => `${n}${info.required ? '' : '?'}`)
           .join(', ') : '';
-        hint += `- **${name}**(${params}) — ${tool.description}\n`;
+        catStr += `- **${name}**(${params}) — ${tool.description}\n`;
       }
-      hint += '\n';
+      catStr += '\n';
+      parts.push(catStr);
     }
 
-    hint += '### Rules\n';
-    hint += '- Use write_file to create new files, append_to_file to add to existing files\n';
-    hint += '- For edits: read_file first, then edit_file with exact oldText\n';
-    hint += '- For large files: write_file for first section, then append_to_file for remaining sections\n';
-    hint += '- Browser workflow: browser_navigate → browser_snapshot → interact using [ref=N] IDs\n';
+    // Rules section — last priority
+    let rules = '### Rules\n';
+    rules += '- Use write_file to create new files, append_to_file to add to existing files\n';
+    rules += '- For edits: read_file first, then edit_file with exact oldText\n';
+    rules += '- For large files: write_file for first section, then append_to_file for remaining sections\n';
+    rules += '- Browser workflow: browser_navigate → browser_snapshot → interact using [ref=N] IDs\n';
+    parts.push(rules);
 
-    return hint;
+    return parts;
   }
 
   getToolPromptForTask(taskType) {

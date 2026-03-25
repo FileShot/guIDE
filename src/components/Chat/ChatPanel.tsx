@@ -538,8 +538,58 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       setGeneratingToolCalls([...filtered]);
     });
 
+    // Atomic tool checkpoint — handles rotation scenarios where finalize + executing + results
+    // would normally be sent as three separate IPC events, causing the code block to disappear
+    // for 1-2 React frames. This single event processes all state transitions in one batch.
+    const cleanupToolCheckpoint = api.onToolCheckpoint?.((toolDataArray: { tool: string; params: any; result?: any }[]) => {
+      // Clear generating phase
+      generatingToolCallsRef.current = [];
+      setGeneratingToolCalls([]);
+      // Clear executing phase
+      executingToolsRef.current = [];
+      setExecutingTools([]);
+      // Move directly to completed — same dedup logic as onMcpToolResults
+      if (toolDataArray && Array.isArray(toolDataArray) && toolDataArray.length > 0) {
+        const WRITE_ACC = new Set(['write_file', 'create_file', 'edit_file', 'append_to_file']);
+        for (const ft of toolDataArray) {
+          if (WRITE_ACC.has(ft.tool) && (ft.params?.content || ft.result?.fullContent)) {
+            const fp = ft.params?.filePath || ft.params?.fileName || '';
+            if (fp) fileContentAccRef.current.set(fp, (ft.result?.fullContent || ft.params.content) as string);
+          }
+        }
+        setCompletedStreamingTools(prev => {
+          const combined = [...prev, ...toolDataArray];
+          const writeTools = ['write_file', 'create_file', 'edit_file', 'append_to_file'];
+          const seen = new Map<string, number>();
+          for (let i = combined.length - 1; i >= 0; i--) {
+            const td = combined[i];
+            if (writeTools.includes(td.tool)) {
+              const key = td.params?.filePath || td.params?.fileName || '';
+              if (!seen.has(key)) seen.set(key, i);
+            }
+          }
+          return combined.filter((td, idx) => {
+            if (!writeTools.includes(td.tool)) return true;
+            const key = td.params?.filePath || td.params?.fileName || '';
+            return seen.get(key) === idx;
+          });
+        });
+      }
+      // Refresh pending file changes after checkpoint
+      refreshPendingChanges();
+    });
+
     const cleanupProgress = api.onAgenticProgress?.((data: { iteration: number; maxIterations: number }) => {
       setAgenticProgress(data);
+    });
+
+    // Keep fileContentAccRef in sync with backend's rotationCheckpoint during D6/continuation
+    // paths. Without this, each append_to_file iteration restarts the code block from scratch
+    // because the accumulator is empty — only the tiny current-iteration stream is shown.
+    const cleanupFileAccUpdate = api.onLlmFileAccUpdate?.((data: { filePath: string; fullContent: string }) => {
+      if (data?.filePath && typeof data.fullContent === 'string') {
+        fileContentAccRef.current.set(data.filePath, data.fullContent);
+      }
     });
 
     const cleanupPhase = api.onAgenticPhase?.((data: { phase: string; status?: 'start' | 'done' | 'clear'; label?: string }) => {
@@ -598,7 +648,9 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       cleanupExecuting?.();
       cleanupResults?.();
       cleanupToolGenerating?.();
+      cleanupToolCheckpoint?.();
       cleanupProgress?.();
+      cleanupFileAccUpdate?.();
       cleanupPhase?.();
       cleanupTodo?.();
       cleanupAgentStatus?.();
@@ -2023,36 +2075,82 @@ ${e.message}`,
     // Render content text (prose, code blocks, any inline tool call JSON still in content)
     const elements = renderContentParts(msg.content, false, expandBlocks);
 
-    // D01: Render tool results from msg.toolsUsed — these survive finalization
-    // even when tool call JSON is stripped from msg.content by parseResponse().
-    // Without this, code blocks from write_file disappear after streaming ends.
+    // D01 + Fix F: Render tool results from msg.toolsUsed — these survive finalization.
+    // Fix F: Merge write tools targeting the same filePath into a single CodeBlock
+    // showing the accumulated content, instead of separate blocks per tool call.
     if (msg.toolsUsed && msg.toolsUsed.length > 0) {
+      const writeTools = ['write_file', 'create_file', 'edit_file', 'append_to_file'];
+      const langMap: Record<string, string> = { ts: 'typescript', tsx: 'tsx', js: 'javascript', jsx: 'jsx', py: 'python', rs: 'rust', go: 'go', java: 'java', cs: 'csharp', cpp: 'cpp', c: 'c', html: 'html', css: 'css', json: 'json', yaml: 'yaml', yml: 'yaml', md: 'markdown', sh: 'bash', bat: 'batch', txt: 'text', xml: 'xml', sql: 'sql' };
+
+      // Group write tools by filePath — merge content, keep non-write tools separate
+      const fileContentMap = new Map<string, { content: string; filePath: string; writes: number; lastOk: boolean }>();
+      const nonWriteTools: Array<{ toolUsed: any; index: number }> = [];
+      const fileOrder: string[] = []; // preserve order of first appearance
+
       for (let ti = 0; ti < msg.toolsUsed.length; ti++) {
         const toolUsed = msg.toolsUsed[ti];
-        const isWriteTool = ['write_file', 'create_file', 'edit_file', 'append_to_file'].includes(toolUsed.tool);
+        const isWriteTool = writeTools.includes(toolUsed.tool);
         const writeContent = isWriteTool ? toolUsed.params?.content as string | undefined : undefined;
         const writeFilePath = (toolUsed.params?.filePath as string || '');
-        const writeExt = writeFilePath.includes('.') ? writeFilePath.split('.').pop()?.toLowerCase() || '' : '';
-        const langMap: Record<string, string> = { ts: 'typescript', tsx: 'tsx', js: 'javascript', jsx: 'jsx', py: 'python', rs: 'rust', go: 'go', java: 'java', cs: 'csharp', cpp: 'cpp', c: 'c', html: 'html', css: 'css', json: 'json', yaml: 'yaml', yml: 'yaml', md: 'markdown', sh: 'bash', bat: 'batch', txt: 'text', xml: 'xml', sql: 'sql' };
-        const writeLang = langMap[writeExt] || writeExt || 'code';
-        const resultOk = toolUsed.result?.success !== false;
-        if (isWriteTool && writeContent) {
-          elements.push(
-            <div key={`toolUsed-${ti}`} className="my-1.5">
-              <div className="flex items-center gap-1.5 mb-1 px-0.5">
-                {resultOk
-                  ? <Check size={11} className="text-[#89d185] flex-shrink-0" />
-                  : <X size={11} className="text-[#f14c4c] flex-shrink-0" />}
-                <span className="text-[11px] text-[#d4d4d4] font-medium">{getToolLabel(toolUsed, resultOk ? 'ok' : 'fail')}</span>
-              </div>
-              <CodeBlock code={writeContent} language={writeLang} onApply={() => onApplyCode(currentFile, writeContent)} isToolCall={true} />
-            </div>
-          );
+
+        if (isWriteTool && writeContent && writeFilePath) {
+          const existing = fileContentMap.get(writeFilePath);
+          if (existing) {
+            // append_to_file: concatenate. write_file: replace (model restarted).
+            if (toolUsed.tool === 'append_to_file') {
+              existing.content += writeContent;
+            } else {
+              // write_file/create_file/edit_file replaces only if longer (monotonic protection)
+              if (writeContent.length > existing.content.length) {
+                existing.content = writeContent;
+              }
+            }
+            existing.writes++;
+            existing.lastOk = toolUsed.result?.success !== false;
+          } else {
+            fileContentMap.set(writeFilePath, {
+              content: writeContent,
+              filePath: writeFilePath,
+              writes: 1,
+              lastOk: toolUsed.result?.success !== false,
+            });
+            fileOrder.push(writeFilePath);
+          }
+        } else if (isWriteTool && !writeContent) {
+          // Write tool with no content — show as inline
+          nonWriteTools.push({ toolUsed, index: ti });
         } else {
-          elements.push(
-            <InlineToolCall key={`toolUsed-${ti}`} label={getToolLabel(toolUsed, resultOk ? 'ok' : 'fail')} icon={resultOk ? '\u2713' : '\u2717'} />
-          );
+          nonWriteTools.push({ toolUsed, index: ti });
         }
+      }
+
+      // Render merged file blocks
+      for (const fp of fileOrder) {
+        const entry = fileContentMap.get(fp)!;
+        const writeExt = fp.includes('.') ? fp.split('.').pop()?.toLowerCase() || '' : '';
+        const writeLang = langMap[writeExt] || writeExt || 'code';
+        const label = entry.writes > 1
+          ? `Wrote ${fp} (${entry.writes} operations merged)`
+          : `Wrote ${fp}`;
+        elements.push(
+          <div key={`toolUsed-file-${fp}`} className="my-1.5">
+            <div className="flex items-center gap-1.5 mb-1 px-0.5">
+              {entry.lastOk
+                ? <Check size={11} className="text-[#89d185] flex-shrink-0" />
+                : <X size={11} className="text-[#f14c4c] flex-shrink-0" />}
+              <span className="text-[11px] text-[#d4d4d4] font-medium">{label}</span>
+            </div>
+            <CodeBlock code={entry.content} language={writeLang} onApply={() => onApplyCode(currentFile, entry.content)} isToolCall={true} />
+          </div>
+        );
+      }
+
+      // Render non-write tools
+      for (const { toolUsed, index } of nonWriteTools) {
+        const resultOk = toolUsed.result?.success !== false;
+        elements.push(
+          <InlineToolCall key={`toolUsed-${index}`} label={getToolLabel(toolUsed, resultOk ? 'ok' : 'fail')} icon={resultOk ? '\u2713' : '\u2717'} />
+        );
       }
     }
 
@@ -2452,18 +2550,16 @@ ${e.message}`,
         />
       ) : (
       <>
-      {/* Header — spacer pushes buttons to right edge */}
+      {/* Header — justify-between puts title left, buttons right */}
       <div
-        className="h-[32px] flex items-center px-2 pr-2 flex-shrink-0"
+        className={`h-[32px] flex items-center justify-between px-2 ${navigator.userAgent.includes('Electron') ? 'pr-[140px]' : 'pr-2'} flex-shrink-0`}
         style={{ backgroundColor: 'var(--theme-bg-secondary)', borderBottom: '1px solid var(--theme-border)' }}
       >
         <div className="flex items-center flex-shrink-0">
           <Sparkles size={14} className="mr-2 flex-shrink-0" style={{ color: 'var(--theme-accent)' }} />
           <span className="text-[12px] font-semibold whitespace-nowrap brand-font" style={{ color: 'var(--theme-foreground)' }}>gu<span style={{ color: 'var(--theme-accent)' }}>IDE</span></span>
         </div>
-        {/* Spacer — pushes action buttons to the right */}
-        <div className="flex-1 min-w-0" />
-        {/* Action buttons — pinned right by spacer */}
+        {/* Action buttons — justify-between places these at right edge */}
         <div className="flex items-center gap-[1px] flex-shrink-0 chat-header-buttons">
 
           <button
@@ -2837,6 +2933,98 @@ ${e.message}`,
               {licenseMessage}
             </p>
           )}
+
+          {/* Tool Toggles */}
+          <div className="border-t border-[#3c3c3c] my-2" />
+          <p className="text-[10px] text-[#858585] mb-1 uppercase tracking-wider flex items-center gap-1.5">
+            <Settings size={10} /> Tools
+            <span className="ml-auto text-[9px] text-[#585858] normal-case tracking-normal">
+              {66 - disabledTools.length}/{66} enabled
+            </span>
+          </p>
+          <p className="text-[10px] text-[#585858] mb-2">Toggle tools the AI can use. Disabled tools are hidden from the model and rejected at execution.</p>
+          {(() => {
+            const toolCategories: Record<string, string[]> = {
+              'File Operations': ['read_file', 'write_file', 'edit_file', 'append_to_file', 'delete_file', 'rename_file', 'copy_file', 'list_directory', 'find_files', 'create_directory', 'get_project_structure', 'get_file_info', 'open_file_in_editor', 'diff_files'],
+              'Search': ['grep_search', 'search_in_file', 'search_codebase', 'replace_in_files'],
+              'Terminal': ['run_command', 'check_port', 'install_packages'],
+              'Web': ['web_search', 'fetch_webpage', 'http_request'],
+              'Browser': ['browser_navigate', 'browser_snapshot', 'browser_click', 'browser_type', 'browser_fill_form', 'browser_select_option', 'browser_evaluate', 'browser_scroll', 'browser_back', 'browser_press_key', 'browser_hover', 'browser_drag', 'browser_screenshot', 'browser_get_content', 'browser_get_url', 'browser_get_links', 'browser_tabs', 'browser_handle_dialog', 'browser_console_messages', 'browser_file_upload', 'browser_resize', 'browser_wait', 'browser_wait_for', 'browser_close'],
+              'Git': ['git_status', 'git_commit', 'git_diff', 'git_log', 'git_branch', 'git_stash', 'git_reset'],
+              'Code Analysis': ['analyze_error'],
+              'Undo': ['undo_edit', 'list_undoable'],
+              'Memory': ['save_memory', 'get_memory', 'list_memories'],
+              'Planning': ['write_todos', 'update_todo'],
+              'Scratchpad': ['write_scratchpad', 'read_scratchpad'],
+              'Image Generation': ['generate_image'],
+            };
+            const allToolNames = Object.values(toolCategories).flat();
+            return (
+              <div className="space-y-0.5 max-h-[200px] overflow-auto">
+                {Object.entries(toolCategories).map(([category, tools]) => {
+                  const enabledInCat = tools.filter(t => !disabledTools.includes(t)).length;
+                  const allEnabled = enabledInCat === tools.length;
+                  const noneEnabled = enabledInCat === 0;
+                  return (
+                    <details key={category} className="group">
+                      <summary className="flex items-center gap-1.5 py-0.5 cursor-pointer select-none text-[10px] text-[#cccccc] hover:text-white list-none">
+                        <ChevronDown size={10} className="transition-transform group-open:rotate-0 -rotate-90 text-[#585858]" />
+                        <span className="flex-1">{category} <span className="text-[#585858]">({enabledInCat}/{tools.length})</span></span>
+                        <button
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (allEnabled) {
+                              setDisabledTools(prev => [...new Set([...prev, ...tools])]);
+                            } else {
+                              setDisabledTools(prev => prev.filter(t => !tools.includes(t)));
+                            }
+                          }}
+                          className="text-[9px] px-1.5 py-0 rounded transition-colors"
+                          style={{
+                            color: allEnabled ? '#585858' : '#3794ff',
+                            backgroundColor: 'transparent',
+                          }}
+                          onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#ffffff10'; }}
+                          onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+                        >
+                          {allEnabled ? 'Disable all' : 'Enable all'}
+                        </button>
+                      </summary>
+                      <div className="pl-4 pb-1 space-y-0">
+                        {tools.map(toolName => {
+                          const isEnabled = !disabledTools.includes(toolName);
+                          return (
+                            <label key={toolName} className="flex items-center gap-1.5 py-[1px] cursor-pointer text-[10px] hover:bg-[#ffffff06] rounded px-1 -mx-1">
+                              <div
+                                onClick={() => toggleTool(toolName)}
+                                className="w-[26px] h-[13px] rounded-full relative transition-colors flex-shrink-0 cursor-pointer"
+                                style={{ backgroundColor: isEnabled ? '#007acc' : '#3c3c3c' }}
+                              >
+                                <div
+                                  className="w-[9px] h-[9px] rounded-full bg-white absolute top-[2px] transition-all"
+                                  style={{ left: isEnabled ? '15px' : '2px' }}
+                                />
+                              </div>
+                              <span style={{ color: isEnabled ? '#cccccc' : '#585858' }}>{toolName}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </details>
+                  );
+                })}
+                {disabledTools.length > 0 && (
+                  <button
+                    onClick={() => setDisabledTools([])}
+                    className="text-[9px] text-[#3794ff] hover:text-[#4da6ff] hover:underline mt-1 cursor-pointer"
+                  >
+                    Enable all tools
+                  </button>
+                )}
+              </div>
+            );
+          })()}
         </div>
       )}
 

@@ -38,7 +38,7 @@ const Header: React.FC<ConceptHeaderProps> = ({
 
   return (
     <div
-      className="h-[36px] flex items-center px-3 flex-shrink-0"
+      className="h-[36px] flex items-center px-3 pr-[140px] flex-shrink-0"
       style={{
         backgroundColor: 'color-mix(in srgb, var(--theme-bg-secondary) 85%, transparent)',
         backdropFilter: 'blur(12px)',

@@ -1,7 +1,36 @@
 # guIDE Web Testing Environment — Complete Reference
 
 > **To start a test session:** Tell the agent "read WEB_TEST_RULES.md" — this file contains everything needed.
-> Last updated: 2026-03-13
+> Last updated: 2026-03-23
+
+---
+
+## RULE ZERO OF TESTING — NO CHEERLEADING — THIS OVERRIDES EVERYTHING
+
+**This is the single most important rule in this entire document. It is placed first because it is violated the most.**
+
+**CHEERLEADING IS BANNED. COMPLETELY. ABSOLUTELY. NO EXCEPTIONS. NO SOFT VERSIONS.**
+
+What cheerleading looks like (ALL of these are violations):
+- "The model is generating at 9 tok/s" (implying progress is acceptable)
+- "Generation is progressing" / "Output is growing" / "Code is being produced"
+- "Looking good so far" / "Things seem to be working" / "No issues yet"
+- "The model successfully generated..." / "It produced a coherent..."
+- Any sentence that frames the test outcome positively before defects are fully catalogued
+- Describing generation speed, line count growth, or output volume with implicit approval
+- Using exclamation marks to express satisfaction about test results
+- Saying "no defects found" without specifying EXACTLY which dimensions were checked
+- ANY positive adjective about the model's output: "good", "nice", "clean", "solid", "decent"
+
+What to do instead:
+- Report ONLY defects and specific factual measurements (line count, context %, token count)
+- If no defect is found in a specific dimension, say: "No defect found in [dimension name]" — NOT "it's working" or "it passed"
+- If all dimensions show no defect, INCREASE TEST DIFFICULTY — you are not testing hard enough
+- Every observation must read like a hostile quality audit finding, not a progress update
+
+**WHY THIS RULE EXISTS:** Agents repeatedly describe test progress with positive framing ("generating at 9 tok/s", "model is producing output", "looking good"), creating a false sense that things are working when they haven't been properly evaluated. This wastes the user's time and masks real defects. The agent's job during testing is to FIND PROBLEMS, not narrate progress.
+
+**IF YOU CATCH YOURSELF CHEERLEADING:** Stop. Delete the sentence. Rewrite it as a factual observation or defect report. Then re-read this section before continuing.
 
 ---
 
@@ -146,13 +175,19 @@ This is the single most important rule.
 If a test fails, the failure IS the finding. Log it. Diagnose the root cause.
 Only make changes that would help ALL users with ALL prompts on ALL hardware.
 
-### Rule 2 — Be a Normal User
+### Rule 2 — Be a Normal User (NO HAND-HOLDING)
 When testing, use exactly the prompts a real user would type:
 - Typos, run-on sentences, ambiguous phrasing
 - Multi-part requests ("can you do X and also Y?")
 - Follow-up messages that reference prior context
 - Edge cases: very short messages, very long messages, code pastes
 - NO hand-holding prompts designed to succeed ("please call the read_file tool and...")
+- **NEVER instruct the model on HOW to generate its output** — do NOT say "make sure to close HTML tags",
+  "end with proper closing tags", "include opening and closing brackets", or ANY instruction that
+  coaches the model on output format. A real user says "build me a website for a pizza shop" — they
+  do NOT say "build me a website and make sure you close all the HTML tags at the end." If the model
+  can't produce complete output without being coached, THAT IS A DEFECT TO LOG — not a prompt to fix.
+- The test prompt should describe WHAT the user wants, never HOW the model should structure its response
 
 ### Rule 3 — Score All Three Dimensions
 Every test response must be evaluated on all three:
@@ -192,10 +227,14 @@ nvidia-smi --query-gpu=memory.free --format=csv,noheader,nounits
 If free VRAM < 2800MB, do NOT run inference tests. Results on VRAM-constrained
 hardware are hardware-degraded and cannot be trusted for diagnosing pipeline issues.
 
-### Rule 8 — No Cheerleading
+### Rule 8 — No Cheerleading (see also RULE ZERO OF TESTING at top of this document)
 Test results are reported as defects found. If nothing broke, state exactly what
 was checked and that no defect was found in those dimensions. Never say "great results",
-"working well", "looking good", or any positive framing. Report facts only.
+"working well", "looking good", "progressing", "generating nicely", or any positive framing.
+Report facts only. No positive adjectives. No narrating progress as though it's achievement.
+Describing generation speed or line count growth with implied approval is cheerleading.
+Saying "no issues yet" is cheerleading. The ONLY acceptable framing is defect reports and
+raw numeric measurements without editorial commentary.
 
 ---
 
@@ -648,6 +687,114 @@ ACCOUNTABILITY CHECK
 10. Did I read copilot-instructions.md before implementing? [yes/no]
 ```
 If ANY answer is wrong, fix it before proceeding.
+
+---
+
+## 15. SEAMLESS CONTINUATION TEST PROTOCOL — MANDATORY
+
+> Added 2026-03-23. This section governs ALL seamless continuation testing.
+> When the user says "test seamless continuation", follow this section EXACTLY.
+
+### What We Are Testing
+Seamless continuation = when the model hits maxResponseTokens mid-generation, the pipeline
+automatically triggers a new generation that picks up EXACTLY where the model left off.
+The intended behavior:
+
+1. Model starts generating a large code file (thousands of lines)
+2. Model hits maxResponseTokens → generation stops
+3. Pipeline detects incomplete output → automatically triggers continuation
+4. New generation picks up in the SAME code block, from the EXACT line where it stopped
+5. Process repeats until the file is complete
+6. Final output is ONE coherent file with no gaps, no duplicates, no broken blocks
+
+**ANYTHING other than this is a failure.** Specifically:
+- Code block splitting into multiple blocks at continuation boundary = FAILURE
+- Duplicate lines at the continuation seam = FAILURE
+- Model restarting from the beginning of the file = FAILURE
+- Model losing track of what function/class it was writing = FAILURE
+- Naked code appearing outside code blocks after finalization = FAILURE
+- Code block not closing properly = FAILURE
+- Model stopping before completing the file = FAILURE
+
+### How to Run the Test
+1. Clear logs
+2. Check VRAM (>2800MB required)
+3. Open a new conversation in the browser
+4. Select a local model (Qwen3.5-4B or larger)
+5. Send a **10-paragraph prompt** describing a realistic website/application with:
+   - Specific business type (car dealership, restaurant, gym, etc. — rotate every test)
+   - Detailed requirements: specific JavaScript functions (12+), CSS animations, WebGL effects,
+     responsive design, form validation, API integration, localStorage, etc.
+   - Do NOT specify line counts — let the model decide how long the output needs to be
+   - The prompt must be detailed enough that the model NATURALLY produces 1000+ lines
+6. Take a screenshot IMMEDIATELY after sending
+7. Monitor every 5 seconds with screenshots (see monitoring rules below)
+
+### Monitoring Rules During Seamless Continuation
+- **Screenshot every 5 seconds** — no exceptions. Every 5 seconds.
+- **After each screenshot, analyze it** — describe what you see. Is the code block still open?
+  Has the line count changed? Is there a "Reasoning..." indicator? Has continuation triggered?
+- **Check backend logs every 5 seconds** — look for:
+  - `seamless continuation` / `maxTokens reached` / `continuation triggered`
+  - `context rotation` / `compaction`
+  - `Natural stop with unclosed code fence`
+  - stopReason values
+- **The INSTANT seamless continuation triggers**: Watch the next screenshot with extreme
+  scrutiny. The model must continue in the SAME code block from the EXACT line where it stopped.
+  If ANYTHING else happens (new block, duplicate lines, restart, naked code), that is an
+  IMMEDIATE FAILURE. Stop monitoring and investigate.
+- **Do NOT wait until the end** to check for failures — check at every continuation boundary
+- **If the model is still generating after 10 minutes**, continue monitoring. Do not stop early.
+
+### What Constitutes Immediate Failure
+Any of these observed during generation = STOP and investigate immediately:
+1. Code splits into multiple code blocks at continuation boundary
+2. Continuation starts a new ``` fence instead of continuing in the existing one
+3. Text appears BETWEEN code blocks that should be contiguous
+4. Line count drops (content regression)
+5. Model restarts the file from scratch
+6. Generation freezes for more than 3 minutes with no new tokens
+7. After finalization: code that was in one block during streaming appears scattered
+
+### Reporting Format for Seamless Continuation Tests
+```
+SEAMLESS CONTINUATION TEST REPORT
+==================================
+PROMPT: [exact prompt sent — or summary if >500 chars]
+MODEL: [name, size, context allocated]
+TOTAL GENERATION TIME: [minutes:seconds]
+CONTINUATION COUNT: [how many times seamless continuation triggered]
+ROTATION COUNT: [how many context rotations triggered]
+FINAL OUTPUT: [line count, whether file is complete, whether code block is intact]
+
+CONTINUATION BOUNDARIES:
+  - Continuation 1 at [time]: [what happened — did code stay in same block?]
+  - Continuation 2 at [time]: [what happened]
+  ...
+
+DEFECTS FOUND:
+  - [specific defect with screenshot evidence and log evidence]
+  - [or "None"]
+
+FINALIZATION CHECK:
+  - Code block intact after response finalized? [yes/no]
+  - Naked code outside blocks? [yes/no]
+  - Duplicate sections? [yes/no]
+
+LOG EVIDENCE:
+  [paste relevant log lines showing continuation triggers, stop reasons, etc.]
+```
+
+### ABSOLUTE BANS During Seamless Continuation Testing
+- No cheerleading. No "looking good." No "progressing well." No exclamation marks.
+- No saying "good" about anything. Not the code. Not the continuation. Not the progress.
+- No positive framing of any kind. Report defects and facts ONLY.
+- If zero defects are found, state exactly what was checked and that no defect was found.
+  Do NOT celebrate this. Increase test difficulty instead.
+- Do NOT end the test early. Let the model finish completely.
+- Do NOT modify source code during the test. Pipeline is frozen during observation.
+
+---
 
 ### Rules That Apply at ALL Times During Testing
 - **NO CHEERLEADING — PRIME RULE** — never say "looking good", "great progress", "improvement", "strong results", or any positive framing whatsoever. Report defects and facts ONLY. If you find zero defects, increase test difficulty — you're not testing hard enough.

@@ -29,7 +29,7 @@ const Header: React.FC<ConceptHeaderProps> = ({
 
   return (
     <div
-      className="h-[34px] flex items-center px-3 flex-shrink-0"
+      className="h-[34px] flex items-center px-3 pr-[140px] flex-shrink-0"
       style={{ backgroundColor: 'transparent', borderBottom: '1px solid color-mix(in srgb, var(--theme-border) 40%, transparent)' }}
     >
       <span

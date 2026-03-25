@@ -143,6 +143,7 @@ function register(ctx) {
         MAX_AGENTIC_ITERATIONS,
       });
     } catch (error) {
+      console.error('[AgenticChat] Pipeline error:', error.stack || error.message || error);
       return { success: false, error: error.message };
     }
   });

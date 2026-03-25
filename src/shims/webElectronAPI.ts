@@ -171,6 +171,7 @@ function setupWebElectronAPI() {
     onLlmReplaceLast:   (cb: Function) => on('llm-replace-last', cb),
     onLlmIterationBegin:(cb: Function) => on('llm-iteration-begin', cb),
     onLlmToolGenerating:(cb: Function) => on('llm-tool-generating', cb),
+    onLlmFileAccUpdate: (cb: Function) => on('llm-file-acc-update', cb),
     onDevLog:           (cb: Function) => on('dev-log', cb),
 
     // ── Model Management ──

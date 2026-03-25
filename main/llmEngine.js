@@ -8,6 +8,7 @@ const { EventEmitter } = require('events');
 const { getModelProfile, getModelSamplingParams, getEffectiveContextSize, getSizeTier } = require('./modelProfiles');
 const { detectFamily, detectParamSize } = require('./modelDetection');
 const { sanitizeResponse } = require('./sanitize');
+const { buildContextShiftOptions } = require('./pipeline/nativeContextStrategy');
 
 // ─── Constants ───
 const STALL_TIMEOUT_GPU_MS = 90_000;
@@ -25,6 +26,11 @@ const KV_REUSE_COOLDOWN_TURNS = 2;
 const MAX_PARALLEL_FUNCTION_CALLS = 4;
 const CONTEXT_ABSOLUTE_CEILING = 131_072;
 const VRAM_PADDING_FLOOR_MB = 800;
+
+// ─── Testing Override ───
+// Set TEST_MAX_CONTEXT=6000 (or any number) to force small context for faster rotation testing
+const TEST_MAX_CONTEXT = process.env.TEST_MAX_CONTEXT ? parseInt(process.env.TEST_MAX_CONTEXT, 10) : null;
+if (TEST_MAX_CONTEXT) console.log(`[LLM] TEST_MAX_CONTEXT override active: ${TEST_MAX_CONTEXT} tokens`);
 
 let _genCounter = 0;
 
@@ -396,8 +402,13 @@ class LLMEngine extends EventEmitter {
           let nativeTrainCtx = 0;
           try { nativeTrainCtx = loadedModel.trainContextSize || 0; } catch (_) {}
           // Respect the model's actual train context ceiling
-          const clampedCtx = nativeTrainCtx > 0 ? Math.min(targetCtx, nativeTrainCtx) : targetCtx;
-          console.log(`[LLM DIAG] Context creation: mode=${mode}, targetCtx=${targetCtx}, clampedCtx=${clampedCtx}, trainCtx=${nativeTrainCtx}, modelSizeGB=${gpuConfig.modelSizeGB.toFixed(2)}`);
+          let clampedCtx = nativeTrainCtx > 0 ? Math.min(targetCtx, nativeTrainCtx) : targetCtx;
+          // TEST_MAX_CONTEXT override for faster rotation testing
+          if (TEST_MAX_CONTEXT && clampedCtx > TEST_MAX_CONTEXT) {
+            console.log(`[LLM] TEST_MAX_CONTEXT: clamping context from ${clampedCtx} to ${TEST_MAX_CONTEXT}`);
+            clampedCtx = TEST_MAX_CONTEXT;
+          }
+          console.log(`[LLM DIAG] Context creation: mode=${mode}, targetCtx=${targetCtx}, clampedCtx=${clampedCtx}, trainCtx=${nativeTrainCtx}, modelSizeGB=${gpuConfig.modelSizeGB.toFixed(2)}${TEST_MAX_CONTEXT ? `, testOverride=${TEST_MAX_CONTEXT}` : ''}`);
 
           const ctxRequest = {
             contextSize: clampedCtx,
@@ -770,11 +781,13 @@ class LLMEngine extends EventEmitter {
         tagBuffer += ch;
 
         if (tagBuffer === '<think>' || tagBuffer.endsWith('<think>')) {
+          if (!insideThinkBlock) console.log(`[LLM] Think block OPENED (${fullResponse.length} output chars so far)`);
           insideThinkBlock = true;
           tagBuffer = '';
           continue;
         }
         if (tagBuffer === '</think>' || tagBuffer.endsWith('</think>')) {
+          if (insideThinkBlock) console.log(`[LLM] Think block CLOSED (${thinkingTokenCount} think chars total)`);
           insideThinkBlock = false;
           tagBuffer = '';
           continue;
@@ -869,6 +882,14 @@ class LLMEngine extends EventEmitter {
       }
       const tokensUsed = this.sequence?.nextTokenIndex || 0;
       console.log(`[LLM] Post-gen: stopReason=${finalStopReason}, responseChars=${fullResponse.length}, tokensUsed=${tokensUsed}, maxTokens=${merged.maxTokens}, llamaStopReason=${result?.metadata?.stopReason || 'unknown'}`);
+      // Content logging: show first/last 200 chars so we can diagnose what the model produced
+      if (fullResponse.length > 0) {
+        const head = fullResponse.slice(0, 200).replace(/\n/g, '\\n');
+        const tail = fullResponse.slice(-200).replace(/\n/g, '\\n');
+        console.log(`[LLM] Content HEAD: ${head}`);
+        if (fullResponse.length > 400) console.log(`[LLM] Content TAIL: ${tail}`);
+        console.log(`[LLM] Think tokens this gen: ${thinkingTokenCount}`);
+      }
       return {
         text: sanitized,
         rawText: fullResponse,
@@ -928,6 +949,13 @@ class LLMEngine extends EventEmitter {
     else if (thoughtBudget === 0) budgets.thoughtTokens = 0;
     else budgets.thoughtTokens = thoughtBudget;
 
+    // Use native context shift strategy with custom compression logic
+    // Solution A: Let node-llama-cpp handle WHEN to shift, we define WHAT happens
+    const contextShiftOpts = buildContextShiftOptions(this);
+    if (useKvCache) {
+      contextShiftOpts.lastEvaluationMetadata = this.lastEvaluation?.contextShiftMetadata;
+    }
+
     return this.chat.generateResponse(this.chatHistory, {
       maxTokens: params.maxTokens || this.defaultParams.maxTokens,
       temperature: params.temperature,
@@ -944,9 +972,7 @@ class LLMEngine extends EventEmitter {
         history: this.lastEvaluation?.contextWindow,
         minimumOverlapPercentageToPreventContextShift: 0.5,
       } : undefined,
-      contextShift: useKvCache ? {
-        lastEvaluationMetadata: this.lastEvaluation?.contextShiftMetadata,
-      } : undefined,
+      contextShift: contextShiftOpts,
       budgets,
       signal: this.abortController?.signal,
       tokenPredictor: this.tokenPredictor,
@@ -1182,6 +1208,13 @@ class LLMEngine extends EventEmitter {
       else if (thoughtBudget === 0) budgets.thoughtTokens = 0;
       else budgets.thoughtTokens = thoughtBudget;
 
+      // Use native context shift strategy with custom compression logic
+      // Solution A: Let node-llama-cpp handle WHEN to shift, we define WHAT happens
+      const contextShiftOpts = buildContextShiftOptions(this);
+      if (useKvCache) {
+        contextShiftOpts.lastEvaluationMetadata = this.lastEvaluation?.contextShiftMetadata;
+      }
+
       const result = await this.chat.generateResponse(this.chatHistory, {
         functions,
         maxParallelFunctionCalls: MAX_PARALLEL_FUNCTION_CALLS,
@@ -1200,9 +1233,7 @@ class LLMEngine extends EventEmitter {
           history: this.lastEvaluation?.contextWindow,
           minimumOverlapPercentageToPreventContextShift: 0.5,
         } : undefined,
-        contextShift: useKvCache ? {
-          lastEvaluationMetadata: this.lastEvaluation?.contextShiftMetadata,
-        } : undefined,
+        contextShift: contextShiftOpts,
         budgets,
         signal: this.abortController?.signal,
         tokenPredictor: this.tokenPredictor,

@@ -46,8 +46,15 @@ function buildSystemPrompt(basePreamble, toolHint, projectPath, currentFile, sel
     appendIfBudget(basePreamble + '\n\n');
   }
 
-  // Tool hint — high priority
-  if (toolHint) {
+  // Tool hint — iterative assembly. toolHint can be:
+  // - An array of strings (header, categories, rules) — added one by one until budget exhausted
+  // - A single string (legacy) — attempted as one block
+  // This prevents the all-or-nothing bug where a large toolHint is silently dropped.
+  if (Array.isArray(toolHint)) {
+    for (const part of toolHint) {
+      if (!appendIfBudget(part)) break; // Budget exhausted — stop adding categories
+    }
+  } else if (toolHint) {
     appendIfBudget(toolHint + '\n');
   }
 

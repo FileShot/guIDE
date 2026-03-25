@@ -102,6 +102,7 @@ export interface ElectronAPI {
   onLlmThinkingToken(callback: (token: string) => void): (() => void) | void;
   onLlmReplaceLast(callback: (text: string) => void): (() => void) | void;
   onLlmToolGenerating(callback: (data: { callIndex: number; functionName: string; paramsText: string; done: boolean }) => void): (() => void) | void;
+  onToolCheckpoint(callback: (data: { tool: string; params: any; result?: any }[]) => void): (() => void) | void;
   onDevLog(callback: (entry: { level: string; text: string; timestamp: number }) => void): (() => void) | void;
   onToolExecuting(callback: (data: { tool: string; params: any }) => void): (() => void) | void;
   onMcpToolResults(callback: (data: any) => void): (() => void) | void;

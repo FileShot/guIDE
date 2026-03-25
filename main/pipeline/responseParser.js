@@ -39,6 +39,8 @@ function parseResponse(rawText, stopReason) {
  * Returns true when:
  *  - There's an unclosed ```json block with tool-call-like content
  *  - There's an unclosed <tool_call> tag
+ *  - The text starts with raw JSON {"tool": "..."} that has unbalanced brackets
+ *    (truncated mid-generation by maxTokens)
  */
 function _hasPartialToolCall(text) {
   // Check for unclosed ```json block with tool-call keywords
@@ -57,6 +59,30 @@ function _hasPartialToolCall(text) {
   const xmlIdx = text.lastIndexOf('<tool_call>');
   if (xmlIdx !== -1 && !text.substring(xmlIdx).includes('</tool_call>')) {
     return true;
+  }
+
+  // Check for raw JSON tool call (no fences) — either at the START of text
+  // or EMBEDDED after preamble text (e.g. "I'll create the file\n\n{"tool":...")
+  // If the JSON has unbalanced brackets, it was truncated and is partial.
+  const rawJsonPattern = /\{\s*"(?:tool|tool_calls|function|name)"\s*:/g;
+  let rawMatch;
+  while ((rawMatch = rawJsonPattern.exec(text)) !== null) {
+    const jsonStart = rawMatch.index;
+    let depth = 0;
+    let inStr = false;
+    let escaped = false;
+    for (let i = jsonStart; i < text.length; i++) {
+      const ch = text[i];
+      if (escaped) { escaped = false; continue; }
+      if (ch === '\\' && inStr) { escaped = true; continue; }
+      if (ch === '"') { inStr = !inStr; continue; }
+      if (!inStr) {
+        if (ch === '{') depth++;
+        else if (ch === '}') depth--;
+        if (depth === 0 && i > jsonStart) break; // balanced — not partial
+      }
+    }
+    if (depth > 0) return true; // unbalanced open — partial raw JSON tool call
   }
 
   return false;
@@ -166,11 +192,29 @@ function tryExtractBalancedJson(text, startIdx) {
   const close = ch === '{' ? '}' : ']';
   let depth = 0;
   let inString = false;
-  let prev = '';
+  let escaped = false;
 
   for (let i = startIdx; i < text.length; i++) {
     const c = text[i];
-    if (c === '"' && prev !== '\\') inString = !inString;
+
+    if (escaped) {
+      // Current char is the target of an escape sequence — skip it entirely.
+      // This correctly handles \\" (escaped backslash followed by a real quote)
+      // which the old single-char prev tracker got wrong.
+      escaped = false;
+      continue;
+    }
+
+    if (c === '\\' && inString) {
+      escaped = true;
+      continue;
+    }
+
+    if (c === '"') {
+      inString = !inString;
+      continue;
+    }
+
     if (!inString) {
       if (c === open) depth++;
       if (c === close) depth--;
@@ -183,7 +227,6 @@ function tryExtractBalancedJson(text, startIdx) {
         }
       }
     }
-    prev = c;
   }
 
   // Unbalanced — try fixing with tryFixJson
@@ -285,23 +328,60 @@ function cleanTrailingArtifacts(text) {
 
 /**
  * Attempt to fix truncated JSON by adding missing closing brackets/braces.
+ *
+ * Uses a proper escaped-flag state machine rather than a single-char prev lookback.
+ * The single-char approach fails for \\" sequences (escaped backslash followed by
+ * a quote that SHOULD close the string — e.g. content ending with a literal path
+ * separator like "C:\\path\\" before the closing ").
  */
 function tryFixJson(s) {
   let str = s.trim();
   let inStr = false;
-  let prev = '';
+  let escaped = false;
   const depth = { '{': 0, '[': 0 };
 
-  for (const ch of str) {
-    if (ch === '"' && prev !== '\\') inStr = !inStr;
+  for (let i = 0; i < str.length; i++) {
+    const ch = str[i];
+
+    if (escaped) {
+      // Current char is the target of an escape sequence — skip it entirely
+      escaped = false;
+      continue;
+    }
+
+    if (ch === '\\' && inStr) {
+      // Next character is escaped — set flag and skip both
+      escaped = true;
+      continue;
+    }
+
+    if (ch === '"') {
+      inStr = !inStr;
+      continue;
+    }
+
     if (!inStr) {
       if (ch === '{') depth['{']++;
-      if (ch === '}') depth['{']--;
-      if (ch === '[') depth['[']++;
-      if (ch === ']') depth['[']--;
+      else if (ch === '}') depth['{']--;
+      else if (ch === '[') depth['[']++;
+      else if (ch === ']') depth['[']--;
     }
-    prev = ch;
   }
+
+  // Close open string before closing brackets — truncated JSON often ends
+  // mid-string (e.g. write_file content cut off at maxTokens).
+  // If escaped=true here, the text ended with a bare backslash (dangling escape).
+  if (inStr) {
+    if (escaped) {
+      // Dangling escape introducer — complete the escape sequence so JSON is valid
+      str += '\\';
+    }
+    str += '"';
+  }
+
+  // Strip trailing commas/colons/whitespace — JSON forbids trailing commas
+  // before closing brackets (e.g. {"content":"value",} is invalid)
+  str = str.replace(/[,:\s]+$/, '');
 
   while (depth['['] > 0) { str += ']'; depth['[']--; }
   while (depth['{'] > 0) { str += '}'; depth['{']--; }
@@ -309,7 +389,15 @@ function tryFixJson(s) {
   try {
     return JSON.parse(str);
   } catch {
-    return null;
+    // Small models sometimes produce invalid JSON escape sequences like \` (escaped backtick)
+    // or \' (escaped single quote). JSON only allows: \" \\ \/ \b \f \n \r \t \uXXXX.
+    // Sanitize by removing the backslash from invalid escape sequences, then retry.
+    const sanitized = str.replace(/\\([^"\\/bfnrtu])/g, '$1');
+    try {
+      return JSON.parse(sanitized);
+    } catch {
+      return null;
+    }
   }
 }
 
@@ -354,7 +442,10 @@ function extractContentFromPartialToolCall(buffer) {
         }
       }
       
-      // Remove any trailing incomplete JSON syntax
+      // Remove any trailing incomplete JSON syntax — including malformed closings
+      // Model sometimes writes "</param}}" or other non-standard JSON closings
+      content = content.replace(/["']\s*<\/?\w*\s*}\s*}\s*```?\s*$/m, '');
+      content = content.replace(/["']\s*}\s*}\s*```?\s*$/m, '');
       content = content.replace(/["\s]*}\s*```?\s*$/, '');
       content = content.replace(/"\s*$/, '');
       

@@ -92,6 +92,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onLlmReplaceLast: (callback) => _on('llm-replace-last', callback),
   onLlmIterationBegin: (callback) => _on('llm-iteration-begin', callback),
   onLlmToolGenerating: (callback) => _on('llm-tool-generating', callback),
+  onLlmFileAccUpdate:  (callback) => _on('llm-file-acc-update', callback),
+  onToolCheckpoint: (callback) => _on('tool-checkpoint', callback),
   onDevLog: (callback) => _on('dev-log', callback),
 
   // ── Model Management ──

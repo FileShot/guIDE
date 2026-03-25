@@ -346,7 +346,10 @@ export function stripTrailingPartialToolCall(text: string): string {
     }
   }
   // depth > 0 means there is an unclosed top-level JSON object at the end
-  if (depth > 0 && lastTopLevelStart !== -1) {
+  // FIX: Only strip when lastTopLevelStart > 0 — there must be actual content BEFORE
+  // the JSON to preserve. When the entire text IS the JSON (position 0), stripping
+  // returns empty string and nothing renders (D-INVISIBLE bug).
+  if (depth > 0 && lastTopLevelStart > 0) {
     const tail = text.substring(lastTopLevelStart);
     // Only suppress if it looks like a tool call: contains a partial "tool"/"name" key,
     // is just an opening brace with a string key starting, or is a bare `{` with only

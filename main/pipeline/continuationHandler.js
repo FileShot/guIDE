@@ -4,6 +4,11 @@
  * When a model's response is truncated (stopReason === 'maxTokens'),
  * this module determines that continuation is needed and produces
  * the message to send back to the model to resume.
+ *
+ * With Solution A (native contextShift) active, the KV cache preserves
+ * the model's recent output. Continuation messages can be minimal because
+ * the model already has context from the KV cache — no need for elaborate
+ * HEAD+TAIL anchoring that consumes precious context tokens.
  */
 'use strict';
 
@@ -15,9 +20,11 @@ function shouldContinue(result) {
 }
 
 /**
- * Build the continuation user message with task context.
+ * Build the continuation user message.
+ * Kept minimal to preserve context budget — the KV cache carries the real context.
+ *
  * @param {Object} [taskContext] Optional context about current state.
- * @param {string} [taskContext.lastText] Last text of output so model knows where it stopped.
+ * @param {string} [taskContext.lastText] Tail of accumulated output.
  * @param {boolean} [taskContext.toolInProgress] Whether a tool call was being written.
  * @param {string} [taskContext.accumulatedBuffer] Full buffer when accumulating across continuations.
  * @param {boolean} [taskContext.midFence] Whether we were inside a fenced code block.
@@ -28,45 +35,56 @@ function continuationMessage(taskContext) {
     return 'Continue exactly where you left off. Do not repeat any content already written.';
   }
 
-  // Tool call in progress — needs structural context so model knows where it stopped
+  // Fix B: Include original task goal so model knows what to continue after compression
+  const goalPrefix = taskContext.taskGoal
+    ? `Original task: ${taskContext.taskGoal.slice(0, 300)}\n`
+    : '';
+
+  // Tool call in progress — minimal but specific
   if (taskContext.toolInProgress) {
-    let msg = 'Your output was cut off mid-tool-call. Continue writing from exactly where you stopped — do not repeat content.';
-    
+    const fileName = taskContext.fileName || null;
+    let msg = goalPrefix;
+    msg += fileName
+      ? `Continue writing "${fileName}" from exactly where you stopped. Use append_to_file.`
+      : 'Continue the tool call from exactly where you stopped.';
+
     if (taskContext.accumulatedBuffer) {
-      // Show more context for tool calls (up to 3000 chars) so model understands structure
-      // Risk mitigation: cap at 3000 to avoid context overflow
-      const bufLen = taskContext.accumulatedBuffer.length;
-      const previewLen = Math.min(3000, bufLen);
-      const preview = bufLen > previewLen 
-        ? '...' + taskContext.accumulatedBuffer.slice(-previewLen)
-        : taskContext.accumulatedBuffer;
-      msg += `\n\nYou have written ${bufLen} chars so far. Last portion:\n${preview}`;
-      msg += '\n\nContinue from that exact point. Complete the content, then close all JSON brackets.';
+      const contentMatch = taskContext.accumulatedBuffer.match(/"content"\s*:\s*"([\s\S]*)/);
+      const fileContent = contentMatch ? contentMatch[1] : taskContext.accumulatedBuffer;
+      const lineCount = (fileContent.match(/\n/g) || []).length + 1;
+
+      // Show only the TAIL — KV cache has the full context, we just need
+      // to remind the model where it was
+      const tail = fileContent.slice(-800);
+      msg += `\nWritten so far: ~${lineCount} lines.`;
+      // Fix B: Include progress tracking if available
+      if (taskContext.fileProgress) {
+        msg += ` File progress: ${taskContext.fileProgress}`;
+      }
+      msg += `\nEnds with:\n${tail}`;
+      if (fileName) {
+        msg += `\nDo NOT use write_file (overwrites). Do NOT restart. Continue content after the tail shown.`;
+      }
     } else if (taskContext.lastText) {
-      const tail = (taskContext.lastText || '').slice(-500);
-      msg += `\nYour output ended with:\n"${tail}"\n\nContinue from there.`;
+      const tail = (taskContext.lastText || '').slice(-400);
+      msg += `\nEnds with:\n${tail}`;
     }
-    
-    if (taskContext.midFence) {
-      msg += ' You were inside a fenced code block — continue inside it, do not open a new fence.';
-    }
-    
+
     return msg;
   }
 
-  // Regular continuation (not tool call)
-  let msg = 'Continue exactly where you left off. Do not repeat any content already written.';
-  
+  // Regular continuation — keep it minimal
+  let msg = goalPrefix + 'Continue exactly where you left off.';
+
   if (taskContext.midFence) {
-    msg += ' You were inside a fenced code block — continue writing code immediately from where you stopped. Do NOT open a new code fence, do NOT restart the file, do NOT use write_file. Just continue the code.';
+    msg += ' You are INSIDE a code block — output ONLY code, no text or summaries.';
   }
-  
+
   if (taskContext.lastText) {
-    // Show 500 chars for regular continuation (more than before for better context)
-    const tail = (taskContext.lastText || '').slice(-500);
-    msg += `\nYour output ended with:\n"${tail}"`;
+    const tail = (taskContext.lastText || '').slice(-400);
+    msg += `\nEnds with:\n${tail}`;
   }
-  
+
   return msg;
 }
 

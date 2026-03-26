@@ -457,7 +457,11 @@ export const ToolCallGroup: React.FC<{ children: React.ReactNode; count: number 
 // ── Code Block with Copy/Apply ──
 const COLLAPSE_LINE_THRESHOLD = 6; // Collapse code blocks taller than this many lines
 
-export const CodeBlock: React.FC<{ code: string; language: string; onApply: () => void; isToolCall?: boolean; isStreaming?: boolean; isAlreadyWritten?: boolean; onSaveAsFile?: (code: string, language: string) => void; defaultCollapsed?: boolean; startExpanded?: boolean }> = ({ code, language, onApply, isToolCall, isStreaming, isAlreadyWritten, onSaveAsFile, defaultCollapsed, startExpanded }) => {
+// React.memo with custom comparator — skip re-render when code/language/display-affecting props
+// are unchanged. Function props (onApply, onSaveAsFile) change reference on every parent render
+// because renderStreamingContent is an inline function, but the functions themselves are only
+// invoked on user click, so stale closures are acceptable for rendering purposes.
+export const CodeBlock: React.FC<{ code: string; language: string; onApply: () => void; isToolCall?: boolean; isStreaming?: boolean; isAlreadyWritten?: boolean; onSaveAsFile?: (code: string, language: string) => void; defaultCollapsed?: boolean; startExpanded?: boolean }> = React.memo(({ code, language, onApply, isToolCall, isStreaming, isAlreadyWritten, onSaveAsFile, defaultCollapsed, startExpanded }) => {
   const [copied, setCopied] = useState(false);
   const lineCount = code.split('\n').length;
   const isLong = lineCount > COLLAPSE_LINE_THRESHOLD;
@@ -553,7 +557,13 @@ export const CodeBlock: React.FC<{ code: string; language: string; onApply: () =
       </div>
     </div>
   );
-};
+}, (prev, next) =>
+  prev.code === next.code &&
+  prev.language === next.language &&
+  prev.isToolCall === next.isToolCall &&
+  prev.isStreaming === next.isStreaming &&
+  prev.isAlreadyWritten === next.isAlreadyWritten
+);
 
 // ── Rich Text Span — renders plain text with source bubbles + inline markdown ──
 export const RichTextSpan: React.FC<{ content: string }> = ({ content }) => {
@@ -611,7 +621,9 @@ export const RichTextSpan: React.FC<{ content: string }> = ({ content }) => {
 };
 
 // ── Inline Markdown Text — renders *italic*, **bold**, and `code` in plain text ──
-export const InlineMarkdownText: React.FC<{ content: string; className?: string }> = ({ content, className = '' }) => {
+// React.memo: skip re-render when content and className haven't changed.
+// markdownInlineToHTML + DOMPurify is expensive; avoid re-running on identical input.
+export const InlineMarkdownText: React.FC<{ content: string; className?: string }> = React.memo(({ content, className = '' }) => {
   // Collapse 3+ consecutive newlines to 2 (max one blank line) to avoid excessive vertical gaps
   const normalized = content.replace(/\n{3,}/g, '\n\n');
   const html = markdownInlineToHTML(normalized);
@@ -621,4 +633,4 @@ export const InlineMarkdownText: React.FC<{ content: string; className?: string 
       dangerouslySetInnerHTML={{ __html: html }}
     />
   );
-};
+});

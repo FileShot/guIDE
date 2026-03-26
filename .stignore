@@ -1,6 +1,7 @@
-// guIDE IDE workspace — Syncthing ignore patterns
-// Excludes build artifacts, dependencies, and large binary files
-// that have no business being synced to the server.
+// SYNCTHING DISABLED ON THIS FOLDER — 2026-03-26
+// Source code was being overwritten by bidirectional sync.
+// All files ignored. Sync is OFF for C:\Users\brend\IDE.
+*
 
 // Node dependencies (every package in the workspace)
 node_modules

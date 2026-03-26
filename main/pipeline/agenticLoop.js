@@ -28,6 +28,11 @@ const { RollingSummary, estimateTokens } = require('./rollingSummary');
 const { ConversationSummarizer } = require('./conversationSummarizer');
 const { nativeContextShiftStrategy } = require('./nativeContextStrategy');
 
+// Regex to match filePath in raw tool call JSON — accepts all aliases that
+// mcpToolServer._normalizeFsParams handles, so checkpoint/salvage paths work
+// even when smaller models use non-standard key names.
+const FILE_PATH_RE = /"(?:filePath|file_path|path|filename|file_name|file)"\s*:\s*"([^"]+)"/;
+
 // ─── Constants ──────────────────────────────────────────────
 const WALL_CLOCK_MS   = 30 * 60 * 1000; // 30 min hard limit
 const STUCK_THRESHOLD = 3;       // Same tool+params N times in a row = stuck
@@ -187,10 +192,12 @@ async function handleLocalChat(ctx, message, context, helpers) {
   let rotationCheckpoint = null;     // { filePath, content } — saved to disk during rotation for regression protection
   let lastContCheckpointLen = 0;     // Track bytes already checkpointed from current tool call accumulation (prevent double-save)
   let d6ConsecutiveSmallAppends = 0; // Fix 9: Track consecutive tiny D6 appends to detect infinite-loop completion signal
+  let eogIncompleteRetries = 0;     // R15-Fix-B: retry count for eogToken during structurally incomplete tool call accumulation
   let d6CumulativeMetrics = null;    // Fix D: Track cumulative D6 productivity { iterations, totalNewLines, lastContent }
   const recentToolSigs = [];         // Track tool call signatures for stuck/cycle detection
   const toolExecCache = new Map();   // Cross-iteration dedup: signature → { iteration, resultSummary }
   const DEDUP_EXEMPT_TOOLS = new Set(['write_file', 'append_to_file', 'edit_file', 'write_todos', 'update_todo', 'run_command', 'web_search', 'browser_navigate', 'browser_click', 'browser_type']);
+  let lastIterContentStreamed = false; // R16-Fix-C: true when previous iteration completed a content-streamed write_file
 
   // ═══ THE AGENTIC LOOP ═══════════════════════════════════
   for (let iteration = 1; iteration <= MAX_AGENTIC_ITERATIONS; iteration++) {
@@ -327,17 +334,46 @@ async function handleLocalChat(ctx, message, context, helpers) {
     } catch (err) {
       const errMsg = err.message || '';
 
-      // With Solution A (pre-gen context check + native contextShift strategy),
-      // CONTEXT_OVERFLOW should not occur. If it does, log it as unexpected
-      // and return gracefully with whatever was generated so far.
+      // CONTEXT_OVERFLOW during generation — attempt to salvage partial content.
+      // The pre-gen check only prevents overflow from HISTORY. When the model generates
+      // so many tokens that KV fills during output, native context shift fires but may
+      // still fail if the remaining context is too small. In that case, the partial
+      // response may contain a valid file-write tool call that we can still execute.
       if (errMsg.startsWith('CONTEXT_OVERFLOW:')) {
-        console.error(`[AgenticLoop] UNEXPECTED CONTEXT_OVERFLOW at iteration ${iteration} — Solution A pre-gen check should have prevented this. History may have grown between check and generation.`);
-        stream.finalize(false);
-        if (err.partialResponse) {
-          fullResponseText += err.partialResponse;
-          displayResponseText += err.partialResponse;
+        console.error(`[AgenticLoop] CONTEXT_OVERFLOW at iteration ${iteration} — attempting to salvage partial response`);
+        const _overflowPartial = err.partialResponse || '';
+        let _overflowSalvaged = false;
+
+        if (_overflowPartial.length > 200) {
+          const _ofToolMatch = _overflowPartial.match(/"tool"\s*:\s*"(write_file|edit_file|create_file)"/);
+          const _ofFileMatch = _overflowPartial.match(FILE_PATH_RE);
+          if (_ofToolMatch && _ofFileMatch) {
+            const _ofContent = extractContentFromPartialToolCall(_overflowPartial);
+            if (_ofContent && _ofContent.length > 50) {
+              console.log(`[AgenticLoop] OVERFLOW SALVAGE: extracted ${_ofContent.length} chars for ${_ofToolMatch[1]}("${_ofFileMatch[1]}")`);
+              try {
+                await mcpToolServer.executeTool(_ofToolMatch[1], { filePath: _ofFileMatch[1], content: _ofContent });
+                stream.fileAccUpdate(_ofFileMatch[1], _ofContent);
+                stream.finalize(true);
+                const _ofLineCount = (_ofContent.match(/\n/g) || []).length + 1;
+                stream._send('llm-token', `\nWrote ${_ofFileMatch[1]} (${_ofLineCount} lines)\n`);
+                fullResponseText += _overflowPartial;
+                _overflowSalvaged = true;
+              } catch (toolErr) {
+                console.error(`[AgenticLoop] OVERFLOW SALVAGE tool exec failed: ${toolErr.message}`);
+              }
+            }
+          }
         }
-        break; // Exit loop with whatever we have
+
+        if (!_overflowSalvaged) {
+          stream.finalize(false);
+          if (_overflowPartial) {
+            fullResponseText += _overflowPartial;
+            displayResponseText += _overflowPartial;
+          }
+        }
+        break; // Exit loop — context is exhausted
       }
 
       // Non-overflow errors are fatal
@@ -388,7 +424,7 @@ async function handleLocalChat(ctx, message, context, helpers) {
       if (nonFileToolMatch && pendingToolCallBuffer.length > 500) {
         console.log(`[AgenticLoop] Non-file tool "${nonFileToolMatch[1]}" during accumulation — saving buffer and executing tool separately`);
         // Save accumulated partial content to disk
-        const _saveFileMatch = pendingToolCallBuffer.match(/"filePath"\s*:\s*"([^"]+)"/);
+        const _saveFileMatch = pendingToolCallBuffer.match(FILE_PATH_RE);
         const _saveTargetFile = _saveFileMatch ? _saveFileMatch[1] : null;
         const _saveContent = extractContentFromPartialToolCall(pendingToolCallBuffer);
         if (_saveContent && _saveTargetFile && _saveContent.length > 100) {
@@ -428,7 +464,7 @@ async function handleLocalChat(ctx, message, context, helpers) {
         lastContCheckpointLen = rotationCheckpoint ? rotationCheckpoint.content.length : 0;
         suppressStream = false;
         // Build continuation with tool result so model can resume writing
-        const _nftFileMatch = pendingToolCallBuffer.match(/"filePath"\s*:\s*"([^"]+)"/);
+        const _nftFileMatch = pendingToolCallBuffer.match(FILE_PATH_RE);
         const _nftTargetFile = _nftFileMatch ? _nftFileMatch[1] : null;
         const ckLines = rotationCheckpoint ? (rotationCheckpoint.content.match(/\n/g) || []).length + 1 : 0;
         const toolResultStr = nonFileToolResult ? JSON.stringify(nonFileToolResult).slice(0, 3000) : '(no result)';
@@ -446,9 +482,9 @@ async function handleLocalChat(ctx, message, context, helpers) {
         || rawText.match(/^\s*\{\s*"tool"\s*:\s*"(write_file|append_to_file|edit_file)"/);
       if (newToolCallMatch && pendingToolCallBuffer.length > 500) {
         const newToolName = newToolCallMatch[1];
-        const oldFileMatch = pendingToolCallBuffer.match(/"filePath"\s*:\s*"([^"]+)"/);
+        const oldFileMatch = pendingToolCallBuffer.match(FILE_PATH_RE);
         const oldTargetFile = oldFileMatch ? oldFileMatch[1] : null;
-        const newFileMatch = rawText.match(/"filePath"\s*:\s*"([^"]+)"/);
+        const newFileMatch = rawText.match(FILE_PATH_RE);
         const newTargetFile = newFileMatch ? newFileMatch[1] : null;
 
         // FIX 3: When model outputs append_to_file for the SAME file during accumulation
@@ -665,7 +701,7 @@ async function handleLocalChat(ctx, message, context, helpers) {
             // started a new tool call, the content was lost. Now we save at EVERY
             // continuation point. Uses write_file to overwrite with full extracted content
             // (accumulated buffer always contains the complete content so far).
-            const _ckFileMatch = pendingToolCallBuffer.match(/"filePath"\s*:\s*"([^"]+)"/);
+            const _ckFileMatch = pendingToolCallBuffer.match(FILE_PATH_RE);
             const _ckTargetFile = _ckFileMatch ? _ckFileMatch[1] : null;
             const _ckToolMatch = pendingToolCallBuffer.match(/"tool"\s*:\s*"(write_file|append_to_file)"/);
             const _ckToolName = _ckToolMatch ? _ckToolMatch[1] : null;
@@ -715,6 +751,62 @@ async function handleLocalChat(ctx, message, context, helpers) {
             // code block continues receiving live content across continuations
             continue;
           }
+        } else if (!shouldContinue(result) && eogIncompleteRetries < 2) {
+          // R15-Fix-B: Model emitted eogToken during accumulation, but the
+          // accumulated JSON is structurally incomplete (unbalanced braces).
+          // This happens when context shift causes the model to lose awareness
+          // of the full file scope and emit </style> + eogToken prematurely.
+          // Force a continuation with a stronger prompt instead of giving up.
+          let braceDepth = 0;
+          let inStr = false;
+          let esc = false;
+          for (let i = 0; i < pendingToolCallBuffer.length; i++) {
+            const ch = pendingToolCallBuffer[i];
+            if (esc) { esc = false; continue; }
+            if (ch === '\\' && inStr) { esc = true; continue; }
+            if (ch === '"') { inStr = !inStr; continue; }
+            if (!inStr) {
+              if (ch === '{') braceDepth++;
+              else if (ch === '}') braceDepth--;
+            }
+          }
+          if (braceDepth > 0) {
+            // JSON is structurally incomplete — force continuation
+            eogIncompleteRetries++;
+            continuationCount++;
+            console.log(`[AgenticLoop] R15-Fix-B: eogToken but JSON incomplete (braceDepth=${braceDepth}) — forcing continuation (retry ${eogIncompleteRetries}/2)`);
+            const _eogFileMatch = pendingToolCallBuffer.match(FILE_PATH_RE);
+            const _eogTargetFile = _eogFileMatch ? _eogFileMatch[1] : null;
+
+            // Checkpoint what we have before continuing
+            const _eogContent = extractContentFromPartialToolCall(pendingToolCallBuffer);
+            if (_eogContent && _eogTargetFile && _eogContent.length > 100 && _eogContent.length > lastContCheckpointLen) {
+              try {
+                if (!rotationCheckpoint || _eogTargetFile !== rotationCheckpoint.filePath ||
+                    _eogContent.length >= rotationCheckpoint.content.length) {
+                  await mcpToolServer.executeTool('write_file', { filePath: _eogTargetFile, content: _eogContent });
+                  rotationCheckpoint = { filePath: _eogTargetFile, content: _eogContent };
+                  console.log(`[AgenticLoop] R15-Fix-B: checkpoint saved ${_eogContent.length} chars to "${_eogTargetFile}"`);
+                  stream.fileAccUpdate(_eogTargetFile, _eogContent);
+                }
+                lastContCheckpointLen = _eogContent.length;
+              } catch (e) {
+                console.log(`[AgenticLoop] R15-Fix-B: checkpoint failed: ${e.message}`);
+              }
+            }
+
+            nextUserMessage = continuationMessage({
+              lastText: pendingToolCallBuffer,
+              toolInProgress: true,
+              accumulatedBuffer: pendingToolCallBuffer,
+              midFence: stream.isHoldingFenced?.() || false,
+              fileName: _eogTargetFile,
+              taskGoal: message,
+              fileProgress: rotationCheckpoint ? `${(rotationCheckpoint.content.match(/\n/g) || []).length + 1} lines on disk` : undefined,
+            });
+            continue;
+          }
+          // braceDepth <= 0: JSON is balanced, fall through to preserve content below
         } else {
           // Natural stop but tool call still incomplete — preserve content from failed tool call
           console.log('[AgenticLoop] Accumulated buffer has no complete tool call — preserving content');
@@ -731,7 +823,7 @@ async function handleLocalChat(ctx, message, context, helpers) {
             // FIX 2: Save content to disk instead of dumping raw JSON-escaped text into chat.
             // Previously this emitted the raw extracted content (with JSON escapes like \" and \n)
             // as display text, which showed raw tool call content in the chat bubble.
-            const _failedFileMatch = pendingToolCallBuffer.match(/"filePath"\s*:\s*"([^"]+)"/);
+            const _failedFileMatch = pendingToolCallBuffer.match(FILE_PATH_RE);
             const _failedTargetFile = _failedFileMatch ? _failedFileMatch[1] : null;
             if (_failedTargetFile) {
               // Save to disk with monotonic protection
@@ -810,6 +902,29 @@ async function handleLocalChat(ctx, message, context, helpers) {
       displayText = parsed.displayText;
       toolCalls = parsed.toolCalls;
 
+      // ── Salvage path: JSON parse failed but content is clearly there ──
+      // When the parser returns toolCalls=0 but the raw text clearly contains
+      // a file-write tool call (with extractable filePath + content), salvage
+      // the content directly instead of discarding it. This handles models that
+      // produce imperfect JSON (unescaped quotes in HTML, missing closing braces)
+      // which is common with smaller models generating large file content.
+      if (toolCalls.length === 0 && rawText.length > 200) {
+        const _salvageToolMatch = rawText.match(/"tool"\s*:\s*"(write_file|edit_file|create_file)"/);
+        const _salvageFileMatch = rawText.match(FILE_PATH_RE);
+        if (_salvageToolMatch && _salvageFileMatch) {
+          const _salvageContent = extractContentFromPartialToolCall(rawText);
+          if (_salvageContent && _salvageContent.length > 50) {
+            console.log(`[AgenticLoop] Salvage: extracted ${_salvageContent.length} chars for ${_salvageToolMatch[1]}("${_salvageFileMatch[1]}") from failed JSON parse`);
+            toolCalls = [{ name: _salvageToolMatch[1], arguments: { filePath: _salvageFileMatch[1], content: _salvageContent } }];
+            // Preserve pre-tool-call text as display (the "I'll create..." intro)
+            const _fenceIdx = rawText.indexOf('```json');
+            if (_fenceIdx > 0) {
+              displayText = rawText.substring(0, _fenceIdx).trim();
+            }
+          }
+        }
+      }
+
       // Check for partial tool call that needs accumulation across continuations
       if (parsed.partial && shouldContinue(result)) {
         console.log('[AgenticLoop] Detected partial tool call — starting accumulation');
@@ -817,7 +932,7 @@ async function handleLocalChat(ctx, message, context, helpers) {
         continuationCount++;
 
         // BUG A FIX: Checkpoint even the FIRST partial tool call before continuing
-        const _initFileMatch = rawText.match(/"filePath"\s*:\s*"([^"]+)"/);
+        const _initFileMatch = rawText.match(FILE_PATH_RE);
         const _initTargetFile = _initFileMatch ? _initFileMatch[1] : null;
         const _initContent = extractContentFromPartialToolCall(rawText);
         if (_initContent && _initTargetFile && _initContent.length > 100) {
@@ -848,6 +963,63 @@ async function handleLocalChat(ctx, message, context, helpers) {
         // keep emitting llm-tool-generating events across continuation boundaries
         continue;
       }
+
+      // ── R13-Fix-B/C: Timeout + partial tool call ─────────────────────────────────
+      // When the watchdog fires (stopReason='timeout') during a file-write tool call,
+      // the model has emitted 21k+ chars of partial JSON that would otherwise be
+      // discarded entirely, and stream.finalize(false) would dump it as raw text to UI.
+      //
+      // Fix B: Extract content and checkpoint to disk so the file is not lost.
+      // Fix C: Call stream.reset() instead of stream.finalize(false) to avoid
+      //        dumping _toolCallJson into the chat bubble as rendered text.
+      if (parsed.partial && result.stopReason === 'timeout') {
+        console.log(`[AgenticLoop] R13-Fix-B: timeout abort with partial tool call — ${rawText.length} chars, attempting checkpoint`);
+        // Fix C: reset stream cleanly (no raw JSON dump to UI)
+        stream.reset();
+
+        const _timeoutFileMatch = rawText.match(FILE_PATH_RE);
+        const _timeoutFile = _timeoutFileMatch ? _timeoutFileMatch[1] : null;
+        const _timeoutContent = extractContentFromPartialToolCall(rawText);
+
+        if (_timeoutContent && _timeoutContent.length > 100 && _timeoutFile) {
+          try {
+            if (!rotationCheckpoint || _timeoutFile !== rotationCheckpoint.filePath ||
+                _timeoutContent.length >= rotationCheckpoint.content.length) {
+              await mcpToolServer.executeTool('write_file', { filePath: _timeoutFile, content: _timeoutContent });
+              rotationCheckpoint = { filePath: _timeoutFile, content: _timeoutContent };
+              lastContCheckpointLen = _timeoutContent.length;
+              stream.fileAccUpdate(_timeoutFile, _timeoutContent);
+              console.log(`[AgenticLoop] R13-Fix-B: timeout checkpoint saved ${_timeoutContent.length} chars to "${_timeoutFile}"`);
+            } else {
+              console.log(`[AgenticLoop] R13-Fix-B: skipped checkpoint — would regress ${_timeoutContent.length} < existing ${rotationCheckpoint?.content?.length}`);
+            }
+          } catch (e) {
+            console.log(`[AgenticLoop] R13-Fix-B: checkpoint write failed: ${e.message}`);
+          }
+
+          // Build continuation to resume generation
+          nextUserMessage = continuationMessage({
+            lastText: rawText,
+            toolInProgress: true,
+            accumulatedBuffer: rawText,
+            midFence: stream.isHoldingFenced?.() || false,
+            fileName: _timeoutFile,
+            taskGoal: message,
+            fileProgress: rotationCheckpoint ? `${(rotationCheckpoint.content.match(/\n/g) || []).length + 1} lines on disk` : undefined,
+          });
+          continuationCount++;
+          console.log(`[AgenticLoop] R13-Fix-B: continuing generation (cont #${continuationCount}) to complete "${_timeoutFile}"`);
+          continue;
+        } else {
+          // Not enough extractable content to checkpoint — fall through to normal finalize path
+          console.log(`[AgenticLoop] R13-Fix-B: insufficient content for checkpoint (file=${_timeoutFile}, content=${_timeoutContent?.length || 0} chars) — ending generation`);
+          // stream.reset() already called above — nothing more to do, loop will exit
+          fullResponseText += rawText;
+          displayResponseText += rawText;
+          break;
+        }
+      }
+      // ── End R13-Fix-B/C ──────────────────────────────────────────────────────────
 
       stream.finalize(toolCalls.length > 0);
       console.log(`[AgenticLoop] After finalize: toolCalls=${toolCalls.length}`);
@@ -948,6 +1120,17 @@ async function handleLocalChat(ctx, message, context, helpers) {
           rollingSummary.recordToolResult(toolCall.name, toolCall.arguments, toolResult, iteration);
           summarizer.recordToolCall(toolCall.name, toolCall.arguments, toolResult);
 
+          // R16-Fix-B: Set rotationCheckpoint after every successful file write
+          // so the regression protection logic can block duplicate writes after
+          // context rotation drops the tool result messages.
+          if ((effectiveName === 'write_file' || effectiveName === 'create_file') && effectiveArgs?.content) {
+            rotationCheckpoint = { filePath: effectiveArgs.filePath, content: effectiveArgs.content };
+            console.log(`[AgenticLoop] R16-Fix-B: rotationCheckpoint set for "${effectiveArgs.filePath}" (${effectiveArgs.content.length} chars)`);
+          } else if (effectiveName === 'append_to_file' && effectiveArgs?.content && rotationCheckpoint?.filePath === effectiveArgs.filePath) {
+            rotationCheckpoint.content += effectiveArgs.content;
+            console.log(`[AgenticLoop] R16-Fix-B: rotationCheckpoint updated (append) for "${effectiveArgs.filePath}" (${rotationCheckpoint.content.length} chars total)`);
+          }
+
           if (toolCall.name === 'write_todos' || toolCall.name === 'update_todo') {
             stream.todoUpdate(mcpToolServer._todos || []);
           }
@@ -966,6 +1149,18 @@ async function handleLocalChat(ctx, message, context, helpers) {
 
       // Track all results
       allToolResults.push(...toolResultEntries);
+
+      // R14-Fix-2: Mark tool results that had content streamed to UI already.
+      // The frontend will use this flag to avoid rendering a second CodeBlock
+      // for the same file content that was already visible during streaming.
+      if (stream.wasContentStreamed()) {
+        const writeTools = new Set(['write_file', 'create_file']);
+        for (const entry of toolResultEntries) {
+          if (writeTools.has(entry.tool) && entry.params?.content) {
+            entry.contentStreamed = true;
+          }
+        }
+      }
 
       // Emit tool results to UI
       stream.toolResults(toolResultEntries);
@@ -1041,6 +1236,76 @@ async function handleLocalChat(ctx, message, context, helpers) {
       // If stuck detected, also clear the recent sigs so detection resets
       if (stuckDetected) recentToolSigs.length = 0;
 
+      // R16-Fix-B: When all tool calls in the iteration were file writes and
+      // the model stopped naturally (eogToken), the file is likely complete.
+      // Instead of "continue with the task" (which prompts the model to rewrite),
+      // tell it the file was written and ask for a summary.
+      const WRITE_TOOL_NAMES = new Set(['write_file', 'create_file', 'append_to_file']);
+      const allWriteTools = toolResultEntries.length > 0 &&
+        toolResultEntries.every(tr => WRITE_TOOL_NAMES.has(tr.tool));
+      const allSucceeded = toolResultEntries.every(tr => tr.result?.success !== false && !tr.result?.error);
+      if (allWriteTools && allSucceeded && result.stopReason === 'natural' && !stuckDetected) {
+        const fileNames = toolResultEntries
+          .map(tr => tr.params?.filePath || tr.params?.fileName || 'unknown')
+          .filter((v, i, arr) => arr.indexOf(v) === i);
+        const fileSummary = fileNames.map(fp => {
+          const content = toolResultEntries.find(tr => (tr.params?.filePath || tr.params?.fileName) === fp)?.params?.content || '';
+          const lines = (content.match(/\n/g) || []).length + 1;
+          return `"${fp}" (${lines} lines)`;
+        }).join(', ');
+        nextUserMessage = `File(s) written: ${fileSummary}. The file has been saved to disk. If the task is complete, provide a brief summary of what was created. Do NOT rewrite the file. Do NOT use write_file again. If there are additional files to create for the task, create them now.`;
+        console.log(`[AgenticLoop] R16-Fix-B: All tools were file writes with natural stop — using completion message instead of "continue"`);
+      }
+
+      // ── Post-context-shift incomplete file detection ──────
+      // When context shift occurred during the generation that produced a file write,
+      // the model's output was truncated mid-content. The salvage path saved what it
+      // could, but the file is incomplete. Tell the model to continue with append_to_file
+      // instead of letting it generate a summary and stop.
+      // R14-Fix-1: Only inject continuation when the model was CUT SHORT (maxTokens/timeout).
+      // If stopReason is 'natural' (eogToken), the model decided it was done — the file
+      // is complete. Injecting "your file is INCOMPLETE" causes the model to output
+      // garbage in iteration 2 (plain text leak).
+      if (llmEngine._contextShiftFiredDuringGen && result.stopReason !== 'natural') {
+        const lastFileWrite = toolResultEntries.find(tr =>
+          (tr.tool === 'write_file' || tr.tool === 'create_file') && tr.params?.filePath
+        );
+        if (lastFileWrite) {
+          const writtenContent = lastFileWrite.params.content || '';
+          const lineCount = (writtenContent.match(/\n/g) || []).length + 1;
+          const tailLines = writtenContent.split('\n').slice(-10).join('\n');
+          console.log(`[AgenticLoop] Post-context-shift file write detected: "${lastFileWrite.params.filePath}" (${lineCount} lines, ${writtenContent.length} chars) — injecting continuation directive`);
+          nextUserMessage = `The file "${lastFileWrite.params.filePath}" was written but is INCOMPLETE — context pressure caused truncation. The file currently has ${lineCount} lines and ends with:\n\n${tailLines}\n\nYou MUST use append_to_file to continue adding the remaining content. Do NOT use write_file (it would overwrite what's already saved). Do NOT summarize or stop — the user requested all the content and only a fraction was written. Continue from where the file was cut off. Original request: ${message.substring(0, 500)}`;
+          // Set rotationCheckpoint so append logic works correctly
+          if (!rotationCheckpoint || lastFileWrite.params.filePath === rotationCheckpoint?.filePath) {
+            rotationCheckpoint = { filePath: lastFileWrite.params.filePath, content: writtenContent };
+          }
+        } else if (llmEngine._contextShiftActiveFile && rotationCheckpoint?.filePath === llmEngine._contextShiftActiveFile) {
+          // R13-Fix-A: No completed tool call, but we have a checkpoint from mid-generation.
+          // The model was in the middle of writing _contextShiftActiveFile when context shifted.
+          // The partial content was saved by the partial-checkpoint path. Tell model to append.
+          const activeFilePath = llmEngine._contextShiftActiveFile;
+          const cpContent = rotationCheckpoint.content || '';
+          const lineCount = (cpContent.match(/\n/g) || []).length + 1;
+          const tailLines = cpContent.split('\n').slice(-10).join('\n');
+          console.log(`[AgenticLoop] R13-Fix-A: post-context-shift using _contextShiftActiveFile="${activeFilePath}" (${lineCount} lines, ${cpContent.length} chars checkpoint) — injecting continuation directive`);
+          nextUserMessage = `The file "${activeFilePath}" was only partially written — context pressure truncated the generation mid-content. The file currently has ${lineCount} lines and ends with:\n\n${tailLines}\n\nYou MUST use append_to_file to continue adding the remaining content. Do NOT use write_file (it would overwrite what's already saved). Do NOT summarize or stop — continue from where the file was cut off. Original request: ${message.substring(0, 500)}`;
+        }
+        llmEngine._contextShiftFiredDuringGen = false;
+        llmEngine._contextShiftActiveFile = null;
+      } else if (llmEngine._contextShiftFiredDuringGen) {
+        // R14-Fix-1b: stopReason was 'natural' — model finished on its own despite context shift.
+        // Still need to clear the flags so they don't leak into the next iteration.
+        console.log(`[AgenticLoop] Context shift occurred but model finished naturally (stopReason=${result.stopReason}) — no continuation needed, clearing flags`);
+        llmEngine._contextShiftFiredDuringGen = false;
+        llmEngine._contextShiftActiveFile = null;
+      }
+
+      // R16-Fix-C: Track if this iteration was a content-streamed file write.
+      // The D5/unclosed-fence check operates on fullResponseText which doesn't
+      // include the content-streamed fences. Must skip D5 in the next iteration.
+      lastIterContentStreamed = stream.wasContentStreamed();
+
       continue;
     }
 
@@ -1072,13 +1337,19 @@ async function handleLocalChat(ctx, message, context, helpers) {
     // the fence was unclosed — it was confused. Its output from this confused state
     // (often summary text, status updates, or restarted content) would corrupt the
     // continuation anchor if kept.
-    {
+    //
+    // R16-Fix-C: Skip this check entirely if the PREVIOUS iteration was a
+    // content-streamed file write. Content-streamed fences go to the frontend
+    // (streamingText) but NOT to fullResponseText. The parity on fullResponseText
+    // is stale/wrong — any fence in the current iteration's output would look
+    // "unclosed" when in reality the content fence was closed by finalize().
+    if (!lastIterContentStreamed) {
       const fenceLines = (fullResponseText.match(/^```/gm) || []).length;
       if (fenceLines % 2 !== 0 && unclosedFenceRetries < 3) {
         // D5: Remove the current iteration's text from accumulated response
         const currentIterText = rawText || '';
         // Check for partial write_file before discarding — used for targeted continuation
-        const partialWriteFileMatch = currentIterText.match(/"tool"\s*:\s*"write_file"[\s\S]*?"filePath"\s*:\s*"([^"]+)"/);
+        const partialWriteFileMatch = currentIterText.match(/"tool"\s*:\s*"write_file"[\s\S]*?"(?:filePath|file_path|path|filename|file_name|file)"\s*:\s*"([^"]+)"/);
         const partialWriteFilePath = partialWriteFileMatch ? partialWriteFileMatch[1] : null;
 
         if (currentIterText.length > 0 && fullResponseText.endsWith(currentIterText)) {
@@ -1103,6 +1374,11 @@ async function handleLocalChat(ctx, message, context, helpers) {
         }
         continue;
       }
+    } else {
+      // R16-Fix-C: Previous iteration was content-streamed — skip fence check.
+      // Clear the flag so it doesn't affect subsequent iterations.
+      console.log('[AgenticLoop] R16-Fix-C: Skipping D5/unclosed-fence check (previous iteration was content-streamed file write)');
+      lastIterContentStreamed = false;
     }
 
     // ── Branch: Natural completion ────────────────────────

@@ -426,11 +426,14 @@ function extractContentFromPartialToolCall(buffer) {
     if (match && match[1]) {
       let content = match[1];
       
-      // Unescape JSON string escapes if we matched a JSON string
+      // For JSON string patterns, find the proper string boundary first
+      // by scanning for the first unescaped " (end of JSON string value)
       if (pattern.source.includes('"content"') || pattern.source.includes('"fileContent"')) {
+        const truncated = _findJsonStringEnd(content);
+        if (truncated !== null) {
+          content = truncated;
+        }
         try {
-          // Try to find where the string ends (unescaped quote)
-          // For truncated strings, just do basic unescaping
           content = content
             .replace(/\\n/g, '\n')
             .replace(/\\t/g, '\t')
@@ -448,6 +451,10 @@ function extractContentFromPartialToolCall(buffer) {
       content = content.replace(/["']\s*}\s*}\s*```?\s*$/m, '');
       content = content.replace(/["\s]*}\s*```?\s*$/, '');
       content = content.replace(/"\s*$/, '');
+      // Strip trailing markdown code fences (``` with optional whitespace/newlines)
+      // even when no JSON closing brace precedes them — handles the common case
+      // where model output ends with </html>\n``` (content ends, fence closes)
+      content = content.replace(/\n*```\s*$/, '');
       
       if (content.length > 50) {
         return content.trim();
@@ -456,6 +463,27 @@ function extractContentFromPartialToolCall(buffer) {
   }
   
   return null;
+}
+
+/**
+ * Scan a string captured after the opening " of a JSON string value
+ * and return only the content up to the closing unescaped ".
+ * Returns null if no proper closing " is found (truncated string).
+ */
+function _findJsonStringEnd(captured) {
+  let i = 0;
+  while (i < captured.length) {
+    if (captured[i] === '\\') {
+      i += 2; // skip escaped character
+      continue;
+    }
+    if (captured[i] === '"') {
+      // Found unescaped " — this is the end of the JSON string
+      return captured.slice(0, i);
+    }
+    i++;
+  }
+  return null; // no closing " found — string was truncated
 }
 
 module.exports = { parseResponse, extractToolCalls, cleanTrailingArtifacts, extractContentFromPartialToolCall };

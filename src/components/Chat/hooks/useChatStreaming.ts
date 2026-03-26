@@ -63,7 +63,14 @@ export function useChatStreaming(): ChatStreamingState {
     // the event loop and freeze the browser. Throttling to 100ms keeps the UI responsive
     // while still showing ~10 visual updates per second during active generation.
     // For short buffers (<200 chars), updates happen immediately via RAF for fast startup.
+    // For very large buffers (>8K chars — e.g. after a big code block is fenced-closed),
+    // rendering cost includes full extractCompleteBlocks + CodeBlock + regex processing
+    // on every flush. Increase throttle to 500ms to prevent main thread starvation.
     const STREAM_THROTTLE_MS = 100;
+    const STREAM_THROTTLE_LARGE_MS = 500;   // for buffers > 8K chars
+    const STREAM_THROTTLE_XL_MS = 1500;     // for buffers > 15K chars
+    const STREAM_THROTTLE_XXL_MS = 3000;    // for buffers > 22K chars
+    const LARGE_BUFFER_THRESHOLD = 8000;
 
     const flushStreamUpdate = () => {
       streamRafRef.current = null;
@@ -95,14 +102,20 @@ export function useChatStreaming(): ChatStreamingState {
         }
         return;
       }
-      // Longer buffers: throttle to STREAM_THROTTLE_MS to prevent event loop blocking
+      // Dynamic throttle: large buffers get longer intervals to prevent freeze
+      const bufLen = streamBufferRef.current.length;
+      const throttle = bufLen > 22000 ? STREAM_THROTTLE_XXL_MS
+                     : bufLen > 15000 ? STREAM_THROTTLE_XL_MS
+                     : bufLen > LARGE_BUFFER_THRESHOLD ? STREAM_THROTTLE_LARGE_MS
+                     : STREAM_THROTTLE_MS;
+      // Longer buffers: throttle to prevent event loop blocking
       if (streamRafRef.current) { cancelAnimationFrame(streamRafRef.current); streamRafRef.current = null; }
       if (streamTimerRef.current) return; // timer already pending
       const elapsed = Date.now() - lastFlushTimeRef.current;
-      if (elapsed >= STREAM_THROTTLE_MS) {
+      if (elapsed >= throttle) {
         streamRafRef.current = requestAnimationFrame(flushStreamUpdate);
       } else {
-        streamTimerRef.current = setTimeout(flushStreamUpdate, STREAM_THROTTLE_MS - elapsed);
+        streamTimerRef.current = setTimeout(flushStreamUpdate, throttle - elapsed);
       }
     };
     const scheduleThinkingUpdate = () => {
@@ -212,8 +225,10 @@ export function useChatStreaming(): ChatStreamingState {
     // When the backend sends llm-replace-last with just the current iteration's cleaned text,
     // we prepend prior iterations' text so we don't wipe what the user was reading.
     const cleanupIterationBegin = (api as any).onLlmIterationBegin?.(() => {
-      console.log('[STREAM-DIAG] llm-iteration-begin: offset set to', streamBufferRef.current.length);
-      iterationStartOffsetRef.current = streamBufferRef.current.length;
+      const bufLen = streamBufferRef.current.length;
+      const fenceCount = (streamBufferRef.current.match(/```/g) || []).length;
+      console.log('[STREAM-DIAG] llm-iteration-begin: offset set to', bufLen, 'fenceCount:', fenceCount, 'lastChars:', JSON.stringify(streamBufferRef.current.slice(Math.max(0, bufLen - 60))));
+      iterationStartOffsetRef.current = bufLen;
     });
 
     // Anti-hallucination: backend detected fake tool results, or tool-call iteration wipe.
@@ -250,6 +265,20 @@ export function useChatStreaming(): ChatStreamingState {
    */
   const waitForTypewriterDone = (): Promise<void> => {
     return new Promise((resolve) => {
+      // R17-Fix: For large buffers (>1K), skip the typewriter wait entirely.
+      // The typewriter effect is for short cloud responses where typing animation
+      // enhances UX. For large buffers (local streaming), the user has been watching
+      // real-time streaming for minutes — waiting up to 3s for the throttle timer
+      // to fire triggers a final expensive streaming render that freezes the browser.
+      // Force displayPos to buffer end and resolve immediately.
+      if (streamBufferRef.current.length > 1000) {
+        // Cancel any pending throttle timer to prevent a stale flush after commit
+        if (streamTimerRef.current) { clearTimeout(streamTimerRef.current); streamTimerRef.current = null; }
+        if (streamRafRef.current) { cancelAnimationFrame(streamRafRef.current); streamRafRef.current = null; }
+        displayPosRef.current = streamBufferRef.current.length;
+        resolve();
+        return;
+      }
       let resolved = false;
       const safeResolve = () => { if (!resolved) { resolved = true; resolve(); } };
       const check = () => {

@@ -435,6 +435,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     let executingTimeout: ReturnType<typeof setTimeout> | null = null;
 
     const cleanupExecuting = api.onToolExecuting?.((data: { tool: string; params: any; result?: any }) => {
+      console.log('[R17-DIAG-TOOL-EXECUTING]', data.tool, 'bufferLen:', streamBufferRef.current?.length);
       // D02: Carry text position from generating tool call to executing tool
       const textPosition = generatingToolCallsRef.current[0]?.textPosition ?? (streamBufferRef.current?.length ?? 0);
       // Tool is now executing — clear the generating-phase bubble
@@ -452,6 +453,12 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     });
 
     const cleanupResults = api.onMcpToolResults?.((resultsData?: any[]) => {
+      console.log('[R17-DIAG-TOOL-RESULTS]', JSON.stringify({
+        resultCount: resultsData?.length ?? 0,
+        executingCount: executingToolsRef.current.length,
+        tools: (resultsData ?? []).map((r: any) => ({ tool: r.tool, contentStreamed: r.contentStreamed, hasContent: !!r.params?.content })),
+        bufferLen: streamBufferRef.current?.length,
+      }));
       if (executingTimeout) clearTimeout(executingTimeout);
       // Clear any lingering generating-phase bubbles
       generatingToolCallsRef.current = [];
@@ -473,14 +480,14 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
             matchResult = resultsData.find(r => r.tool === ft.tool && JSON.stringify(r.params) === JSON.stringify(ft.params));
           }
           // Adopt enriched params AND result from the IPC payload
-          return matchResult ? { ...ft, params: matchResult.params, result: matchResult.result } : ft;
+          return matchResult ? { ...ft, params: matchResult.params, result: matchResult.result, contentStreamed: matchResult.contentStreamed } : ft;
         });
       }
       // Fix 28: If executingTools was empty but resultsData has entries (salvage-and-append
       // sends mcp-tool-results directly without a prior mcp-executing-tools), promote the
       // results directly into completedStreamingTools so code blocks remain visible.
       if (finished.length === 0 && resultsData && Array.isArray(resultsData) && resultsData.length > 0) {
-        finished = resultsData.map(r => ({ tool: r.tool, params: r.params, result: r.result }));
+        finished = resultsData.map(r => ({ tool: r.tool, params: r.params, result: r.result, contentStreamed: r.contentStreamed }));
       }
       if (finished.length > 0) {
         // Fix 30D: Update file content accumulator with completed write tool content
@@ -542,6 +549,11 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     // would normally be sent as three separate IPC events, causing the code block to disappear
     // for 1-2 React frames. This single event processes all state transitions in one batch.
     const cleanupToolCheckpoint = api.onToolCheckpoint?.((toolDataArray: { tool: string; params: any; result?: any }[]) => {
+      console.log('[R17-DIAG-CHECKPOINT]', JSON.stringify({
+        toolCount: toolDataArray?.length ?? 0,
+        tools: (toolDataArray ?? []).map((t: any) => ({ tool: t.tool, contentStreamed: t.contentStreamed })),
+        bufferLen: streamBufferRef.current?.length,
+      }));
       // Clear generating phase
       generatingToolCallsRef.current = [];
       setGeneratingToolCalls([]);
@@ -1024,7 +1036,9 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       // For local models this resolves instantly (typewriter always caught up in real-time).
       // Only runs when a buffer is present and the generation epoch is still valid.
       if (result?.success && streamBufferRef.current.length > 0 && streamEpochRef.current === activeEpochRef.current) {
+        const _twStart = performance.now();
         await waitForTypewriterDone();
+        console.log('[R17-TIMING] waitForTypewriterDone:', (performance.now() - _twStart).toFixed(1), 'ms, bufLen:', streamBufferRef.current.length);
       }
 
       // BUG-026: If model is unavailable, clear the queue — retrying queued messages
@@ -1075,6 +1089,28 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
         return;
       }
 
+      // ── R17 DIAGNOSTIC: buffer state at commit time ──────────────────
+      const _diagBuf = streamBufferRef.current;
+      const _diagBackend = result?.text ?? '';
+      const _diagFenceCount = (_diagBuf.match(/```/g) || []).length;
+      const _diagToolResults = result?.toolResults ?? [];
+      const _diagContentStreamedFlags = _diagToolResults.map((tr: any) => ({
+        tool: tr.tool, contentStreamed: tr.contentStreamed ?? false,
+        contentLen: tr.result?.length ?? tr.content?.length ?? 0
+      }));
+      console.log('[R17-DIAG-COMMIT]', JSON.stringify({
+        bufferLen: _diagBuf.length,
+        backendLen: _diagBackend.trim().length,
+        fenceCount: _diagFenceCount,
+        bufferFirst100: _diagBuf.substring(0, 100),
+        bufferLast100: _diagBuf.substring(Math.max(0, _diagBuf.length - 100)),
+        toolResults: _diagContentStreamedFlags,
+        completedStreamingToolsCount: completedStreamingTools.length,
+        generatingToolCallsCount: generatingToolCalls.length,
+        executingToolsCount: executingTools.length,
+      }));
+      // ── end R17 diagnostic ──────────────────────────────────────────
+
       const assistantMsg: ChatMessage = {
         id: `msg-${Date.now()}-resp`,
         role: 'assistant',
@@ -1084,6 +1120,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
               const backendText = result.text?.trim() ?? '';
               const bufferText = streamBufferRef.current.trim();
               const hasThinking = thinkingSegmentsRef.current.some(s => s.trim());
+              const chosenSource = bufferText ? 'buffer' : (backendText ? 'backend' : (hasThinking ? 'thinking-only' : 'fallback'));
+              console.log('[R17-DIAG-SOURCE]', chosenSource, 'contentLen:', (bufferText || backendText || '').length);
               // If backend and buffer are both empty but thinking exists, show empty bubble
               // (thinking block will render) rather than the misleading fallback string.
               // BUG-IMG2: bufferText wins — the committed bubble must match what the
@@ -1112,7 +1150,10 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
 
       // Epoch guard: discard result if session was cancelled/reset while waiting for ai-chat
       if (streamEpochRef.current === callEpoch) {
+        const _commitStart = performance.now();
+        console.log('[R17-TIMING] About to setMessages. contentLen:', assistantMsg.content.length, 'toolsUsed:', assistantMsg.toolsUsed?.length ?? 0);
         setMessages(prev => [...prev, assistantMsg]);
+        console.log('[R17-TIMING] setMessages called:', (performance.now() - _commitStart).toFixed(1), 'ms (React will render async)');
       }
 
       // TTS: speak the response if enabled
@@ -1132,6 +1173,14 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
         timestamp: Date.now(),
       }]);
     } finally {
+      // ── R17 DIAGNOSTIC: state at cleanup time ────────────────────────
+      console.log('[R17-DIAG-CLEANUP]', JSON.stringify({
+        bufferLen: streamBufferRef.current?.length ?? 0,
+        completedStreamingToolsCount: completedStreamingTools.length,
+        generatingToolCallsCount: generatingToolCalls.length,
+        executingToolsCount: executingTools.length,
+      }));
+      // ── end R17 diagnostic ───────────────────────────────────────────
       // Clear ref immediately — don't wait for useEffect sync (prevents guard race)
       isGeneratingRef.current = false;
       setIsGenerating(false);
@@ -1747,6 +1796,7 @@ ${e.message}`,
   };
 
   const renderContentParts = (content: string, suppressTools = false, expandBlocks = false) => {
+    const _rcpStart = performance.now();
     // Pre-extract tool results for merging
     const toolResultMap = extractToolResults(content);
 
@@ -1843,10 +1893,14 @@ ${e.message}`,
     for (let i = 0; i < parts.length; i++) {
       const part = parts[i];
 
-      if (part.startsWith('```') && part.endsWith('```') && part.length > 6) {
-        const firstLine = part.indexOf('\n');
-        const lang = part.substring(3, firstLine > 0 ? firstLine : 3).trim();
-        const code = firstLine > 0 ? part.substring(firstLine + 1, part.length - 3) : part.substring(3, part.length - 3);
+      // R17-Fix-7: extractCodeBlocks includes trailing newline in matchStr (blockEnd = lineEnd + 1).
+      // Without trimEnd(), part.endsWith('```') fails → entire code block falls to text handler
+      // → 25K of HTML rendered as fragmented inline markdown (code/text/emphasis nodes).
+      const partTrimmed = part.trimEnd();
+      if (partTrimmed.startsWith('```') && partTrimmed.endsWith('```') && partTrimmed.length > 6) {
+        const firstLine = partTrimmed.indexOf('\n');
+        const lang = partTrimmed.substring(3, firstLine > 0 ? firstLine : 3).trim();
+        const code = firstLine > 0 ? partTrimmed.substring(firstLine + 1, partTrimmed.length - 3) : partTrimmed.substring(3, partTrimmed.length - 3);
 
         // Tool call JSON block — render inline chronologically
         const toolCall = (lang === 'json' || lang === 'tool') ? parseToolCall(code) : null;
@@ -2068,6 +2122,9 @@ ${e.message}`,
       }
     }
 
+    if (content.length > 5000) {
+      console.log('[R17-TIMING] renderContentParts:', (performance.now() - _rcpStart).toFixed(1), 'ms, contentLen:', content.length, 'elements:', elements.length);
+    }
     return elements;
   };
 
@@ -2079,11 +2136,24 @@ ${e.message}`,
     // Fix F: Merge write tools targeting the same filePath into a single CodeBlock
     // showing the accumulated content, instead of separate blocks per tool call.
     if (msg.toolsUsed && msg.toolsUsed.length > 0) {
+      // ── R17 DIAGNOSTIC: committed message tool rendering ──
+      console.log('[R17-DIAG-COMMITTED-MSG]', JSON.stringify({
+        contentLen: msg.content?.length ?? 0,
+        contentFirst80: (msg.content || '').substring(0, 80),
+        fenceCount: ((msg.content || '').match(/```/g) || []).length,
+        toolCount: msg.toolsUsed.length,
+        tools: msg.toolsUsed.map((t: any) => ({
+          tool: t.tool, contentStreamed: t.contentStreamed,
+          contentLen: t.params?.content?.length ?? 0,
+        })),
+        renderContentPartsCount: elements.length,
+      }));
+      // ── end R17 diagnostic ──
       const writeTools = ['write_file', 'create_file', 'edit_file', 'append_to_file'];
       const langMap: Record<string, string> = { ts: 'typescript', tsx: 'tsx', js: 'javascript', jsx: 'jsx', py: 'python', rs: 'rust', go: 'go', java: 'java', cs: 'csharp', cpp: 'cpp', c: 'c', html: 'html', css: 'css', json: 'json', yaml: 'yaml', yml: 'yaml', md: 'markdown', sh: 'bash', bat: 'batch', txt: 'text', xml: 'xml', sql: 'sql' };
 
       // Group write tools by filePath — merge content, keep non-write tools separate
-      const fileContentMap = new Map<string, { content: string; filePath: string; writes: number; lastOk: boolean }>();
+      const fileContentMap = new Map<string, { content: string; filePath: string; writes: number; lastOk: boolean; contentStreamed?: boolean }>();
       const nonWriteTools: Array<{ toolUsed: any; index: number }> = [];
       const fileOrder: string[] = []; // preserve order of first appearance
 
@@ -2107,12 +2177,14 @@ ${e.message}`,
             }
             existing.writes++;
             existing.lastOk = toolUsed.result?.success !== false;
+            if (toolUsed.contentStreamed) existing.contentStreamed = true;
           } else {
             fileContentMap.set(writeFilePath, {
               content: writeContent,
               filePath: writeFilePath,
               writes: 1,
               lastOk: toolUsed.result?.success !== false,
+              contentStreamed: !!toolUsed.contentStreamed,
             });
             fileOrder.push(writeFilePath);
           }
@@ -2132,17 +2204,32 @@ ${e.message}`,
         const label = entry.writes > 1
           ? `Wrote ${fp} (${entry.writes} operations merged)`
           : `Wrote ${fp}`;
-        elements.push(
-          <div key={`toolUsed-file-${fp}`} className="my-1.5">
-            <div className="flex items-center gap-1.5 mb-1 px-0.5">
-              {entry.lastOk
-                ? <Check size={11} className="text-[#89d185] flex-shrink-0" />
-                : <X size={11} className="text-[#f14c4c] flex-shrink-0" />}
-              <span className="text-[11px] text-[#d4d4d4] font-medium">{label}</span>
+        // R14-Fix-2: When content was already streamed to UI as a live code block,
+        // only render the status pill, not a second CodeBlock with the same content.
+        if (entry.contentStreamed) {
+          elements.push(
+            <div key={`toolUsed-file-${fp}`} className="my-1.5">
+              <div className="flex items-center gap-1.5 px-0.5">
+                {entry.lastOk
+                  ? <Check size={11} className="text-[#89d185] flex-shrink-0" />
+                  : <X size={11} className="text-[#f14c4c] flex-shrink-0" />}
+                <span className="text-[11px] text-[#d4d4d4] font-medium">{label}</span>
+              </div>
             </div>
-            <CodeBlock code={entry.content} language={writeLang} onApply={() => onApplyCode(currentFile, entry.content)} isToolCall={true} />
-          </div>
-        );
+          );
+        } else {
+          elements.push(
+            <div key={`toolUsed-file-${fp}`} className="my-1.5">
+              <div className="flex items-center gap-1.5 mb-1 px-0.5">
+                {entry.lastOk
+                  ? <Check size={11} className="text-[#89d185] flex-shrink-0" />
+                  : <X size={11} className="text-[#f14c4c] flex-shrink-0" />}
+                <span className="text-[11px] text-[#d4d4d4] font-medium">{label}</span>
+              </div>
+              <CodeBlock code={entry.content} language={writeLang} onApply={() => onApplyCode(currentFile, entry.content)} isToolCall={true} />
+            </div>
+          );
+        }
       }
 
       // Render non-write tools
@@ -2161,6 +2248,7 @@ ${e.message}`,
   // and leave the trailing incomplete block as plain text
   // Also merges tool calls with their results like renderContentParts
   const renderStreamingContent = (text: string) => {
+    const _rscStart = performance.now();
     // Strip function-call style tool invocations early — these appear naked during streaming
     // because backend only detects them after generation completes (fallback detection).
     // E.g. write_file("path", "content") or edit_file("path", "oldText", "newText")
@@ -2311,7 +2399,8 @@ ${e.message}`,
         }
       }
       // The complete code block — render with full styling
-      const block = blockMatch.matchStr;
+      // R17-Fix-7: trimEnd() to handle trailing newline from extractCompleteBlocks
+      const block = blockMatch.matchStr.trimEnd();
       const firstLine = block.indexOf('\n');
       const lang = block.substring(3, firstLine > 0 ? firstLine : 3).trim();
       const code = firstLine > 0 ? block.substring(firstLine + 1, block.length - 3) : block.substring(3, block.length - 3);
@@ -2525,6 +2614,9 @@ ${e.message}`,
       }
     }
 
+    if (text.length > 5000) {
+      console.log('[R17-TIMING] renderStreamingContent:', (performance.now() - _rscStart).toFixed(1), 'ms, textLen:', text.length, 'parts:', parts.length);
+    }
     return parts;
   };
 
@@ -3245,7 +3337,7 @@ ${e.message}`,
                       const toolItems: Array<{ position: number; element: React.ReactNode }> = [];
 
                       // ── Build unified file map from all three sources ──
-                      const fileMap = new Map<string, { baseContent: string; streamContent: string; status: 'streaming' | 'executing' | 'done'; lineCount?: number; result?: any; position: number }>();
+                      const fileMap = new Map<string, { baseContent: string; streamContent: string; status: 'streaming' | 'executing' | 'done'; lineCount?: number; result?: any; position: number; contentStreamed?: boolean }>();
 
                       completedStreamingTools.filter(td => WRITE_TOOLS_UNI.includes(td.tool)).forEach(td => {
                         const fp = (td.params?.filePath || td.params?.fileName || '') as string;
@@ -3253,7 +3345,7 @@ ${e.message}`,
                         const contentForBlock = ((td as any).result?.fullContent || td.params?.content || '') as string;
                         const existing = fileMap.get(fp);
                         const pos = Math.min(existing?.position ?? Infinity, td.textPosition ?? Infinity);
-                        fileMap.set(fp, { baseContent: contentForBlock, streamContent: '', status: 'done', result: (td as any).result, position: pos });
+                        fileMap.set(fp, { baseContent: contentForBlock, streamContent: '', status: 'done', result: (td as any).result, position: pos, contentStreamed: !!(td as any).contentStreamed });
                       });
 
                       executingTools.filter(td => WRITE_TOOLS_UNI.includes(td.tool)).forEach(td => {
@@ -3312,6 +3404,10 @@ ${e.message}`,
                           const totalFromBackend = baseLines + data.lineCount;
                           if (totalFromBackend > displayLineCount) displayLineCount = totalFromBackend;
                         }
+                        // R17-Fix: Content-streamed files now render a CodeBlock via the tool block
+                        // (same as non-content-streamed). The code fence is skipped from streamingText
+                        // by the interleaving skip logic below, preventing renderStreamingContent()
+                        // from processing 14K+ chars on every render frame (which freezes the browser).
                         toolItems.push({
                           position: data.position,
                           element: (
@@ -3428,11 +3524,40 @@ ${e.message}`,
                       toolItems.sort((a, b) => a.position - b.position);
                       const hasPositions = toolItems.some(t => Number.isFinite(t.position));
 
+                      // R16-Fix-A: Check if any file was content-streamed. When contentStreamed=true,
+                      // the tool rendering already suppresses the CodeBlock (shows only status pill).
+                      // Do NOT also strip the streaming code block from streamingText — that would
+                      // remove the ONLY visible code block. Only strip when the tool block will
+                      // render its own CodeBlock (i.e. contentStreamed is false/absent).
+                      const anyContentStreamed = Array.from(fileMap.values()).some(fmd => fmd.contentStreamed);
+
+                      // ── R17 DIAGNOSTIC: streaming bubble state ──
+                      if (fileMap.size > 0) {
+                        const fileMapDiag = Array.from(fileMap.entries()).map(([fp, d]) => ({
+                          fp, status: d.status, contentStreamed: d.contentStreamed,
+                          baseLen: d.baseContent.length, streamLen: d.streamContent.length,
+                          position: d.position,
+                        }));
+                        console.log('[R17-DIAG-STREAM-BUBBLE]', JSON.stringify({
+                          hasTools: true, fileMapSize: fileMap.size,
+                          anyContentStreamed, streamingTextLen: streamingText?.length ?? 0,
+                          fileMap: fileMapDiag,
+                        }));
+                      }
+                      // ── end R17 diagnostic ──
+
                       if (!hasPositions || !streamingText) {
                         // No position data or no text — flat layout (backward compatible)
+                        // When file-write tools exist, strip code blocks from streaming text
+                        // to prevent duplicate rendering (tool block already shows the content)
+                        let flatStreamText = streamingText;
+                        if (flatStreamText && fileMap.size > 0) {
+                          // R17-Fix: Always strip code fences from flat layout when tool block renders CodeBlock
+                          flatStreamText = flatStreamText.replace(/\nWriting \*\*[^*]+\*\*\.\.\.\n```[^\n]*\n[\s\S]*?```\s*\n?/g, '\n');
+                        }
                         return (
                           <>
-                            {streamingText && <div className="space-y-1">{renderStreamingContent(streamingText)}</div>}
+                            {flatStreamText?.trim() && <div className="space-y-1">{renderStreamingContent(flatStreamText)}</div>}
                             {toolItems.map((item, i) => <React.Fragment key={`ti-${i}`}>{item.element}</React.Fragment>)}
                           </>
                         );
@@ -3458,7 +3583,34 @@ ${e.message}`,
                         }
                         const tools = posGroups.get(pos)!;
                         tools.forEach((el, i) => result.push(<React.Fragment key={`tg-${pos}-${i}`}>{el}</React.Fragment>));
-                        lastPos = pos;
+
+                        // After rendering file-write tool items, skip past the file's
+                        // streamed content in streamingText to prevent duplicate code blocks.
+                        // File content was sent as llm-token events and appears in
+                        // streamingText bounded by ``` fences. The tool block already
+                        // renders this content — rendering it again via renderStreamingContent
+                        // would create a second identical code block.
+                        // R17-Fix: Always skip code fences at tool positions — the tool block
+                        // renders its own CodeBlock (memoized, stable key). This prevents
+                        // renderStreamingContent() from processing 14K+ chars of code fence
+                        // on every render, which was causing browser freezes.
+                        const hasFileToolAtPos = fileMap.size > 0 && Array.from(fileMap.values()).some(
+                          fmd => Number.isFinite(fmd.position) && Math.abs(fmd.position - pos) < 50
+                        );
+                        if (hasFileToolAtPos) {
+                          const remAfterTool = streamingText.substring(pos);
+                          // Find the closing code fence (a line that is only ```)
+                          const closingMatch = remAfterTool.match(/^```\s*$/m);
+                          if (closingMatch && closingMatch.index !== undefined) {
+                            lastPos = pos + closingMatch.index + closingMatch[0].length;
+                            if (lastPos < streamingText.length && streamingText[lastPos] === '\n') lastPos++;
+                          } else {
+                            // No closing fence yet — content still streaming, skip to end
+                            lastPos = streamingText.length;
+                          }
+                        } else {
+                          lastPos = pos;
+                        }
                       }
                       if (lastPos < streamingText.length) {
                         const rem = streamingText.substring(lastPos);

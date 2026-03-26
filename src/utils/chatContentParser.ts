@@ -152,6 +152,7 @@ export function stripFunctionCallTools(text: string): string {
  * Strip tool execution result sections, orphan headers, and internal reasoning from text.
  */
 export function stripToolArtifacts(text: string): string {
+  const _staStart = typeof performance !== 'undefined' ? performance.now() : 0;
   let cleaned = text;
   // Remove <think>/<thinking> blocks that weren't caught earlier
   cleaned = cleaned.replace(/<think(?:ing)?>\s*[\s\S]*?<\/think(?:ing)?>/gi, '');
@@ -170,9 +171,10 @@ export function stripToolArtifacts(text: string): string {
   cleaned = cleaned.replace(/^(json|html|css|javascript|typescript|python|bash|sh|xml|yaml)\s*\n(?=\s*\{)/gim, '');
   // Strip orphaned JSON fragments — e.g. `params": {"filePath":...}}` left when a tool
   // call's opening brace was consumed by the parser but the params field leaked as text.
-  cleaned = cleaned.replace(/^\s*"?params"?\s*"?\s*:\s*\{[\s\S]*?\}\}?\s*$/gm, '');
+  // Use bounded matching to avoid backtracking on large multi-line content.
+  cleaned = cleaned.replace(/^\s*"?params"?\s*"?\s*:\s*\{[^\n]*\}\}?\s*$/gm, '');
   // Strip lines that are raw JSON key-value fragments starting with a quoted key
-  cleaned = cleaned.replace(/^\s*"[a-zA-Z_]+":\s*(\{|\[)[^]*?\}\}?\s*$/gm, '');
+  cleaned = cleaned.replace(/^\s*"[a-zA-Z_]+":\s*(?:\{|\[)[^\n]*\}\}?\s*$/gm, '');
   // Remove ## Tool Execution Results sections and everything in them
   cleaned = cleaned.replace(/\n*## Tool Execution Results[\s\S]*?(?=\n## [^T]|\n\*(?:Detected|Reached|Continuing)|$)/g, '');
   // Remove standalone ### toolname [OK|FAIL] headers and the content following them
@@ -180,17 +182,47 @@ export function stripToolArtifacts(text: string): string {
   // Remove orphan ### Tool Execution Results
   cleaned = cleaned.replace(/\n*###? Tool Execution Results\n?/g, '');
   // Strip leaked CSS/HTML content from truncated write_file continuations — raw CSS rules
-  // (e.g., .classname { property: value; }) appearing as plain text outside code blocks.
-  // Only strip when it looks like bulk CSS rules (3+ consecutive CSS-like lines) not a brief mention.
-  cleaned = cleaned.replace(/(?:^|\n)((?:\s*[.#@][a-zA-Z][\w-]*(?:\s*[,>\s+~]?\s*[.#@a-zA-Z][\w-]*)*\s*\{[^}]*\}\s*\n?){3,})/g, '');
-  // Strip bulk HTML tag sequences leaked from write_file content (3+ consecutive lines of raw HTML)
-  cleaned = cleaned.replace(/(?:^|\n)((?:\s*<\/?[a-zA-Z][a-zA-Z0-9-]*(?:\s[^>]*)?\/?>\s*\n?){3,})/g, '');  // Detect and fence naked code blocks that leaked without fences (common continuation artifact)
+  // appearing as plain text outside code blocks. Line-based approach to avoid backtracking.
+  {
+    const lines = cleaned.split('\n');
+    const cssRuleRe = /^\s*[.#@][a-zA-Z][\w-]*[^{]*\{[^}]*\}\s*$/;
+    const htmlTagRe = /^\s*<\/?[a-zA-Z][a-zA-Z0-9-]*(?:\s[^>]*)?\/?>\s*$/;
+    let cssRun = 0, htmlRun = 0;
+    const cssRanges: [number, number][] = [];
+    const htmlRanges: [number, number][] = [];
+    for (let li = 0; li < lines.length; li++) {
+      if (cssRuleRe.test(lines[li])) {
+        cssRun++;
+      } else {
+        if (cssRun >= 3) cssRanges.push([li - cssRun, li - 1]);
+        cssRun = 0;
+      }
+      if (htmlTagRe.test(lines[li])) {
+        htmlRun++;
+      } else {
+        if (htmlRun >= 3) htmlRanges.push([li - htmlRun, li - 1]);
+        htmlRun = 0;
+      }
+    }
+    if (cssRun >= 3) cssRanges.push([lines.length - cssRun, lines.length - 1]);
+    if (htmlRun >= 3) htmlRanges.push([lines.length - htmlRun, lines.length - 1]);
+    if (cssRanges.length > 0 || htmlRanges.length > 0) {
+      const removeSet = new Set<number>();
+      for (const [s, e] of [...cssRanges, ...htmlRanges]) {
+        for (let i = s; i <= e; i++) removeSet.add(i);
+      }
+      cleaned = lines.filter((_, i) => !removeSet.has(i)).join('\n');
+    }
+  }  // Detect and fence naked code blocks that leaked without fences (common continuation artifact)
   // Pattern: 3+ consecutive lines that look like code (indented or with common syntax markers)
   cleaned = cleaned.replace(
     /(?:^|\n\n)((?:(?:  |\t)+[^\n]+\n){3,})/g,
     (_, codeBlock) => `\n\n\`\`\`\n${codeBlock.trim()}\n\`\`\`\n\n`
   );  // Collapse excessive newlines
   cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
+  if (_staStart && text.length > 2000) {
+    console.log('[R17-TIMING] stripToolArtifacts:', (performance.now() - _staStart).toFixed(1), 'ms, inputLen:', text.length, 'outputLen:', cleaned.length);
+  }
   return cleaned.trim();
 }
 

@@ -86,26 +86,78 @@ function truncateItemText(item, maxChars) {
  * Truncate a model response item to fit within a character budget.
  * Keeps the TAIL (most recent output) since that's what the model needs
  * for coherent continuation.
+ *
+ * Special case (R13-Fix-D1): When the model is mid-tool-call (the response
+ * contains an in-progress JSON string like '{"tool":"write_file",...'), keeping
+ * the tail of that JSON is destructive — the model receives a fragment like
+ * `...rest of HTML here..."}` as its own prior output and stalls or emits EOS.
+ * Instead, preserve only the pre-JSON text prefix (the model's "I'll create..."
+ * intro) and drop the partial JSON entirely. This gives the model a clean
+ * anchor to resume from.
  */
 function truncateModelItem(item, maxChars) {
   if (!item || item.type !== 'model' || !item.response) return item;
 
+  // ── R13-Fix-D1: Detect in-progress tool call JSON in response segments ──
+  // If any string segment looks like a partial tool call JSON, keep only the
+  // text segments that appear BEFORE the first JSON segment. This prevents
+  // the model from seeing its own mid-JSON output as a continuation anchor.
+  const firstJsonSegIdx = item.response.findIndex(seg => {
+    if (typeof seg !== 'string') return false;
+    const trimmed = seg.trimStart();
+    return trimmed.startsWith('{"tool"') || trimmed.startsWith('{"tool_calls"') ||
+           trimmed.startsWith('{"function"') || trimmed.startsWith('{"name"') ||
+           trimmed.startsWith('```json\n{"tool') || trimmed.startsWith('```json\n{"function');
+  });
+
+  if (firstJsonSegIdx > 0) {
+    // There is text before the JSON — keep only those prefix segments, truncated to budget
+    const prefixSegs = item.response.slice(0, firstJsonSegIdx);
+    let prefixChars = 0;
+    for (const s of prefixSegs) prefixChars += typeof s === 'string' ? s.length : JSON.stringify(s).length;
+    if (prefixChars <= maxChars) {
+      if (CONFIG.DEBUG) log.info(`[NativeCtxShift] R13-D1: Dropped partial JSON from model item, kept ${prefixChars}-char text prefix`);
+      return { ...item, response: prefixSegs };
+    }
+    // Prefix itself is too long — truncate it
+    const truncated = truncateModelItemSegments(prefixSegs, maxChars);
+    if (CONFIG.DEBUG) log.info(`[NativeCtxShift] R13-D1: Dropped partial JSON, truncated text prefix to ${maxChars} chars`);
+    return { ...item, response: truncated };
+  }
+
+  if (firstJsonSegIdx === 0) {
+    // The ENTIRE response is JSON (no text intro) — drop everything.
+    // Return an empty model response. The model will re-generate from the summary.
+    if (CONFIG.DEBUG) log.info(`[NativeCtxShift] R13-D1: Model item is entirely partial JSON — returning empty model response`);
+    return { ...item, response: [] };
+  }
+
+  // ── Normal truncation: keep the tail of the accumulated segments ──
+  const truncatedSegs = truncateModelItemSegments(item.response, maxChars);
+  return { ...item, response: truncatedSegs };
+}
+
+/**
+ * Internal: truncate an array of model response segments to fit maxChars,
+ * keeping segments from the END (most recent).
+ */
+function truncateModelItemSegments(segments, maxChars) {
   // Serialize all response segments to measure
   let totalChars = 0;
-  const segSizes = item.response.map(seg => {
+  const segSizes = segments.map(seg => {
     const size = typeof seg === 'string' ? seg.length : JSON.stringify(seg).length;
     totalChars += size;
     return size;
   });
 
-  if (totalChars <= maxChars) return { ...item, response: [...item.response] };
+  if (totalChars <= maxChars) return [...segments];
 
   // Keep segments from the END (most recent). Drop/truncate from the start.
   const newResponse = [];
   let budget = maxChars;
 
-  for (let i = item.response.length - 1; i >= 0; i--) {
-    const seg = item.response[i];
+  for (let i = segments.length - 1; i >= 0; i--) {
+    const seg = segments[i];
     const size = segSizes[i];
     if (size <= budget) {
       newResponse.unshift(seg);
@@ -119,7 +171,7 @@ function truncateModelItem(item, maxChars) {
     if (budget <= 0) break;
   }
 
-  return { ...item, response: newResponse };
+  return newResponse;
 }
 
 /**
@@ -421,11 +473,29 @@ function getContextShiftSize(sequence) {
 
 /**
  * Build context shift options for node-llama-cpp.
+ * Sets engine._contextShiftFiredDuringGen = true when a shift occurs,
+ * allowing the agentic loop to detect post-shift premature EOS.
  */
 function buildContextShiftOptions(llmEngine) {
   return {
     size: (sequence) => getContextShiftSize(sequence),
-    strategy: nativeContextShiftStrategy,
+    strategy: async (options) => {
+      // Signal to the agentic loop that a context shift happened during this generation
+      if (llmEngine) llmEngine._contextShiftFiredDuringGen = true;
+
+      // R13-Fix-A: Record which file was actively being generated at shift time.
+      // The agentic loop reads _contextShiftActiveFile after generation to know
+      // which file to checkpoint after a post-shift EOS/stall.
+      if (llmEngine) {
+        const activeFile = detectActiveFileGeneration(options.chatHistory || []);
+        llmEngine._contextShiftActiveFile = activeFile ? activeFile.filePath : null;
+        if (activeFile) {
+          log.info(`[NativeCtxStrategy] R13-Fix-A: context shift during active write_file("${activeFile.filePath}") — stored in _contextShiftActiveFile`);
+        }
+      }
+
+      return nativeContextShiftStrategy(options);
+    },
     lastEvaluationMetadata: llmEngine?.lastEvaluation?.contextShiftMetadata || null,
   };
 }

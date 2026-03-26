@@ -683,6 +683,8 @@ class LLMEngine extends EventEmitter {
     // Setup abort
     this.abortController = new AbortController();
     this._abortReason = null;
+    this._contextShiftFiredDuringGen = false; // Reset per-generation context shift flag
+    this._contextShiftActiveFile = null;      // R13-Fix-A: Reset per-generation active file flag
     const genId = ++_genCounter;
 
     // Compact history if too long

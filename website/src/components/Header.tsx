@@ -9,6 +9,7 @@ const navLinks = [
   { href: '/download', label: 'Download' },
   { href: '/models', label: 'Models' },
   { href: '/models/benchmarks', label: 'Benchmarks' },
+  { href: '/extensions', label: 'Extensions' },
 ];
 
 const pocketLink = { href: 'https://pocket.graysoft.dev', label: 'Pocket', external: true };

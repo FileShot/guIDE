@@ -1,8 +1,8 @@
-'use client';
+﻿'use client';
 
 // Single source of truth for the displayed release version.
 // Updated automatically by: npm run release:deploy (from IDE root)
-const CURRENT_VERSION = '1.8.34';
+const CURRENT_VERSION = '2.2.7';
 
 import Link from 'next/link';
 import { useState } from 'react';
@@ -19,20 +19,20 @@ const platforms: { id: Platform; label: string; icon: React.ReactNode }[] = [
   { id: 'mac', label: 'macOS', icon: <Apple size={16} /> },
 ];
 
-const BASE = `https://github.com/FileShot/guIDE/releases/download/v${CURRENT_VERSION}`;
+const BASE = `https://github.com/FileShot/guide-2.0/releases/download/v${CURRENT_VERSION}`;
 
 const downloads: Record<Platform, Record<Variant, { name: string; file: string; size: string; format: string; available: boolean; note?: string }>> = {
   windows: {
-    standard: { name: 'guIDE for Windows', file: `${BASE}/guIDE-Setup-${CURRENT_VERSION}.exe`, size: '~180 MB', format: 'NSIS Installer (.exe)', available: true },
-    cuda: { name: 'guIDE for Windows · CUDA Edition', file: `${BASE}/guIDE-CUDA-Setup-${CURRENT_VERSION}.exe`, size: '~450 MB', format: 'NSIS Installer (.exe)', available: true, note: 'Includes NVIDIA CUDA binaries — larger download, best GPU performance' },
+    standard: { name: 'guIDE for Windows', file: `${BASE}/guIDE-${CURRENT_VERSION}-cpu-x64-setup.exe`, size: '~127 MB', format: 'NSIS Installer (.exe)', available: true },
+    cuda: { name: 'guIDE for Windows · CUDA Edition', file: `${BASE}/guIDE-${CURRENT_VERSION}-cuda-x64-setup.exe`, size: '~338 MB', format: 'NSIS Installer (.exe)', available: true, note: 'Includes NVIDIA CUDA binaries — larger download, best GPU performance' },
   },
   linux: {
-    standard: { name: 'guIDE for Linux', file: `${BASE}/guIDE-${CURRENT_VERSION}-x86_64.AppImage`, size: '~150 MB', format: 'AppImage', available: true },
-    cuda: { name: 'guIDE for Linux · CUDA Edition', file: `${BASE}/guIDE-CUDA-${CURRENT_VERSION}-x86_64.AppImage`, size: '~420 MB', format: 'AppImage', available: true, note: 'Includes NVIDIA CUDA binaries — requires CUDA 12+ and drivers 525+' },
+    standard: { name: 'guIDE for Linux', file: `${BASE}/guIDE-${CURRENT_VERSION}-cpu-linux-x64.AppImage`, size: '~135 MB', format: 'AppImage', available: true },
+    cuda: { name: 'guIDE for Linux · CUDA Edition', file: `${BASE}/guIDE-${CURRENT_VERSION}-cuda-linux-x64.AppImage`, size: '~135 MB', format: 'AppImage', available: true, note: 'Includes NVIDIA CUDA binaries — requires CUDA 12+ and drivers 525+' },
   },
   mac: {
-    standard: { name: 'guIDE for macOS', file: `${BASE}/guIDE-${CURRENT_VERSION}-x64.dmg`, size: '~180 MB', format: 'DMG (Intel + Apple Silicon)', available: true },
-    cuda: { name: 'guIDE for macOS', file: `${BASE}/guIDE-${CURRENT_VERSION}-x64.dmg`, size: '~180 MB', format: 'DMG (Intel + Apple Silicon)', available: true },
+    standard: { name: 'guIDE for macOS (Apple Silicon)', file: `${BASE}/guIDE-${CURRENT_VERSION}-cpu-mac-arm64.dmg`, size: '~127 MB', format: 'DMG (Apple Silicon)', available: true, note: 'For M1/M2/M3/M4 Macs. Intel Mac build also available below.' },
+    cuda: { name: 'guIDE for macOS (Intel)', file: `${BASE}/guIDE-${CURRENT_VERSION}-cpu-mac-x64.dmg`, size: '~131 MB', format: 'DMG (Intel x64)', available: true, note: 'For Intel-based Macs. Use Standard variant for Apple Silicon.' },
   },
 };
 
@@ -64,14 +64,13 @@ export default function DownloadPage() {
   const [platform, setPlatform] = useState<Platform>('windows');
   const [variant, setVariant] = useState<Variant>('standard');
 
-  const hasCuda = platform === 'windows' || platform === 'linux';
-  const activeVariant: Variant = hasCuda ? variant : 'standard';
+  const activeVariant: Variant = variant;
   const dl = downloads[platform][activeVariant];
   const reqs = requirementsByPlatform[platform];
 
   const handlePlatformChange = (p: Platform) => {
     setPlatform(p);
-    if (p === 'mac') setVariant('standard');
+    setVariant('standard');
   };
 
   const trackDownload = (dlPlatform: Platform) => {
@@ -137,41 +136,41 @@ export default function DownloadPage() {
           </div>
         </FadeIn>
 
-        {/* Variant Toggle — Windows + Linux only */}
-        {hasCuda ? (
-          <FadeIn delay={0.07}>
-            <div className="flex items-center gap-2 mb-8">
-              <button
-                onClick={() => setVariant('standard')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all border ${
-                  activeVariant === 'standard'
-                    ? 'border-white/20 bg-white/[0.05] text-white'
-                    : 'border-white/[0.06] text-neutral-500 hover:text-neutral-300 hover:border-white/10'
-                }`}
-              >
-                Standard
-              </button>
-              <button
-                onClick={() => setVariant('cuda')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all border ${
-                  activeVariant === 'cuda'
-                    ? 'border-green-500/40 bg-green-500/[0.07] text-green-400'
-                    : 'border-white/[0.06] text-neutral-500 hover:text-neutral-300 hover:border-white/10'
-                }`}
-              >
+        {/* Variant Toggle */}
+        <FadeIn delay={0.07}>
+          <div className="flex items-center gap-2 mb-8">
+            <button
+              onClick={() => setVariant('standard')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all border ${
+                activeVariant === 'standard'
+                  ? 'border-white/20 bg-white/[0.05] text-white'
+                  : 'border-white/[0.06] text-neutral-500 hover:text-neutral-300 hover:border-white/10'
+              }`}
+            >
+              {platform === 'mac' ? 'Apple Silicon' : 'Standard'}
+            </button>
+            <button
+              onClick={() => setVariant('cuda')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all border ${
+                activeVariant === 'cuda'
+                  ? (platform === 'mac' ? 'border-blue-500/40 bg-blue-500/[0.07] text-blue-400' : 'border-green-500/40 bg-green-500/[0.07] text-green-400')
+                  : 'border-white/[0.06] text-neutral-500 hover:text-neutral-300 hover:border-white/10'
+              }`}
+            >
+              {platform === 'mac' ? (
+                <Monitor size={13} />
+              ) : (
                 <Zap size={13} />
-                NVIDIA CUDA
-              </button>
-              <span className="ml-1 text-xs text-neutral-600">
-                {activeVariant === 'cuda'
-                  ? 'Requires NVIDIA GPU · CUDA 12+'
-                  : 'Works on any hardware · smaller download'}
-              </span>
-            </div>
-          </FadeIn>
-        ) : (
-          <div className="mb-8" />
-        )}
+              )}
+              {platform === 'mac' ? 'Intel' : 'NVIDIA CUDA'}
+            </button>
+            <span className="ml-1 text-xs text-neutral-600">
+              {platform === 'mac'
+                ? (activeVariant === 'cuda' ? 'For Intel-based Macs' : 'For M1/M2/M3/M4 Macs')
+                : (activeVariant === 'cuda' ? 'Requires NVIDIA GPU · CUDA 12+' : 'Works on any hardware · smaller download')}
+            </span>
+          </div>
+        </FadeIn>
 
         {/* Download Card */}
         <FadeIn delay={0.1}>

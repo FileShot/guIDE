@@ -8,6 +8,7 @@ const footerLinks = {
     { href: '/models', label: 'Model Recommender' },
     { href: '/models/benchmarks', label: 'Benchmarks' },
     { href: '/models/compare', label: 'Model Comparisons' },
+    { href: '/extensions', label: 'Extensions' },
     { href: '/faq', label: 'FAQ' },
     { href: '/#features', label: 'Features' },
     { href: '/#pricing', label: 'Pricing' },

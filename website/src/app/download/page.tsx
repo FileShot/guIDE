@@ -19,7 +19,7 @@ const platforms: { id: Platform; label: string; icon: React.ReactNode }[] = [
   { id: 'mac', label: 'macOS', icon: <Apple size={16} /> },
 ];
 
-const BASE = `https://github.com/FileShot/guide-2.0/releases/download/v${CURRENT_VERSION}`;
+const BASE = `https://github.com/FileShot/guide-3.0/releases/download/v${CURRENT_VERSION}`;
 
 const downloads: Record<Platform, Record<Variant, { name: string; file: string; size: string; format: string; available: boolean; note?: string }>> = {
   windows: {

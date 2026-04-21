@@ -2,7 +2,7 @@
 
 // Single source of truth for the displayed release version.
 // Updated automatically by: npm run release:deploy (from IDE root)
-const CURRENT_VERSION = '2.3.15';
+const CURRENT_VERSION = '3.0.13';
 
 import Link from 'next/link';
 import { useState } from 'react';
